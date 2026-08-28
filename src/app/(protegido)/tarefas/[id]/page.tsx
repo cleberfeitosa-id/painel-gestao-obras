@@ -29,6 +29,7 @@ import { AlterarStatus } from "@/components/tarefas/alterar-status";
 import { Comentarios } from "@/components/tarefas/comentarios";
 import { Anexos } from "@/components/tarefas/anexos";
 import { AprovacaoTarefa } from "@/components/tarefas/aprovacao-tarefa";
+import { BotaoExcluirTarefa } from "@/components/tarefas/botao-excluir-tarefa";
 import type {
   TarefaRow,
   PerfilRow,
@@ -199,12 +200,21 @@ export default async function DetalheTarefaPage({
             </p>
           </div>
           {podeEscrever && (
-            <Link href={`/tarefas/${tarefa.id}/editar`}>
-              <Botao variante="contorno">
-                <Pencil className="h-4 w-4" />
-                Editar
-              </Botao>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href={`/tarefas/${tarefa.id}/editar`}>
+                <Botao variante="contorno">
+                  <Pencil className="h-4 w-4" />
+                  Editar
+                </Botao>
+              </Link>
+              {usuario.eGestor && (
+                <BotaoExcluirTarefa
+                  tarefaId={tarefa.id}
+                  titulo={tarefa.titulo}
+                  redirecionarAposExcluir="/tarefas"
+                />
+              )}
+            </div>
           )}
         </div>
       </div>

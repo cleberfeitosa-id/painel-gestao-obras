@@ -20,6 +20,7 @@ import {
   Celula,
 } from "@/components/ui";
 import { FiltrosTarefas } from "@/components/tarefas/filtros-tarefas";
+import { BotaoExcluirTarefa } from "@/components/tarefas/botao-excluir-tarefa";
 import type {
   ObraRow,
   PerfilRow,
@@ -107,13 +108,32 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
 
 async function buscarOpcoes() {
   const supabase = await createClient();
-  const [{ data: obras }, { data: perfis }] = await Promise.all([
+  const [
+    { data: obras },
+    { data: perfis },
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
     supabase.from("obras").select("id, nome").order("nome"),
     supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
+    supabase.auth.getUser(),
   ]);
+
+  let papel = "";
+  if (user) {
+    const { data: perfil } = await supabase
+      .from("perfis")
+      .select("papel")
+      .eq("id", user.id)
+      .single();
+    papel = perfil?.papel ?? "";
+  }
+
   return {
     obras: (obras ?? []) as Pick<ObraRow, "id" | "nome">[],
     responsaveis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
+    podeExcluir: papel === "admin" || papel === "gestor",
   };
 }
 
@@ -154,6 +174,7 @@ export default async function TarefasPage({
     buscarTarefas(filtros),
     buscarOpcoes(),
   ]);
+  const { obras, responsaveis, podeExcluir } = opcoes;
 
   const temFiltros = Object.values(filtros).some(Boolean);
 
@@ -176,10 +197,7 @@ export default async function TarefasPage({
 
       <Cartao>
         <CartaoConteudo>
-          <FiltrosTarefas
-            obras={opcoes.obras}
-            responsaveis={opcoes.responsaveis}
-          />
+          <FiltrosTarefas obras={obras} responsaveis={responsaveis} />
         </CartaoConteudo>
       </Cartao>
 
@@ -221,6 +239,7 @@ export default async function TarefasPage({
                     <CelulaCabecalho>Prioridade</CelulaCabecalho>
                     <CelulaCabecalho>Prazo</CelulaCabecalho>
                     <CelulaCabecalho>Local</CelulaCabecalho>
+                    {podeExcluir && <CelulaCabecalho>Acoes</CelulaCabecalho>}
                   </LinhaCabecalho>
                 </Cabecalho>
                 <Corpo>
@@ -283,6 +302,15 @@ export default async function TarefasPage({
                             <span className="text-superficie-300">—</span>
                           )}
                         </Celula>
+                        {podeExcluir && (
+                          <Celula>
+                            <BotaoExcluirTarefa
+                              tarefaId={tarefa.id}
+                              titulo={tarefa.titulo}
+                              compacto
+                            />
+                          </Celula>
+                        )}
                       </Linha>
                     );
                   })}
@@ -298,9 +326,13 @@ export default async function TarefasPage({
                 tarefa.status === "concluido",
               );
               return (
-                <Link key={tarefa.id} href={`/tarefas/${tarefa.id}`} className="group">
+                <div key={tarefa.id}>
                   <Cartao className="transition-shadow group-hover:shadow-md">
-                    <CartaoConteudo className="space-y-3">
+                    <Link
+                      href={`/tarefas/${tarefa.id}`}
+                      className="group block"
+                    >
+                      <CartaoConteudo className="space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <p className="font-semibold text-superficie-900">
                           {tarefa.titulo}
@@ -344,8 +376,18 @@ export default async function TarefasPage({
                         </span>
                       </div>
                     </CartaoConteudo>
+                    </Link>
+                    {podeExcluir && (
+                      <div className="flex items-center justify-end gap-2 border-t border-borda px-4 py-2">
+                        <BotaoExcluirTarefa
+                          tarefaId={tarefa.id}
+                          titulo={tarefa.titulo}
+                          compacto
+                        />
+                      </div>
+                    )}
                   </Cartao>
-                </Link>
+                </div>
               );
             })}
           </div>

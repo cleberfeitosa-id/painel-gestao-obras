@@ -302,6 +302,99 @@ export async function criarTarefa(
   redirect(`/tarefas/${data.id}`);
 }
 
+const esquemaAssociar = z.object({
+  localizacao_tipo: z.enum(["ponto", "regiao"]),
+  planta_id: z.string().uuid(),
+  pagina: z.coerce.number().int().positive(),
+  ponto_x: z.coerce.number().nullable().optional(),
+  ponto_y: z.coerce.number().nullable().optional(),
+  regiao: z
+    .object({
+      vertices: z
+        .array(z.object({ x: z.number(), y: z.number() }))
+        .min(3, "A regiao precisa de pelo menos 3 vertices."),
+    })
+    .nullable()
+    .optional(),
+});
+
+export async function associarLocalizacao(
+  tarefaId: string,
+  dados: z.infer<typeof esquemaAssociar>,
+): Promise<Resultado> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  const papel = await papelDoUsuario(user.id);
+  if (!eGestor(papel)) {
+    return { erro: "Voce nao tem permissao para associar tarefas." };
+  }
+
+  const resultado = esquemaAssociar.safeParse(dados);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Localizacao invalida." };
+  }
+
+  const { localizacao_tipo, planta_id, pagina, ponto_x, ponto_y, regiao } =
+    resultado.data;
+
+  const supabase = await createClient();
+
+  const { data: tarefa } = await supabase
+    .from("tarefas")
+    .select("obra_id")
+    .eq("id", tarefaId)
+    .maybeSingle();
+  if (!tarefa) {
+    return { erro: "Tarefa nao encontrada." };
+  }
+
+  const { data: planta } = await supabase
+    .from("plantas")
+    .select("obra_id")
+    .eq("id", planta_id)
+    .maybeSingle();
+  if (!planta) {
+    return { erro: "Planta nao encontrada." };
+  }
+
+  if (tarefa.obra_id !== planta.obra_id) {
+    return {
+      erro: "Tarefa e planta precisam pertencer a mesma obra.",
+    };
+  }
+
+  const atualizacao =
+    localizacao_tipo === "ponto"
+      ? {
+          localizacao_tipo: "ponto" as const,
+          planta_id,
+          pagina,
+          ponto_x: ponto_x ?? null,
+          ponto_y: ponto_y ?? null,
+          regiao: null,
+        }
+      : {
+          localizacao_tipo: "regiao" as const,
+          planta_id,
+          pagina,
+          ponto_x: null,
+          ponto_y: null,
+          regiao: regiao ?? null,
+        };
+
+  const { error } = await supabase.from("tarefas").update(atualizacao).eq("id", tarefaId);
+
+  if (error) {
+    return { erro: "Nao foi possivel associar a localizacao. Tente novamente." };
+  }
+
+  revalidatePath("/tarefas");
+  revalidatePath(`/tarefas/${tarefaId}`);
+  revalidatePath("/painel");
+  return {};
+}
+
 export async function atualizarTarefa(
   _estadoAnterior: Resultado,
   formData: FormData,
@@ -525,10 +618,7 @@ export async function avaliarTarefa(
   return {};
 }
 
-export async function excluirTarefa(
-  _estadoAnterior: Resultado,
-  formData: FormData,
-): Promise<Resultado> {
+export async function excluirTarefa(tarefaId: string): Promise<Resultado> {
   const user = await usuarioAtual();
   if (!user) return { erro: "Sessao expirada. Entre novamente." };
 
@@ -537,17 +627,29 @@ export async function excluirTarefa(
     return { erro: "Voce nao tem permissao para excluir tarefas." };
   }
 
-  const id = String(formData.get("id") ?? "");
-  if (!id) return { erro: "Tarefa invalida." };
+  if (!tarefaId) return { erro: "Tarefa invalida." };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("tarefas").delete().eq("id", id);
+  const { data: anexos } = await supabase
+    .from("tarefa_anexos")
+    .select("caminho")
+    .eq("tarefa_id", tarefaId);
 
+  for (const anexo of anexos ?? []) {
+    try {
+      await removerArquivo(BUCKET_ANEXOS, anexo.caminho);
+    } catch (erro) {
+      console.error("[tarefas] falha ao remover arquivo do storage:", erro);
+    }
+  }
+
+  const { error } = await supabase.from("tarefas").delete().eq("id", tarefaId);
   if (error) {
     return { erro: "Nao foi possivel excluir a tarefa. Tente novamente." };
   }
 
   revalidatePath("/tarefas");
+  revalidatePath(`/tarefas/${tarefaId}`);
   revalidatePath("/painel");
   return {};
 }

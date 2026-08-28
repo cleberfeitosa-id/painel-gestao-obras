@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Link2,
   MapPin,
   Maximize,
   MousePointer2,
@@ -19,7 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
-import { Botao, Etiqueta, Spinner } from "@/components/ui";
+import { Botao, Etiqueta, Selecao, Spinner } from "@/components/ui";
 import {
   calcularCalibracao,
   centroDaRegiao,
@@ -33,6 +34,7 @@ import {
   retanguloParaRegiao,
   telaParaPdf,
   type Calibracao,
+  type Retangulo,
 } from "@/lib/pdf/coordenadas";
 import {
   OPCOES_SITUACAO_TAREFA,
@@ -48,18 +50,26 @@ import {
   renovarUrlPlanta,
   salvarCalibracao as salvarCalibracaoAcao,
 } from "@/app/(protegido)/obras/[id]/plantas/acoes";
+import { associarLocalizacao } from "@/app/(protegido)/tarefas/acoes";
 import type {
   PlantaCalibracaoRow,
   PontoPdf,
   PrioridadeTarefa,
   RegiaoPdf,
 } from "@/lib/supabase/database.types";
-import type { PropsAreaPlanta, TarefaPlanta } from "./tipos";
+import type {
+  PropsAreaPlanta,
+  TarefaPlanta,
+} from "./tipos";
 import type { SituacaoTarefa } from "@/lib/domain/rotulos";
 
-type Ferramenta = "navegar" | "medir" | "pino" | "regiao" | "calibrar";
+type Ferramenta = "navegar" | "medir" | "pino" | "regiao" | "calibrar" | "associar";
 
 type DimensoesPagina = { largura: number; altura: number };
+
+type ConfirmacaoLocalizacao =
+  | { tipo: "ponto"; ponto: PontoPdf }
+  | { tipo: "regiao"; regiao: RegiaoPdf };
 
 // Config do worker do PDF.js no MESMO modulo em que o <Document> e usado
 // (recomendacao oficial do react-pdf). O `new URL(..., import.meta.url)` faz o
@@ -80,16 +90,19 @@ const FERRAMENTAS: Array<{
   { valor: "pino", rotulo: "Pino", icone: MapPin },
   { valor: "regiao", rotulo: "Regiao", icone: Square },
   { valor: "calibrar", rotulo: "Calibrar", icone: Scale },
+  { valor: "associar", rotulo: "Associar", icone: Link2 },
 ];
 
 const DICA_FERRAMENTA: Record<Ferramenta, string> = {
   navegar:
-    "Arraste para mover a planta. Clique em um pino ou regiao para abrir a tarefa.",
+    "Arraste para mover a planta, use a roda do mouse ou o gesto de pinça para dar zoom. Clique em um pino ou regiao para abrir a tarefa.",
   medir:
     "Clique em dois pontos para medir a distancia; um terceiro clique desenha um retangulo e mede a area.",
-  pino: "Clique na planta para criar uma tarefa neste ponto.",
-  regiao: "Arraste sobre a planta para criar uma tarefa em uma regiao.",
+  pino: "Clique na planta para criar uma tarefa neste ponto; clique novamente para ajustar a posicao antes de confirmar.",
+  regiao: "Arraste sobre a planta para criar uma tarefa em uma regiao; ajuste as bordas antes de confirmar.",
   calibrar: "Clique em dois pontos de distancia conhecida para calibrar a escala.",
+  associar:
+    "Selecione uma tarefa e clique (pino) ou arraste (regiao) na planta para associa-la a uma localizacao.",
 };
 
 const cursorPorFerramenta: Record<Ferramenta, string> = {
@@ -98,6 +111,7 @@ const cursorPorFerramenta: Record<Ferramenta, string> = {
   pino: "crosshair",
   regiao: "crosshair",
   calibrar: "crosshair",
+  associar: "crosshair",
 };
 
 function DicaTarefa({ tarefa }: { tarefa: TarefaPlanta }) {
@@ -170,6 +184,69 @@ function RotuloMedicao({
   );
 }
 
+type Canto = "nw" | "ne" | "sw" | "se";
+
+const CANTOS: Canto[] = ["nw", "ne", "sw", "se"];
+
+function textoPonto(ponto: PontoPdf, calibracao: Calibracao | null): string {
+  const unidade = calibracao?.unidade ?? "pt";
+  const fator = calibracao?.unidadesPorPonto ?? 1;
+  return `X ${(ponto.x * fator).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${unidade} · Y ${(ponto.y * fator).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${unidade}`;
+}
+
+function textoDimensoes(regiao: RegiaoPdf, calibracao: Calibracao | null): string {
+  const limites = limitesDaRegiao(regiao);
+  if (!limites) return "";
+  const unidade = calibracao?.unidade ?? "pt";
+  const escala = { unidadesPorPonto: calibracao?.unidadesPorPonto ?? 1, unidade };
+  const largura = medirDistancia(
+    { x: limites.x, y: limites.y },
+    { x: limites.x + limites.largura, y: limites.y },
+    escala,
+  );
+  const altura = medirDistancia(
+    { x: limites.x, y: limites.y },
+    { x: limites.x, y: limites.y + limites.altura },
+    escala,
+  );
+  return `${formatarMedida(largura, unidade)} × ${formatarMedida(altura, unidade)}`;
+}
+
+function cantoParaPonto(limites: Retangulo, canto: Canto): PontoPdf {
+  switch (canto) {
+    case "nw":
+      return { x: limites.x, y: limites.y + limites.altura };
+    case "ne":
+      return { x: limites.x + limites.largura, y: limites.y + limites.altura };
+    case "sw":
+      return { x: limites.x, y: limites.y };
+    case "se":
+      return { x: limites.x + limites.largura, y: limites.y };
+  }
+}
+
+function regiaoComCanto(
+  regiao: RegiaoPdf,
+  canto: Canto,
+  novo: PontoPdf,
+): RegiaoPdf {
+  const limites = limitesDaRegiao(regiao);
+  if (!limites) return regiao;
+  let x1 = limites.x;
+  let x2 = limites.x + limites.largura;
+  let y1 = limites.y;
+  let y2 = limites.y + limites.altura;
+  if (canto === "nw" || canto === "ne") y2 = novo.y;
+  if (canto === "sw" || canto === "se") y1 = novo.y;
+  if (canto === "nw" || canto === "sw") x1 = novo.x;
+  if (canto === "ne" || canto === "se") x2 = novo.x;
+  const ax = Math.min(x1, x2);
+  const bx = Math.max(x1, x2);
+  const ay = Math.min(y1, y2);
+  const by = Math.max(y1, y2);
+  return retanguloParaRegiao({ x: ax, y: ay }, { x: bx, y: by });
+}
+
 function CarregandoPlanta() {
   return (
     <div className="flex min-h-[400px] w-[480px] max-w-full flex-col items-center justify-center gap-3 p-8">
@@ -205,6 +282,7 @@ export function VisualizadorPlanta({
   urlPdf,
   calibracoes,
   tarefas,
+  tarefasObra,
   executores,
   podeEditar,
 }: PropsAreaPlanta) {
@@ -223,7 +301,13 @@ export function VisualizadorPlanta({
   const [pontosMedicao, setPontosMedicao] = useState<PontoPdf[]>([]);
   const [pontosCalibracao, setPontosCalibracao] = useState<PontoPdf[]>([]);
   const [regiaoAtual, setRegiaoAtual] = useState<RegiaoPdf | null>(null);
+  const [posicaoMouse, setPosicaoMouse] = useState<PontoPdf | null>(null);
   const [pinoAtivo, setPinoAtivo] = useState<string | null>(null);
+  const [confirmacao, setConfirmacao] = useState<ConfirmacaoLocalizacao | null>(null);
+  const [associacaoTipo, setAssociacaoTipo] = useState<"pino" | "regiao">("pino");
+  const [tarefaAssociacao, setTarefaAssociacao] = useState("");
+  const [associando, setAssociando] = useState(false);
+  const [erroAssociacao, setErroAssociacao] = useState<string | null>(null);
 
   const [filtroSituacao, setFiltroSituacao] = useState<"todas" | SituacaoTarefa>("todas");
   const [filtroPrioridade, setFiltroPrioridade] = useState<"todas" | PrioridadeTarefa>("todas");
@@ -235,8 +319,14 @@ export function VisualizadorPlanta({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
   const regiaoRef = useRef<PontoPdf | null>(null);
+  const pinoDragRef = useRef<{ ancora: PontoPdf } | null>(null);
+  const cantoDragRef = useRef<{ canto: Canto } | null>(null);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ distancia: number; escala: number } | null>(null);
+  const animacaoZoomRef = useRef<{ fx: number; fy: number; cx: number; cy: number } | null>(null);
 
   const calibracaoLinha = calibracoesPorPagina.get(paginaAtual) ?? null;
   const calibracao: Calibracao | null = calibracaoLinha
@@ -245,6 +335,16 @@ export function VisualizadorPlanta({
         unidade: calibracaoLinha.unidade,
       }
     : null;
+
+  const emAssociacao = ferramenta === "associar";
+  const modoDesenho: "pino" | "regiao" | null =
+    ferramenta === "pino"
+      ? "pino"
+      : ferramenta === "regiao"
+        ? "regiao"
+        : ferramenta === "associar"
+          ? associacaoTipo
+          : null;
 
   const tarefasPagina = useMemo(
     () => tarefas.filter((t) => t.pagina === paginaAtual),
@@ -285,6 +385,10 @@ export function VisualizadorPlanta({
     setPontosMedicao([]);
     setPontosCalibracao([]);
     setRegiaoAtual(null);
+    setPosicaoMouse(null);
+    setConfirmacao(null);
+    pinoDragRef.current = null;
+    cantoDragRef.current = null;
     regiaoRef.current = null;
     if (containerRef.current) containerRef.current.scrollTop = 0;
   }, [paginaAtual]);
@@ -295,70 +399,202 @@ export function VisualizadorPlanta({
     return telaParaPdf(e.clientX, e.clientY, rect, dimensoes.largura, dimensoes.altura);
   }
 
+  function distanciaEntrePontos(
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+  ) {
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  function registrarPonteiro(e: React.PointerEvent<HTMLDivElement>) {
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+
   function aoPressionar(e: React.PointerEvent<HTMLDivElement>) {
+    registrarPonteiro(e);
+    const ponteiros = pointersRef.current;
+
+    // Gesto de pinça: segundo dedo inicia o zoom por pinch.
+    if (ponteiros.size >= 2) {
+      const [p1, p2] = [...ponteiros.values()];
+      pinchRef.current = {
+        distancia: distanciaEntrePontos(p1, p2),
+        escala,
+      };
+      setArrastando(false);
+      panRef.current = null;
+      return;
+    }
+
     if (ferramenta === "navegar") {
       const el = containerRef.current;
       if (!el) return;
       panRef.current = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, st: el.scrollTop };
       setArrastando(true);
       e.currentTarget.setPointerCapture(e.pointerId);
-    } else if (ferramenta === "regiao") {
+    } else if (modoDesenho === "regiao") {
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
       regiaoRef.current = ponto;
       setRegiaoAtual(retanguloParaRegiao(ponto, ponto));
       e.currentTarget.setPointerCapture(e.pointerId);
+    } else if (modoDesenho === "pino" && confirmacao?.tipo === "ponto") {
+      const ponto = pontoDoEvento(e);
+      if (!ponto) return;
+      pinoDragRef.current = { ancora: ponto };
+      e.currentTarget.setPointerCapture(e.pointerId);
     }
   }
 
   function aoMover(e: React.PointerEvent<HTMLDivElement>) {
+    if (pinchRef.current) {
+      const ponteiros = pointersRef.current;
+      const p = ponteiros.get(e.pointerId);
+      if (p) ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ponteiros.size === 2) {
+        const [p1, p2] = [...ponteiros.values()];
+        const distancia = distanciaEntrePontos(p1, p2);
+        if (pinchRef.current.distancia > 0) {
+          const fator = distancia / pinchRef.current.distancia;
+          setAjusteLargura(false);
+          setEscala(
+            Math.min(5, Math.max(0.1, pinchRef.current.escala * fator)),
+          );
+        }
+      }
+      return;
+    }
+
     if (ferramenta === "navegar" && panRef.current) {
       const el = containerRef.current;
       if (!el) return;
       el.scrollLeft = panRef.current.sl - (e.clientX - panRef.current.x);
       el.scrollTop = panRef.current.st - (e.clientY - panRef.current.y);
-    } else if (ferramenta === "regiao" && regiaoRef.current) {
+    } else if (modoDesenho === "regiao" && regiaoRef.current) {
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
+      setPosicaoMouse(ponto);
       setRegiaoAtual(retanguloParaRegiao(regiaoRef.current, ponto));
+    } else if (modoDesenho === "pino" && pinoDragRef.current) {
+      const ponto = pontoDoEvento(e);
+      if (!ponto) return;
+      setConfirmacao({ tipo: "ponto", ponto });
+    } else if (cantoDragRef.current && confirmacao?.tipo === "regiao") {
+      const ponto = pontoDoEvento(e);
+      if (!ponto) return;
+      const nova = regiaoComCanto(
+        confirmacao.regiao,
+        cantoDragRef.current.canto,
+        ponto,
+      );
+      setConfirmacao({ tipo: "regiao", regiao: nova });
+      setRegiaoAtual(nova);
     }
   }
 
-  function aoSoltar() {
+  function aoSoltar(e: React.PointerEvent<HTMLDivElement>) {
+    const ponteiros = pointersRef.current;
+    ponteiros.delete(e.pointerId);
+
+    const eraPinch = pinchRef.current !== null;
+    if (ponteiros.size < 2) pinchRef.current = null;
+
+    if (eraPinch || ponteiros.size > 0) {
+      panRef.current = null;
+      setArrastando(false);
+      setPosicaoMouse(null);
+      pinoDragRef.current = null;
+      return;
+    }
+
     if (ferramenta === "navegar") {
       panRef.current = null;
       setArrastando(false);
-    } else if (ferramenta === "regiao") {
+    } else if (modoDesenho === "regiao") {
+      setPosicaoMouse(null);
       if (regiaoRef.current && regiaoAtual) {
         const limites = limitesDaRegiao(regiaoAtual);
         if (limites && limites.largura > 2 && limites.altura > 2) {
-          const regiaoJson = encodeURIComponent(JSON.stringify(regiaoAtual));
-          router.push(
-            `/tarefas/nova?obra=${obraId}&planta=${planta.id}&pagina=${paginaAtual}&tipo=regiao&regiao=${regiaoJson}`,
-          );
+          setConfirmacao({ tipo: "regiao", regiao: regiaoAtual });
+        } else {
+          setRegiaoAtual(null);
         }
       }
       regiaoRef.current = null;
-      setRegiaoAtual(null);
+    } else if (modoDesenho === "pino" && pinoDragRef.current) {
+      const ponto = pontoDoEvento(e);
+      if (ponto) setConfirmacao({ tipo: "ponto", ponto });
+      pinoDragRef.current = null;
     }
   }
 
   function aoClicar(e: React.MouseEvent<HTMLDivElement>) {
+    if (pointersRef.current.size > 0) return; // ignora clique originado de gesto
     if (ferramenta === "medir") {
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
       setPontosMedicao((atual) => (atual.length >= 3 ? [ponto] : [...atual, ponto]));
-    } else if (ferramenta === "pino") {
+    } else if (modoDesenho === "pino") {
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
-      router.push(
-        `/tarefas/nova?obra=${obraId}&planta=${planta.id}&pagina=${paginaAtual}&tipo=ponto&x=${ponto.x.toFixed(2)}&y=${ponto.y.toFixed(2)}`,
-      );
+      setConfirmacao({ tipo: "ponto", ponto });
     } else if (ferramenta === "calibrar") {
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
       setPontosCalibracao((atual) => (atual.length >= 2 ? [ponto] : [...atual, ponto]));
     }
+  }
+
+  async function confirmarAssociacao() {
+    if (!confirmacao || !tarefaAssociacao) return;
+    setAssociando(true);
+    setErroAssociacao(null);
+    const resultado = await associarLocalizacao(tarefaAssociacao, {
+      localizacao_tipo: confirmacao.tipo,
+      planta_id: planta.id,
+      pagina: paginaAtual,
+      ponto_x: confirmacao.tipo === "ponto" ? confirmacao.ponto.x : undefined,
+      ponto_y: confirmacao.tipo === "ponto" ? confirmacao.ponto.y : undefined,
+      regiao: confirmacao.tipo === "regiao" ? confirmacao.regiao : undefined,
+    });
+    setAssociando(false);
+    if (resultado.erro) {
+      setErroAssociacao(resultado.erro);
+      return;
+    }
+    setConfirmacao(null);
+    setRegiaoAtual(null);
+    setTarefaAssociacao("");
+    router.refresh();
+  }
+
+  function limparRascunho() {
+    setConfirmacao(null);
+    setRegiaoAtual(null);
+    setPosicaoMouse(null);
+    pinoDragRef.current = null;
+    cantoDragRef.current = null;
+    regiaoRef.current = null;
+  }
+
+  function confirmarCriacao() {
+    if (!confirmacao) return;
+    if (emAssociacao) {
+      void confirmarAssociacao();
+      return;
+    }
+    if (confirmacao.tipo === "ponto") {
+      const { ponto } = confirmacao;
+      router.push(
+        `/tarefas/nova?obra=${obraId}&planta=${planta.id}&pagina=${paginaAtual}&tipo=ponto&x=${ponto.x.toFixed(2)}&y=${ponto.y.toFixed(2)}`,
+      );
+    } else {
+      const regiaoJson = encodeURIComponent(JSON.stringify(confirmacao.regiao));
+      router.push(
+        `/tarefas/nova?obra=${obraId}&planta=${planta.id}&pagina=${paginaAtual}&tipo=regiao&regiao=${regiaoJson}`,
+      );
+    }
+    setConfirmacao(null);
   }
 
   function aumentarZoom() {
@@ -375,6 +611,38 @@ export function VisualizadorPlanta({
     setAjusteLargura(false);
     setEscala(1);
   }
+
+  function aoRolar(e: React.WheelEvent<HTMLDivElement>) {
+    e.preventDefault();
+    const el = contentRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    animacaoZoomRef.current = {
+      fx: (e.clientX - rect.left) / rect.width,
+      fy: (e.clientY - rect.top) / rect.height,
+      cx: e.clientX,
+      cy: e.clientY,
+    };
+    const fator = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    setAjusteLargura(false);
+    setEscala((atual) => Math.min(5, Math.max(0.1, Number((atual * fator).toFixed(3)))));
+  }
+
+  // Mantém o ponto da planta sob o cursor fixo durante o zoom pela roda.
+  useEffect(() => {
+    const alvo = animacaoZoomRef.current;
+    if (!alvo) return;
+    const el = contentRef.current;
+    const container = containerRef.current;
+    if (!el || !container) return;
+    const rectEl = el.getBoundingClientRect();
+    const rectContainer = container.getBoundingClientRect();
+    const scrollLeft = rectContainer.left + el.offsetLeft - (alvo.cx - alvo.fx * rectEl.width);
+    const scrollTop = rectContainer.top + el.offsetTop - (alvo.cy - alvo.fy * rectEl.height);
+    container.scrollLeft = scrollLeft;
+    container.scrollTop = scrollTop;
+    animacaoZoomRef.current = null;
+  }, [escala]);
 
   async function renovarUrl() {
     setRenovando(true);
@@ -476,7 +744,9 @@ export function VisualizadorPlanta({
                   key={ferramentaOpcao.valor}
                   type="button"
                   onClick={() => {
+                    if (ferramentaOpcao.valor !== ferramenta) limparRascunho();
                     setFerramenta(ferramentaOpcao.valor);
+                    if (ferramentaOpcao.valor === "associar") setTarefaAssociacao("");
                     if (ferramentaOpcao.valor !== "calibrar") setPontosCalibracao([]);
                   }}
                   title={ferramentaOpcao.rotulo}
@@ -602,6 +872,58 @@ export function VisualizadorPlanta({
           ))}
         </div>
 
+        {ferramenta === "associar" && (
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-azul-200 bg-azul-50/60 px-3 py-3">
+            <div className="min-w-[220px] flex-1">
+              <Selecao
+                rotulo="Tarefa para associar"
+                value={tarefaAssociacao}
+                onChange={(e) => setTarefaAssociacao(e.target.value)}
+              >
+                <option value="">Selecione uma tarefa</option>
+                {tarefasObra.map((tarefa) => (
+                  <option key={tarefa.id} value={tarefa.id}>
+                    {tarefa.titulo}
+                  </option>
+                ))}
+              </Selecao>
+            </div>
+            <div>
+              <span className="mb-1 block text-xs font-medium text-superficie-600">
+                Tipo de localizacao
+              </span>
+              <div className="flex overflow-hidden rounded-lg border border-borda bg-white">
+                <button
+                  type="button"
+                  onClick={() => setAssociacaoTipo("pino")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors",
+                    associacaoTipo === "pino"
+                      ? "bg-azul-600 text-white"
+                      : "text-superficie-600 hover:bg-superficie-100",
+                  )}
+                >
+                  <MapPin className="h-4 w-4" />
+                  Pino
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssociacaoTipo("regiao")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors",
+                    associacaoTipo === "regiao"
+                      ? "bg-azul-600 text-white"
+                      : "text-superficie-600 hover:bg-superficie-100",
+                  )}
+                >
+                  <Square className="h-4 w-4" />
+                  Regiao
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <Calibragem
           calibracao={calibracaoLinha}
           pontos={pontosCalibracao}
@@ -619,10 +941,11 @@ export function VisualizadorPlanta({
 
         <div
           ref={containerRef}
+          onWheel={aoRolar}
           className="relative h-[70vh] overflow-auto rounded-xl border border-borda bg-superficie-100/60"
         >
           <div className="flex min-h-full min-w-full p-4">
-            <div className="relative m-auto w-fit shadow-lg">
+            <div ref={contentRef} className="relative m-auto w-fit shadow-lg">
               {urlAtual ? (
                 <Document
                   file={urlAtual}
@@ -682,7 +1005,7 @@ export function VisualizadorPlanta({
                   className="absolute inset-0 z-10"
                   style={{
                     cursor: arrastando ? "grabbing" : cursorPorFerramenta[ferramenta],
-                    touchAction: ferramenta === "regiao" ? "none" : "pan-x pan-y",
+                    touchAction: "none",
                   }}
                   onPointerDown={aoPressionar}
                   onPointerMove={aoMover}
@@ -718,13 +1041,15 @@ export function VisualizadorPlanta({
                         classe="stroke-perigo"
                       />
                     )}
-                    {ferramenta === "regiao" && regiaoAtual && (
-                      <RectSvg
-                        regiao={regiaoAtual}
-                        dimensoes={dimensoes}
-                        classe="stroke-azul-600 fill-azul-600/10"
-                      />
-                    )}
+                    {modoDesenho === "regiao" &&
+                      regiaoAtual &&
+                      confirmacao?.tipo !== "regiao" && (
+                        <RectSvg
+                          regiao={regiaoAtual}
+                          dimensoes={dimensoes}
+                          classe="stroke-azul-600"
+                        />
+                      )}
                   </svg>
 
                   {tarefasFiltradas
@@ -800,10 +1125,10 @@ export function VisualizadorPlanta({
                             SITUACAO_TAREFA[sit].regiao,
                           )}
                           style={{
-                            left: `${canto1.esquerda}%`,
-                            top: `${canto1.topo}%`,
-                            width: `${canto2.esquerda - canto1.esquerda}%`,
-                            height: `${canto2.topo - canto1.topo}%`,
+                            left: `${Math.min(canto1.esquerda, canto2.esquerda)}%`,
+                            top: `${Math.min(canto1.topo, canto2.topo)}%`,
+                            width: `${Math.abs(canto2.esquerda - canto1.esquerda)}%`,
+                            height: `${Math.abs(canto2.topo - canto1.topo)}%`,
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -841,6 +1166,81 @@ export function VisualizadorPlanta({
                       />
                     ))}
 
+                  {modoDesenho === "regiao" && posicaoMouse && (
+                    <RotuloMedicao
+                      ponto={posicaoMouse}
+                      texto={textoDimensoes(regiaoAtual ?? { vertices: [posicaoMouse] }, calibracao)}
+                      dimensoes={dimensoes}
+                    />
+                  )}
+
+                  {confirmacao?.tipo === "regiao" && (
+                    <>
+                      <svg
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+                      >
+                        <RectSvg
+                          regiao={confirmacao.regiao}
+                          dimensoes={dimensoes}
+                          classe="stroke-azul-600 fill-azul-600/10"
+                        />
+                      </svg>
+                      {CANTOS.map((canto) => {
+                        const limites = limitesDaRegiao(confirmacao.regiao);
+                        if (!limites) return null;
+                        const pos = pdfParaPercentual(
+                          cantoParaPonto(limites, canto),
+                          dimensoes.largura,
+                          dimensoes.altura,
+                        );
+                        return (
+                          <div
+                            key={canto}
+                            className="absolute z-30 h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize rounded-[2px] border-2 border-white bg-azul-600 shadow"
+                            style={{
+                              left: `${pos.esquerda}%`,
+                              top: `${pos.topo}%`,
+                            }}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              cantoDragRef.current = { canto };
+                              e.currentTarget.setPointerCapture(e.pointerId);
+                            }}
+                            onPointerMove={(e) => {
+                              if (!cantoDragRef.current) return;
+                              e.stopPropagation();
+                              const p = pontoDoEvento(e);
+                              if (!p) return;
+                              const nova = regiaoComCanto(confirmacao.regiao, canto, p);
+                              setConfirmacao({ tipo: "regiao", regiao: nova });
+                              setRegiaoAtual(nova);
+                            }}
+                            onPointerUp={() => {
+                              cantoDragRef.current = null;
+                            }}
+                          />
+                        );
+                      })}
+                    </>
+                  )}
+
+                  {confirmacao?.tipo === "ponto" && (
+                    <>
+                      <Marcador
+                        ponto={confirmacao.ponto}
+                        dimensoes={dimensoes}
+                        cor="bg-azul-600"
+                      />
+                      <RotuloMedicao
+                        ponto={confirmacao.ponto}
+                        texto={textoPonto(confirmacao.ponto, calibracao)}
+                        dimensoes={dimensoes}
+                      />
+                    </>
+                  )}
+
                   {linhaMedicao && (
                     <RotuloMedicao
                       ponto={{
@@ -864,6 +1264,50 @@ export function VisualizadorPlanta({
             </div>
           </div>
         </div>
+        {confirmacao && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-azul-200 bg-azul-50/60 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-azul-800">
+                {emAssociacao
+                  ? "Associar tarefa a esta localizacao"
+                  : confirmacao.tipo === "regiao"
+                    ? "Confirme a regiao antes de criar a tarefa"
+                    : "Confirme o pino antes de criar a tarefa"}
+              </p>
+              <p className="mt-0.5 text-xs text-azul-700">
+                {confirmacao.tipo === "regiao"
+                  ? textoDimensoes(confirmacao.regiao, calibracao)
+                  : textoPonto(confirmacao.ponto, calibracao)}
+                {emAssociacao && tarefaAssociacao
+                  ? ` - ${tarefasObra.find((t) => t.id === tarefaAssociacao)?.titulo ?? ""}`
+                  : ""}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Botao
+                type="button"
+                variante="fantasma"
+                onClick={limparRascunho}
+                disabled={associando}
+              >
+                Cancelar
+              </Botao>
+              <Botao
+                type="button"
+                onClick={confirmarCriacao}
+                carregando={associando}
+                disabled={emAssociacao && !tarefaAssociacao}
+              >
+                {emAssociacao ? "Associar" : "Criar tarefa"}
+              </Botao>
+            </div>
+            {erroAssociacao && emAssociacao && (
+              <p role="alert" className="w-full text-sm text-perigo">
+                {erroAssociacao}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <ListaTarefasPlanta
@@ -930,10 +1374,10 @@ function RectSvg({
   );
   return (
     <rect
-      x={canto1.esquerda}
-      y={canto1.topo}
-      width={canto2.esquerda - canto1.esquerda}
-      height={canto2.topo - canto1.topo}
+      x={Math.min(canto1.esquerda, canto2.esquerda)}
+      y={Math.min(canto1.topo, canto2.topo)}
+      width={Math.abs(canto2.esquerda - canto1.esquerda)}
+      height={Math.abs(canto2.topo - canto1.topo)}
       className={cn("stroke-[2]", classe)}
       vectorEffect="non-scaling-stroke"
     />

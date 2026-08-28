@@ -27,6 +27,13 @@ export type TarefaPlanta = {
 
 export type ExecutorFiltro = Pick<ExecutorRow, "id" | "nome">;
 
+export type TarefaObraAssociacao = {
+  id: string;
+  titulo: string;
+  localizacao_tipo: TipoLocalizacao;
+  planta_id: string | null;
+};
+
 export type PropsAreaPlanta = {
   obraId: string;
   obraNome: string;
@@ -34,6 +41,7 @@ export type PropsAreaPlanta = {
   urlPdf: string | null;
   calibracoes: PlantaCalibracaoRow[];
   tarefas: TarefaPlanta[];
+  tarefasObra: TarefaObraAssociacao[];
   executores: ExecutorFiltro[];
   podeEditar: boolean;
 };

@@ -6,7 +6,11 @@ import { BUCKET_PLANTAS, urlAssinada } from "@/lib/armazenamento";
 import { Botao } from "@/components/ui";
 import { AreaPlanta } from "@/components/plantas/area-planta";
 import { BotaoExcluirPlanta } from "@/components/plantas/botao-excluir-planta";
-import type { ExecutorFiltro, TarefaPlanta } from "@/components/plantas/tipos";
+import type {
+  ExecutorFiltro,
+  TarefaObraAssociacao,
+  TarefaPlanta,
+} from "@/components/plantas/tipos";
 import type {
   PlantaCalibracaoRow,
   PlantaRow,
@@ -28,33 +32,43 @@ export default async function DetalhePlantaPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ data: planta }, { data: calibracoes }, { data: tarefas }, { data: perfil }, { data: executores }] =
-    await Promise.all([
-      supabase
-        .from("plantas")
-        .select("*, obras(id, nome)")
-        .eq("id", plantaId)
-        .single(),
-      supabase
-        .from("planta_calibracoes")
-        .select("*")
-        .eq("planta_id", plantaId),
-      supabase
-        .from("tarefas")
-        .select(
-          "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome)",
-        )
-        .eq("planta_id", plantaId),
-      user
-        ? supabase.from("perfis").select("papel").eq("id", user.id).single()
-        : Promise.resolve({ data: null }),
-      supabase
-        .from("executores")
-        .select("id, nome")
-        .eq("obra_id", id)
-        .eq("ativo", true)
-        .order("nome"),
-    ]);
+  const [
+    { data: planta },
+    { data: calibracoes },
+    { data: tarefas },
+    { data: tarefasObra },
+    { data: perfil },
+    { data: executores },
+  ] = await Promise.all([
+    supabase
+      .from("plantas")
+      .select("*, obras(id, nome)")
+      .eq("id", plantaId)
+      .single(),
+    supabase
+      .from("planta_calibracoes")
+      .select("*")
+      .eq("planta_id", plantaId),
+    supabase
+      .from("tarefas")
+      .select(
+        "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome)",
+      )
+      .eq("planta_id", plantaId),
+    supabase
+      .from("tarefas")
+      .select("id, titulo, localizacao_tipo, planta_id")
+      .eq("obra_id", id),
+    user
+      ? supabase.from("perfis").select("papel").eq("id", user.id).single()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("executores")
+      .select("id, nome")
+      .eq("obra_id", id)
+      .eq("ativo", true)
+      .order("nome"),
+  ]);
 
   if (!planta || planta.obra_id !== id) notFound();
 
@@ -81,6 +95,15 @@ export default async function DetalhePlantaPage({
     id: e.id,
     nome: e.nome,
   }));
+
+  const tarefasObraLista: TarefaObraAssociacao[] = (tarefasObra ?? []).map(
+    (tarefa) => ({
+      id: tarefa.id,
+      titulo: tarefa.titulo,
+      localizacao_tipo: tarefa.localizacao_tipo,
+      planta_id: tarefa.planta_id,
+    }),
+  );
 
   return (
     <div className="space-y-6">
@@ -127,6 +150,7 @@ export default async function DetalhePlantaPage({
         urlPdf={urlPdf}
         calibracoes={(calibracoes ?? []) as PlantaCalibracaoRow[]}
         tarefas={tarefasPlanta}
+        tarefasObra={tarefasObraLista}
         executores={executoresLista}
         podeEditar={podeEditar}
       />
