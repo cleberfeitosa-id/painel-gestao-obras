@@ -30,6 +30,7 @@ import { Comentarios } from "@/components/tarefas/comentarios";
 import { Anexos } from "@/components/tarefas/anexos";
 import { AprovacaoTarefa } from "@/components/tarefas/aprovacao-tarefa";
 import { BotaoExcluirTarefa } from "@/components/tarefas/botao-excluir-tarefa";
+import { BotaoDuplicarTarefa } from "@/components/tarefas/botao-duplicar-tarefa";
 import type {
   TarefaRow,
   PerfilRow,
@@ -173,11 +174,17 @@ export default async function DetalheTarefaPage({
     <div className="space-y-6">
       <div>
         <Link
-          href="/tarefas"
+          href={
+            tarefa.localizacao_tipo !== "nenhuma" && tarefa.planta_id
+              ? `/obras/${tarefa.obra_id}/plantas/${tarefa.planta_id}`
+              : "/tarefas"
+          }
           className="inline-flex items-center gap-1 text-sm font-medium text-azul-600 hover:text-azul-700"
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar para tarefas
+          {tarefa.localizacao_tipo !== "nenhuma" && tarefa.planta_id
+            ? "Voltar para a planta"
+            : "Voltar para tarefas"}
         </Link>
         <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -208,11 +215,17 @@ export default async function DetalheTarefaPage({
                 </Botao>
               </Link>
               {usuario.eGestor && (
-                <BotaoExcluirTarefa
-                  tarefaId={tarefa.id}
-                  titulo={tarefa.titulo}
-                  redirecionarAposExcluir="/tarefas"
-                />
+                <>
+                  <BotaoDuplicarTarefa
+                    tarefaId={tarefa.id}
+                    titulo={tarefa.titulo}
+                  />
+                  <BotaoExcluirTarefa
+                    tarefaId={tarefa.id}
+                    titulo={tarefa.titulo}
+                    redirecionarAposExcluir="/tarefas"
+                  />
+                </>
               )}
             </div>
           )}

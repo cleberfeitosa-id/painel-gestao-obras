@@ -207,10 +207,18 @@ async function validarExecutorDaObra(
   return null;
 }
 
+type DadosNotificacao = {
+  titulo: string;
+  descricao?: string | null;
+  obra_id: string;
+  prazo?: string | null;
+  prioridade: PrioridadeTarefa;
+};
+
 async function enviarNotificacao(
   tarefaId: string,
   responsavelId: string,
-  dados: DadosTarefa,
+  dados: DadosNotificacao,
 ) {
   const supabase = await createClient();
   const [{ data: perfil }, { data: obra }] = await Promise.all([
@@ -300,6 +308,197 @@ export async function criarTarefa(
   revalidatePath("/tarefas");
   revalidatePath("/painel");
   redirect(`/tarefas/${data.id}`);
+}
+
+const esquemaLocalizacaoLote = z
+  .object({
+    localizacao_tipo: z.enum(["ponto", "regiao"]),
+    planta_id: z.string().uuid(),
+    pagina: z.coerce.number().int().positive(),
+    ponto_x: z.coerce.number().nullable().optional(),
+    ponto_y: z.coerce.number().nullable().optional(),
+    regiao: z
+      .object({
+        vertices: z
+          .array(z.object({ x: z.number(), y: z.number() }))
+          .min(3, "A regiao precisa de pelo menos 3 vertices."),
+      })
+      .nullable()
+      .optional(),
+  })
+  .superRefine((dados, ctx) => {
+    if (dados.localizacao_tipo === "ponto") {
+      if (dados.ponto_x == null || dados.ponto_y == null) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Localizacao por ponto exige coordenadas x e y.",
+        });
+      }
+    }
+    if (dados.localizacao_tipo === "regiao" && !dados.regiao) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Localizacao por regiao exige os vertices da area.",
+      });
+    }
+  });
+
+const esquemaCriarLote = z
+  .object({
+    titulo: z.string().trim().min(1, "Informe o titulo da tarefa.").max(200),
+    descricao: z.string().trim().max(4000).optional().or(z.literal("")),
+    obra_id: z.string().uuid("Selecione uma obra valida."),
+    responsavel_id: z.string().uuid().nullable().optional().or(z.literal("")),
+    executor_id: z.preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.string().uuid().nullable().optional()
+    ),
+    supervisor_id: z.preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.string().uuid().nullable().optional()
+    ),
+    status: z.enum(["pendente", "em_execucao", "concluido"]),
+    prioridade: z.enum(["baixa", "media", "alta", "urgente"]),
+    prazo: z.string().optional().or(z.literal("")),
+    data_planejada: z.string().optional().or(z.literal("")),
+    exige_foto: z.boolean().optional(),
+    exige_video: z.boolean().optional(),
+    exige_arquivo: z.boolean().optional(),
+    localizacoes: z.preprocess(
+      (val) => {
+        if (typeof val === "string") {
+          try {
+            return JSON.parse(val);
+          } catch {
+            return val;
+          }
+        }
+        return val;
+      },
+      z
+        .array(esquemaLocalizacaoLote)
+        .min(1, "Adicione pelo menos uma localizacao na planta.")
+    ),
+  })
+  .superRefine((dados, ctx) => {
+    if (dados.prazo && dados.data_planejada) {
+      if (dados.data_planejada > dados.prazo) {
+        ctx.addIssue({
+          code: "custom",
+          message: "A data planejada de inicio nao pode ser posterior ao prazo.",
+          path: ["data_planejada"],
+        });
+      }
+    }
+  });
+
+export async function criarTarefasEmLote(
+  _estadoAnterior: Resultado,
+  formData: FormData,
+): Promise<Resultado> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  const papel = await papelDoUsuario(user.id);
+  if (!eGestor(papel)) {
+    return { erro: "Voce nao tem permissao para criar tarefas." };
+  }
+
+  const bruto = {
+    titulo: formData.get("titulo"),
+    descricao: formData.get("descricao"),
+    obra_id: formData.get("obra_id"),
+    responsavel_id: formData.get("responsavel_id"),
+    executor_id: formData.get("executor_id"),
+    supervisor_id: formData.get("supervisor_id"),
+    status: formData.get("status"),
+    prioridade: formData.get("prioridade"),
+    prazo: formData.get("prazo"),
+    data_planejada: formData.get("data_planejada"),
+    exige_foto: formData.get("exige_foto") === "on",
+    exige_video: formData.get("exige_video") === "on",
+    exige_arquivo: formData.get("exige_arquivo") === "on",
+    localizacoes: formData.get("localizacoes"),
+  };
+
+  const resultado = esquemaCriarLote.safeParse(bruto);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
+  }
+
+  const supabase = await createClient();
+  const erroExecutor = await validarExecutorDaObra(
+    resultado.data.executor_id,
+    resultado.data.obra_id,
+  );
+  if (erroExecutor) return { erro: erroExecutor };
+
+  const dados = resultado.data;
+  const linhas = dados.localizacoes.map((localizacao) => ({
+    titulo: dados.titulo,
+    descricao: dados.descricao || null,
+    obra_id: dados.obra_id,
+    responsavel_id: dados.responsavel_id || null,
+    executor_id: dados.executor_id || null,
+    supervisor_id: dados.supervisor_id || null,
+    status: dados.status as StatusTarefa,
+    prioridade: dados.prioridade as PrioridadeTarefa,
+    prazo: dados.prazo || null,
+    data_planejada: dados.data_planejada || null,
+    exige_foto: dados.exige_foto ?? false,
+    exige_video: dados.exige_video ?? false,
+    exige_arquivo: dados.exige_arquivo ?? false,
+    localizacao_tipo: localizacao.localizacao_tipo as TipoLocalizacao,
+    planta_id: localizacao.planta_id,
+    pagina: localizacao.pagina,
+    ponto_x:
+      localizacao.localizacao_tipo === "ponto"
+        ? (localizacao.ponto_x ?? null)
+        : null,
+    ponto_y:
+      localizacao.localizacao_tipo === "ponto"
+        ? (localizacao.ponto_y ?? null)
+        : null,
+    regiao:
+      localizacao.localizacao_tipo === "regiao" ? localizacao.regiao : null,
+    criado_por: user.id,
+  }));
+
+  const { data, error } = await supabase
+    .from("tarefas")
+    .insert(linhas)
+    .select("id, responsavel_id");
+
+  if (error || !data) {
+    return {
+      erro: "Nao foi possivel criar as tarefas. Tente novamente.",
+    };
+  }
+
+  const primeiros = new Map<string, string>();
+  for (const linha of data) {
+    if (linha.responsavel_id && !primeiros.has(linha.responsavel_id)) {
+      primeiros.set(linha.responsavel_id, linha.id);
+    }
+  }
+
+  // Notifica cada responsavel apenas uma vez, usando a primeira tarefa do lote.
+  for (const [responsavelId, tarefaId] of primeiros) {
+    await enviarNotificacao(tarefaId, responsavelId, {
+      titulo: dados.titulo,
+      descricao: dados.descricao,
+      obra_id: dados.obra_id,
+      prazo: dados.prazo,
+      prioridade: dados.prioridade as PrioridadeTarefa,
+    });
+  }
+
+  const obraId = dados.obra_id;
+  const plantaId = dados.localizacoes[0]?.planta_id;
+  revalidatePath("/tarefas");
+  revalidatePath("/painel");
+  if (plantaId) revalidatePath(`/obras/${obraId}/plantas/${plantaId}`);
+  redirect(`/obras/${obraId}/plantas/${plantaId}`);
 }
 
 const esquemaAssociar = z.object({
@@ -616,6 +815,76 @@ export async function avaliarTarefa(
   revalidatePath(`/tarefas/${tarefaId}`);
   revalidatePath("/painel");
   return {};
+}
+
+export async function duplicarTarefa(
+  tarefaId: string,
+): Promise<Resultado & { id?: string }> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  const papel = await papelDoUsuario(user.id);
+  if (!eGestor(papel)) {
+    return { erro: "Voce nao tem permissao para duplicar tarefas." };
+  }
+
+  if (!tarefaId) return { erro: "Tarefa invalida." };
+
+  const supabase = await createClient();
+  const { data: tarefa } = await supabase
+    .from("tarefas")
+    .select("*")
+    .eq("id", tarefaId)
+    .single();
+
+  if (!tarefa) return { erro: "Tarefa nao encontrada." };
+
+  // Duplica como tarefa de mesmo tipo: status e aprovacao voltam a pendente e
+  // timestamps de conclusao/avaliacao nao sao copiados.
+  const { data, error } = await supabase
+    .from("tarefas")
+    .insert({
+      titulo: `${tarefa.titulo} (copia)`,
+      descricao: tarefa.descricao,
+      obra_id: tarefa.obra_id,
+      responsavel_id: tarefa.responsavel_id,
+      executor_id: tarefa.executor_id,
+      supervisor_id: tarefa.supervisor_id,
+      status: "pendente",
+      prioridade: tarefa.prioridade,
+      prazo: tarefa.prazo,
+      data_planejada: tarefa.data_planejada,
+      exige_foto: tarefa.exige_foto,
+      exige_video: tarefa.exige_video,
+      exige_arquivo: tarefa.exige_arquivo,
+      localizacao_tipo: tarefa.localizacao_tipo,
+      planta_id: tarefa.planta_id,
+      pagina: tarefa.pagina,
+      ponto_x: tarefa.ponto_x,
+      ponto_y: tarefa.ponto_y,
+      regiao: tarefa.regiao,
+      criado_por: user.id,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { erro: "Nao foi possivel duplicar a tarefa. Tente novamente." };
+  }
+
+  if (tarefa.responsavel_id) {
+    await enviarNotificacao(data.id, tarefa.responsavel_id, {
+      titulo: `${tarefa.titulo} (copia)`,
+      descricao: tarefa.descricao,
+      obra_id: tarefa.obra_id,
+      prazo: tarefa.prazo,
+      prioridade: tarefa.prioridade as PrioridadeTarefa,
+    });
+  }
+
+  revalidatePath("/tarefas");
+  revalidatePath("/painel");
+  return { id: data.id };
 }
 
 export async function excluirTarefa(tarefaId: string): Promise<Resultado> {

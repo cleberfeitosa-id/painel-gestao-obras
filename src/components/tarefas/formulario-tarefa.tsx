@@ -24,6 +24,15 @@ export type LocalizacaoInicial = {
   regiao?: { vertices: { x: number; y: number }[] };
 };
 
+export type LocalizacaoLote = {
+  localizacao_tipo: "ponto" | "regiao";
+  planta_id: string;
+  pagina: number;
+  ponto_x?: number;
+  ponto_y?: number;
+  regiao?: { vertices: { x: number; y: number }[] };
+};
+
 interface FormularioTarefaProps {
   acao: (
     estadoAnterior: ResultadoFormulario,
@@ -35,6 +44,7 @@ interface FormularioTarefaProps {
   supervisores: Pick<PerfilRow, "id" | "nome">[];
   tarefa?: TarefaRow;
   localizacaoInicial?: LocalizacaoInicial;
+  localizacoesLote?: LocalizacaoLote[];
   obraIdInicial?: string;
 }
 
@@ -78,6 +88,7 @@ export function FormularioTarefa({
   supervisores,
   tarefa,
   localizacaoInicial,
+  localizacoesLote,
   obraIdInicial,
 }: FormularioTarefaProps) {
   const [estado, acaoFormulario] = useActionState(acao, {});
@@ -139,16 +150,26 @@ export function FormularioTarefa({
     <form action={acaoFormulario} className="space-y-6">
       {tarefa && <input type="hidden" name="id" value={tarefa.id} />}
 
-      <input type="hidden" name="localizacao_tipo" value={localizacao.localizacao_tipo} />
-      <input type="hidden" name="planta_id" value={localizacao.planta_id ?? ""} />
-      <input type="hidden" name="pagina" value={localizacao.pagina ?? ""} />
-      <input type="hidden" name="ponto_x" value={localizacao.ponto_x ?? ""} />
-      <input type="hidden" name="ponto_y" value={localizacao.ponto_y ?? ""} />
-      <input
-        type="hidden"
-        name="regiao"
-        value={localizacao.regiao ? JSON.stringify(localizacao.regiao) : ""}
-      />
+      {localizacoesLote ? (
+        <input
+          type="hidden"
+          name="localizacoes"
+          value={JSON.stringify(localizacoesLote)}
+        />
+      ) : (
+        <>
+          <input type="hidden" name="localizacao_tipo" value={localizacao.localizacao_tipo} />
+          <input type="hidden" name="planta_id" value={localizacao.planta_id ?? ""} />
+          <input type="hidden" name="pagina" value={localizacao.pagina ?? ""} />
+          <input type="hidden" name="ponto_x" value={localizacao.ponto_x ?? ""} />
+          <input type="hidden" name="ponto_y" value={localizacao.ponto_y ?? ""} />
+          <input
+            type="hidden"
+            name="regiao"
+            value={localizacao.regiao ? JSON.stringify(localizacao.regiao) : ""}
+          />
+        </>
+      )}
 
       {estado.erro && (
         <div
@@ -159,8 +180,26 @@ export function FormularioTarefa({
         </div>
       )}
 
-      {localizacao.localizacao_tipo !== "nenhuma" && (
-        <ResumoLocalizacao localizacao={localizacao} />
+      {localizacoesLote ? (
+        <div className="flex items-start gap-2 rounded-lg border border-azul-200 bg-azul-50 px-4 py-3 text-sm text-azul-800">
+          <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <div>
+            <p className="font-medium">
+              {localizacoesLote.length}{" "}
+              {localizacoesLote.length === 1
+                ? "localizacao selecionada"
+                : "localizacoes selecionadas"}
+            </p>
+            <p className="text-xs text-azul-700">
+              Os dados abaixo serao replicados para cada tarefa do lote, uma por
+              localizacao.
+            </p>
+          </div>
+        </div>
+      ) : (
+        localizacao.localizacao_tipo !== "nenhuma" && (
+          <ResumoLocalizacao localizacao={localizacao} />
+        )
       )}
 
       <Campo
@@ -347,7 +386,17 @@ export function FormularioTarefa({
       </fieldset>
 
       <div className="flex items-center justify-end gap-3 pt-2">
-        <BotaoEnviar rotulo={tarefa ? "Salvar alteracoes" : "Criar tarefa"} />
+        <BotaoEnviar
+          rotulo={
+            localizacoesLote
+              ? `Criar ${localizacoesLote.length} ${
+                  localizacoesLote.length === 1 ? "tarefa" : "tarefas"
+                }`
+              : tarefa
+                ? "Salvar alteracoes"
+                : "Criar tarefa"
+          }
+        />
       </div>
     </form>
   );

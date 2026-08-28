@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Layers,
   Link2,
   MapPin,
   Maximize,
@@ -70,6 +71,10 @@ type DimensoesPagina = { largura: number; altura: number };
 type ConfirmacaoLocalizacao =
   | { tipo: "ponto"; ponto: PontoPdf }
   | { tipo: "regiao"; regiao: RegiaoPdf };
+
+type LoteMarcador =
+  | { localizacao_tipo: "ponto"; ponto: PontoPdf }
+  | { localizacao_tipo: "regiao"; regiao: RegiaoPdf };
 
 // Config do worker do PDF.js no MESMO modulo em que o <Document> e usado
 // (recomendacao oficial do react-pdf). O `new URL(..., import.meta.url)` faz o
@@ -308,6 +313,8 @@ export function VisualizadorPlanta({
   const [tarefaAssociacao, setTarefaAssociacao] = useState("");
   const [associando, setAssociando] = useState(false);
   const [erroAssociacao, setErroAssociacao] = useState<string | null>(null);
+  const [modoLote, setModoLote] = useState(false);
+  const [loteMarcadores, setLoteMarcadores] = useState<LoteMarcador[]>([]);
 
   const [filtroSituacao, setFiltroSituacao] = useState<"todas" | SituacaoTarefa>("todas");
   const [filtroPrioridade, setFiltroPrioridade] = useState<"todas" | PrioridadeTarefa>("todas");
@@ -387,6 +394,7 @@ export function VisualizadorPlanta({
     setRegiaoAtual(null);
     setPosicaoMouse(null);
     setConfirmacao(null);
+    setLoteMarcadores([]);
     pinoDragRef.current = null;
     cantoDragRef.current = null;
     regiaoRef.current = null;
@@ -515,7 +523,15 @@ export function VisualizadorPlanta({
       if (regiaoRef.current && regiaoAtual) {
         const limites = limitesDaRegiao(regiaoAtual);
         if (limites && limites.largura > 2 && limites.altura > 2) {
-          setConfirmacao({ tipo: "regiao", regiao: regiaoAtual });
+          if (modoLote) {
+            setLoteMarcadores((atual) => [
+              ...atual,
+              { localizacao_tipo: "regiao", regiao: regiaoAtual },
+            ]);
+            setRegiaoAtual(null);
+          } else {
+            setConfirmacao({ tipo: "regiao", regiao: regiaoAtual });
+          }
         } else {
           setRegiaoAtual(null);
         }
@@ -537,7 +553,14 @@ export function VisualizadorPlanta({
     } else if (modoDesenho === "pino") {
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
-      setConfirmacao({ tipo: "ponto", ponto });
+      if (modoLote) {
+        setLoteMarcadores((atual) => [
+          ...atual,
+          { localizacao_tipo: "ponto", ponto },
+        ]);
+      } else {
+        setConfirmacao({ tipo: "ponto", ponto });
+      }
     } else if (ferramenta === "calibrar") {
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
@@ -595,6 +618,35 @@ export function VisualizadorPlanta({
       );
     }
     setConfirmacao(null);
+  }
+
+  function criarEmLote() {
+    if (loteMarcadores.length === 0) return;
+    const localizacoes = loteMarcadores.map((marcador) =>
+      marcador.localizacao_tipo === "ponto"
+        ? {
+            localizacao_tipo: "ponto",
+            planta_id: planta.id,
+            pagina: paginaAtual,
+            ponto_x: marcador.ponto.x,
+            ponto_y: marcador.ponto.y,
+          }
+        : {
+            localizacao_tipo: "regiao",
+            planta_id: planta.id,
+            pagina: paginaAtual,
+            regiao: marcador.regiao,
+          },
+    );
+    const json = encodeURIComponent(JSON.stringify(localizacoes));
+    router.push(
+      `/tarefas/nova-em-lote?obra=${obraId}&planta=${planta.id}&pagina=${paginaAtual}&localizacoes=${json}`,
+    );
+  }
+
+  function limparLote() {
+    setLoteMarcadores([]);
+    setRegiaoAtual(null);
   }
 
   function aumentarZoom() {
@@ -732,7 +784,7 @@ export function VisualizadorPlanta({
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-4">
-        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-borda bg-fundo-card p-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-borda bg-fundo-card p-1.5 shadow-sm">
           <div className="flex items-center gap-1">
             {FERRAMENTAS.filter(
               (f) => f.valor === "navegar" || f.valor === "medir" || podeEditar,
@@ -752,7 +804,7 @@ export function VisualizadorPlanta({
                   title={ferramentaOpcao.rotulo}
                   aria-pressed={ativa}
                   className={cn(
-                    "flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors",
+                    "flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors",
                     ativa
                       ? "bg-azul-600 text-white"
                       : "text-superficie-600 hover:bg-superficie-100",
@@ -770,8 +822,36 @@ export function VisualizadorPlanta({
           <div className="flex items-center gap-1">
             <button
               type="button"
+              onClick={() => {
+                setModoLote((atual) => {
+                  const novo = !atual;
+                  if (novo) limparRascunho();
+                  else setLoteMarcadores([]);
+                  return novo;
+                });
+              }}
+              disabled={ferramenta !== "pino" && ferramenta !== "regiao"}
+              title="Criar varias tarefas de uma vez na planta"
+              aria-pressed={modoLote}
+              className={cn(
+                "flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors disabled:opacity-40",
+                modoLote
+                  ? "bg-azul-600 text-white"
+                  : "text-superficie-600 hover:bg-superficie-100",
+              )}
+            >
+              <Layers className="h-4 w-4" />
+              <span className="hidden sm:inline">Lote</span>
+            </button>
+          </div>
+
+          <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
               onClick={diminuirZoom}
-              className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
+              className="flex h-9 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
               title="Diminuir zoom"
             >
               <ZoomOut className="h-4 w-4" />
@@ -782,7 +862,7 @@ export function VisualizadorPlanta({
             <button
               type="button"
               onClick={aumentarZoom}
-              className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
+              className="flex h-9 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
               title="Aumentar zoom"
             >
               <ZoomIn className="h-4 w-4" />
@@ -790,7 +870,7 @@ export function VisualizadorPlanta({
             <button
               type="button"
               onClick={() => setAjusteLargura(true)}
-              className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
+              className="flex h-9 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
               title="Ajustar a largura"
             >
               <Maximize className="h-4 w-4" />
@@ -798,7 +878,7 @@ export function VisualizadorPlanta({
             <button
               type="button"
               onClick={resetarZoom}
-              className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
+              className="flex h-9 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
               title="Zoom 100%"
             >
               <RotateCcw className="h-4 w-4" />
@@ -813,7 +893,7 @@ export function VisualizadorPlanta({
                   type="button"
                   onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
                   disabled={paginaAtual <= 1}
-                  className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100 disabled:opacity-40"
+                  className="flex h-9 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100 disabled:opacity-40"
                   title="Pagina anterior"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -829,7 +909,7 @@ export function VisualizadorPlanta({
                       setPaginaAtual(valor);
                     }
                   }}
-                  className="h-11 w-14 rounded-lg border border-borda bg-white px-2 text-center text-sm text-superficie-900 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
+                  className="h-9 w-14 rounded-lg border border-borda bg-white px-2 text-center text-sm text-superficie-900 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
                   aria-label="Numero da pagina"
                 />
                 <span className="text-sm text-superficie-500">/ {numPaginas}</span>
@@ -837,7 +917,7 @@ export function VisualizadorPlanta({
                   type="button"
                   onClick={() => setPaginaAtual((p) => Math.min(numPaginas, p + 1))}
                   disabled={paginaAtual >= numPaginas}
-                  className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100 disabled:opacity-40"
+                  className="flex h-9 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100 disabled:opacity-40"
                   title="Proxima pagina"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -852,7 +932,7 @@ export function VisualizadorPlanta({
               <button
                 type="button"
                 onClick={() => setPontosMedicao([])}
-                className="flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-superficie-600 hover:bg-superficie-100"
+                className="flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-superficie-600 hover:bg-superficie-100"
               >
                 <X className="h-4 w-4" />
                 Limpar
@@ -861,9 +941,9 @@ export function VisualizadorPlanta({
           )}
         </div>
 
-        <p className="text-xs text-superficie-500">{DICA_FERRAMENTA[ferramenta]}</p>
+        <p className="text-[11px] text-superficie-400">{DICA_FERRAMENTA[ferramenta]}</p>
 
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-borda bg-fundo-card px-3 py-2 text-xs" role="group" aria-label="Legenda de cores">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-borda bg-fundo-card px-2.5 py-1.5 text-[11px]" role="group" aria-label="Legenda de cores">
           {OPCOES_SITUACAO_TAREFA.map((opcao) => (
             <span key={opcao.valor} className="inline-flex items-center gap-1.5">
               <span className={cn("inline-block h-2.5 w-2.5 rounded-full", opcao.pino)} />
@@ -873,7 +953,7 @@ export function VisualizadorPlanta({
         </div>
 
         {ferramenta === "associar" && (
-          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-azul-200 bg-azul-50/60 px-3 py-3">
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-azul-200 bg-azul-50/60 px-3 py-2.5">
             <div className="min-w-[220px] flex-1">
               <Selecao
                 rotulo="Tarefa para associar"
@@ -881,11 +961,29 @@ export function VisualizadorPlanta({
                 onChange={(e) => setTarefaAssociacao(e.target.value)}
               >
                 <option value="">Selecione uma tarefa</option>
-                {tarefasObra.map((tarefa) => (
-                  <option key={tarefa.id} value={tarefa.id}>
-                    {tarefa.titulo}
-                  </option>
-                ))}
+                {tarefasObra.map((tarefa) => {
+                  let status = "";
+                  if (tarefa.localizacao_tipo === "ponto") {
+                    status = "Pino";
+                  } else if (tarefa.localizacao_tipo === "regiao") {
+                    status = "Regiao";
+                  }
+                  const emOutraPlanta =
+                    tarefa.planta_id && tarefa.planta_id !== planta.id;
+                  const sufixo = status
+                    ? emOutraPlanta
+                      ? ` - ${status} em "${
+                          tarefa.planta_nome ?? "outra planta"
+                        }"`
+                      : ` - ${status}`
+                    : " - Sem localizacao";
+                  return (
+                    <option key={tarefa.id} value={tarefa.id}>
+                      {tarefa.titulo}
+                      {sufixo}
+                    </option>
+                  );
+                })}
               </Selecao>
             </div>
             <div>
@@ -1146,6 +1244,52 @@ export function VisualizadorPlanta({
                       );
                     })}
 
+                  {loteMarcadores.map((marcador, indice) =>
+                    marcador.localizacao_tipo === "ponto" ? (
+                      <div
+                        key={`lote-${indice}`}
+                        className="absolute z-30 -translate-x-1/2 -translate-y-1/2"
+                        style={{
+                          left: `${pdfParaPercentual(marcador.ponto, dimensoes.largura, dimensoes.altura).esquerda}%`,
+                          top: `${pdfParaPercentual(marcador.ponto, dimensoes.largura, dimensoes.altura).topo}%`,
+                        }}
+                      >
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-azul-600 text-[10px] font-bold text-white shadow ring-2 ring-white">
+                          {indice + 1}
+                        </span>
+                      </div>
+                    ) : (() => {
+                      const limites = limitesDaRegiao(marcador.regiao);
+                      if (!limites) return null;
+                      const canto1 = pdfParaPercentual(
+                        { x: limites.x, y: limites.y },
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      const canto2 = pdfParaPercentual(
+                        { x: limites.x + limites.largura, y: limites.y + limites.altura },
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      return (
+                        <div
+                          key={`lote-${indice}`}
+                          className="absolute z-30 flex items-start rounded-sm border-2 border-azul-600"
+                          style={{
+                            left: `${Math.min(canto1.esquerda, canto2.esquerda)}%`,
+                            top: `${Math.min(canto1.topo, canto2.topo)}%`,
+                            width: `${Math.abs(canto2.esquerda - canto1.esquerda)}%`,
+                            height: `${Math.abs(canto2.topo - canto1.topo)}%`,
+                          }}
+                        >
+                          <span className="-mt-2 -ml-2 flex h-5 w-5 items-center justify-center rounded-full bg-azul-600 text-[10px] font-bold text-white shadow ring-2 ring-white">
+                            {indice + 1}
+                          </span>
+                        </div>
+                      );
+                    })(),
+                  )}
+
                   {ferramenta === "medir" &&
                     pontosMedicao.map((ponto, indice) => (
                       <Marcador
@@ -1264,6 +1408,37 @@ export function VisualizadorPlanta({
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="space-y-6 lg:sticky lg:top-6">
+        {modoLote && loteMarcadores.length > 0 && (
+          <div className="rounded-lg border border-azul-200 bg-azul-50/60 px-4 py-3">
+            <p className="text-sm font-medium text-azul-800">
+              {loteMarcadores.length}{" "}
+              {loteMarcadores.length === 1
+                ? "localizacao"
+                : "localizacoes"}{" "}
+              marcadas
+            </p>
+            <p className="mt-0.5 text-xs text-azul-700">
+              Clique em &quot;Criar tarefas&quot; para preencher um unico
+              formulario e replicar os dados para cada localizacao.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Botao type="button" onClick={criarEmLote}>
+                Criar {loteMarcadores.length === 1 ? "tarefa" : "tarefas"}
+              </Botao>
+              <Botao
+                type="button"
+                variante="fantasma"
+                onClick={limparLote}
+              >
+                Limpar
+              </Botao>
+            </div>
+          </div>
+        )}
+
         {confirmacao && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-azul-200 bg-azul-50/60 px-4 py-3">
             <div>
@@ -1308,20 +1483,19 @@ export function VisualizadorPlanta({
             )}
           </div>
         )}
+        <ListaTarefasPlanta
+          tarefas={tarefasFiltradas}
+          todasTarefasPagina={tarefasPagina}
+          paginaAtual={paginaAtual}
+          executores={executores}
+          filtroSituacao={filtroSituacao}
+          aoMudarSituacao={setFiltroSituacao}
+          filtroPrioridade={filtroPrioridade}
+          aoMudarPrioridade={setFiltroPrioridade}
+          filtroExecutor={filtroExecutor}
+          aoMudarExecutor={setFiltroExecutor}
+        />
       </div>
-
-      <ListaTarefasPlanta
-        tarefas={tarefasFiltradas}
-        todasTarefasPagina={tarefasPagina}
-        paginaAtual={paginaAtual}
-        executores={executores}
-        filtroSituacao={filtroSituacao}
-        aoMudarSituacao={setFiltroSituacao}
-        filtroPrioridade={filtroPrioridade}
-        aoMudarPrioridade={setFiltroPrioridade}
-        filtroExecutor={filtroExecutor}
-        aoMudarExecutor={setFiltroExecutor}
-      />
     </div>
   );
 }

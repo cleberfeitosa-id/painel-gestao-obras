@@ -21,6 +21,7 @@ import {
 } from "@/components/ui";
 import { FiltrosTarefas } from "@/components/tarefas/filtros-tarefas";
 import { BotaoExcluirTarefa } from "@/components/tarefas/botao-excluir-tarefa";
+import { BotaoDuplicarTarefa } from "@/components/tarefas/botao-duplicar-tarefa";
 import type {
   ObraRow,
   PerfilRow,
@@ -304,11 +305,18 @@ export default async function TarefasPage({
                         </Celula>
                         {podeExcluir && (
                           <Celula>
-                            <BotaoExcluirTarefa
-                              tarefaId={tarefa.id}
-                              titulo={tarefa.titulo}
-                              compacto
-                            />
+                            <div className="flex items-center justify-end gap-1">
+                              <BotaoDuplicarTarefa
+                                tarefaId={tarefa.id}
+                                titulo={tarefa.titulo}
+                                compacto
+                              />
+                              <BotaoExcluirTarefa
+                                tarefaId={tarefa.id}
+                                titulo={tarefa.titulo}
+                                compacto
+                              />
+                            </div>
                           </Celula>
                         )}
                       </Linha>
@@ -379,6 +387,11 @@ export default async function TarefasPage({
                     </Link>
                     {podeExcluir && (
                       <div className="flex items-center justify-end gap-2 border-t border-borda px-4 py-2">
+                        <BotaoDuplicarTarefa
+                          tarefaId={tarefa.id}
+                          titulo={tarefa.titulo}
+                          compacto
+                        />
                         <BotaoExcluirTarefa
                           tarefaId={tarefa.id}
                           titulo={tarefa.titulo}

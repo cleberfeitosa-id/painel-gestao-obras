@@ -57,7 +57,7 @@ export default async function DetalhePlantaPage({
       .eq("planta_id", plantaId),
     supabase
       .from("tarefas")
-      .select("id, titulo, localizacao_tipo, planta_id")
+      .select("id, titulo, localizacao_tipo, planta_id, plantas!tarefas_planta_id_fkey(nome)")
       .eq("obra_id", id),
     user
       ? supabase.from("perfis").select("papel").eq("id", user.id).single()
@@ -102,6 +102,7 @@ export default async function DetalhePlantaPage({
       titulo: tarefa.titulo,
       localizacao_tipo: tarefa.localizacao_tipo,
       planta_id: tarefa.planta_id,
+      planta_nome: tarefa.plantas?.nome ?? null,
     }),
   );
 
@@ -127,6 +128,12 @@ export default async function DetalhePlantaPage({
           </div>
           {podeEditar && (
             <div className="flex gap-2">
+              <Link href={`/tarefas/nova?obra=${id}`}>
+                <Botao variante="primario">
+                  <Plus className="h-4 w-4" />
+                  Nova tarefa
+                </Botao>
+              </Link>
               <Link href={`/obras/${id}/plantas/nova`}>
                 <Botao variante="contorno">
                   <Plus className="h-4 w-4" />

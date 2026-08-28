@@ -32,6 +32,7 @@ export type TarefaObraAssociacao = {
   titulo: string;
   localizacao_tipo: TipoLocalizacao;
   planta_id: string | null;
+  planta_nome: string | null;
 };
 
 export type PropsAreaPlanta = {
