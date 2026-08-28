@@ -230,9 +230,10 @@ export default async function PainelPage() {
                     }[prazoInfo.situacao];
 
                     return (
-                      <div
+                      <Link
                         key={tarefa.id}
-                        className="flex items-center justify-between gap-4 px-6 py-3"
+                        href={`/tarefas/${tarefa.id}`}
+                        className="flex items-center justify-between gap-4 px-6 py-3 hover:bg-superficie-50 transition-colors"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-superficie-900 truncate">
@@ -252,7 +253,7 @@ export default async function PainelPage() {
                             {prazoInfo.texto}
                           </span>
                         </div>
-                      </div>
+                      </Link>
                     );
                   })}
                 </div>
@@ -283,7 +284,11 @@ export default async function PainelPage() {
               ) : (
                 <div className="divide-y divide-superficie-100">
                   {dados.obrasRecentes.map((obra) => (
-                    <div key={obra.id} className="px-6 py-3">
+                    <Link
+                      key={obra.id}
+                      href={`/obras/${obra.id}`}
+                      className="block px-6 py-3 hover:bg-superficie-50 transition-colors"
+                    >
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium text-superficie-900 truncate">
                           {obra.nome}
@@ -303,7 +308,7 @@ export default async function PainelPage() {
                           {obra.cidade}
                         </p>
                       )}
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
