@@ -1,0 +1,895 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Maximize,
+  MousePointer2,
+  RotateCcw,
+  Ruler,
+  Scale,
+  Square,
+  X,
+  ZoomIn,
+  ZoomOut,
+  type LucideIcon,
+} from "lucide-react";
+import { Document, Page } from "react-pdf";
+import { Botao, Etiqueta, Spinner } from "@/components/ui";
+import {
+  calcularCalibracao,
+  centroDaRegiao,
+  distanciaEmPontos,
+  formatarMedida,
+  limitesDaRegiao,
+  medirArea,
+  medirDistancia,
+  medirPerimetro,
+  pdfParaPercentual,
+  retanguloParaRegiao,
+  telaParaPdf,
+  type Calibracao,
+} from "@/lib/pdf/coordenadas";
+import { PRIORIDADE_TAREFA, STATUS_TAREFA } from "@/lib/domain/rotulos";
+import { situacaoPrazo } from "@/lib/datas";
+import { cn } from "@/lib/utils";
+import { Calibragem } from "./calibragem";
+import { ListaTarefasPlanta } from "./lista-tarefas-planta";
+import {
+  renovarUrlPlanta,
+  salvarCalibracao as salvarCalibracaoAcao,
+} from "@/app/(protegido)/obras/[id]/plantas/acoes";
+import type {
+  PlantaCalibracaoRow,
+  PontoPdf,
+  PrioridadeTarefa,
+  RegiaoPdf,
+} from "@/lib/supabase/database.types";
+import type { PropsAreaPlanta, TarefaPlanta } from "./tipos";
+
+type Ferramenta = "navegar" | "medir" | "pino" | "regiao" | "calibrar";
+
+type DimensoesPagina = { largura: number; altura: number };
+
+const FERRAMENTAS: Array<{
+  valor: Ferramenta;
+  rotulo: string;
+  icone: LucideIcon;
+}> = [
+  { valor: "navegar", rotulo: "Navegar", icone: MousePointer2 },
+  { valor: "medir", rotulo: "Medir", icone: Ruler },
+  { valor: "pino", rotulo: "Pino", icone: MapPin },
+  { valor: "regiao", rotulo: "Regiao", icone: Square },
+  { valor: "calibrar", rotulo: "Calibrar", icone: Scale },
+];
+
+const DICA_FERRAMENTA: Record<Ferramenta, string> = {
+  navegar:
+    "Arraste para mover a planta. Clique em um pino ou regiao para abrir a tarefa.",
+  medir:
+    "Clique em dois pontos para medir a distancia; um terceiro clique desenha um retangulo e mede a area.",
+  pino: "Clique na planta para criar uma tarefa neste ponto.",
+  regiao: "Arraste sobre a planta para criar uma tarefa em uma regiao.",
+  calibrar: "Clique em dois pontos de distancia conhecida para calibrar a escala.",
+};
+
+const CORES_PINO: Record<PrioridadeTarefa, string> = {
+  baixa: "bg-sky-500",
+  media: "bg-slate-500",
+  alta: "bg-orange-500",
+  urgente: "bg-red-500",
+};
+
+const CORES_REGIAO: Record<PrioridadeTarefa, string> = {
+  baixa: "border-sky-500/80 bg-sky-500/10",
+  media: "border-slate-500/80 bg-slate-500/10",
+  alta: "border-orange-500/80 bg-orange-500/10",
+  urgente: "border-red-500/80 bg-red-500/10",
+};
+
+const cursorPorFerramenta: Record<Ferramenta, string> = {
+  navegar: "grab",
+  medir: "crosshair",
+  pino: "crosshair",
+  regiao: "crosshair",
+  calibrar: "crosshair",
+};
+
+function DicaTarefa({ tarefa }: { tarefa: TarefaPlanta }) {
+  const prazoInfo = situacaoPrazo(tarefa.prazo, tarefa.status === "concluido");
+  return (
+    <div className="w-56 rounded-lg border border-borda bg-white p-3 shadow-lg">
+      <p className="line-clamp-2 text-sm font-medium text-superficie-900">
+        {tarefa.titulo}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1">
+        <Etiqueta className={STATUS_TAREFA[tarefa.status].classe}>
+          {STATUS_TAREFA[tarefa.status].rotulo}
+        </Etiqueta>
+        <Etiqueta className={PRIORIDADE_TAREFA[tarefa.prioridade].classe}>
+          {PRIORIDADE_TAREFA[tarefa.prioridade].rotulo}
+        </Etiqueta>
+      </div>
+      <p className="mt-2 text-xs text-superficie-500">{prazoInfo.texto}</p>
+    </div>
+  );
+}
+
+function Marcador({
+  ponto,
+  dimensoes,
+  cor,
+}: {
+  ponto: PontoPdf;
+  dimensoes: DimensoesPagina;
+  cor: string;
+}) {
+  const pos = pdfParaPercentual(ponto, dimensoes.largura, dimensoes.altura);
+  return (
+    <div
+      className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2"
+      style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
+    >
+      <span
+        className={cn(
+          "block h-3 w-3 rounded-full border-2 border-white shadow",
+          cor,
+        )}
+      />
+    </div>
+  );
+}
+
+function RotuloMedicao({
+  ponto,
+  texto,
+  dimensoes,
+}: {
+  ponto: PontoPdf;
+  texto: string;
+  dimensoes: DimensoesPagina;
+}) {
+  const pos = pdfParaPercentual(ponto, dimensoes.largura, dimensoes.altura);
+  return (
+    <div
+      className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-superficie-900/90 px-2 py-1 text-xs font-medium text-white"
+      style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
+    >
+      {texto}
+    </div>
+  );
+}
+
+function CarregandoPlanta() {
+  return (
+    <div className="flex min-h-[400px] w-[480px] max-w-full flex-col items-center justify-center gap-3 p-8">
+      <Spinner tamanho="lg" />
+      <p className="text-sm text-superficie-500">Carregando planta...</p>
+    </div>
+  );
+}
+
+function ErroPlanta({
+  erro,
+  aoTentar,
+  renovando,
+}: {
+  erro: string;
+  aoTentar: () => void;
+  renovando: boolean;
+}) {
+  return (
+    <div className="flex min-h-[300px] w-[480px] max-w-full flex-col items-center justify-center gap-3 p-8 text-center">
+      <AlertTriangle className="h-8 w-8 text-perigo" />
+      <p className="text-sm text-superficie-700">{erro}</p>
+      <Botao variante="contorno" tamanho="sm" onClick={aoTentar} carregando={renovando}>
+        Tentar novamente
+      </Botao>
+    </div>
+  );
+}
+
+export function VisualizadorPlanta({
+  obraId,
+  planta,
+  urlPdf,
+  calibracoes,
+  tarefas,
+  podeEditar,
+}: PropsAreaPlanta) {
+  const router = useRouter();
+  const [urlAtual, setUrlAtual] = useState<string | null>(urlPdf);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [numPaginas, setNumPaginas] = useState(planta.total_paginas);
+  const [escala, setEscala] = useState(1);
+  const [ajusteLargura, setAjusteLargura] = useState(true);
+  const [ferramenta, setFerramenta] = useState<Ferramenta>("navegar");
+  const [dimensoes, setDimensoes] = useState<DimensoesPagina | null>(null);
+  const [erroDocumento, setErroDocumento] = useState<string | null>(null);
+  const [renovando, setRenovando] = useState(false);
+  const [arrastando, setArrastando] = useState(false);
+
+  const [pontosMedicao, setPontosMedicao] = useState<PontoPdf[]>([]);
+  const [pontosCalibracao, setPontosCalibracao] = useState<PontoPdf[]>([]);
+  const [regiaoAtual, setRegiaoAtual] = useState<RegiaoPdf | null>(null);
+  const [pinoAtivo, setPinoAtivo] = useState<string | null>(null);
+
+  const [calibracoesPorPagina, setCalibracoesPorPagina] = useState<
+    Map<number, PlantaCalibracaoRow>
+  >(() => new Map(calibracoes.map((c) => [c.pagina, c])));
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const panRef = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
+  const regiaoRef = useRef<PontoPdf | null>(null);
+
+  const calibracaoLinha = calibracoesPorPagina.get(paginaAtual) ?? null;
+  const calibracao: Calibracao | null = calibracaoLinha
+    ? {
+        unidadesPorPonto: calibracaoLinha.unidades_por_ponto,
+        unidade: calibracaoLinha.unidade,
+      }
+    : null;
+
+  const tarefasPagina = useMemo(
+    () => tarefas.filter((t) => t.pagina === paginaAtual),
+    [tarefas, paginaAtual],
+  );
+
+  const aplicarAjusteLargura = useCallback(() => {
+    if (!ajusteLargura || !dimensoes) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const larguraUtil = el.clientWidth - 32;
+    setEscala(Math.max(0.1, larguraUtil / dimensoes.largura));
+  }, [ajusteLargura, dimensoes]);
+
+  useEffect(() => {
+    aplicarAjusteLargura();
+    const el = containerRef.current;
+    if (!el) return;
+    const observador = new ResizeObserver(aplicarAjusteLargura);
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, [aplicarAjusteLargura]);
+
+  useEffect(() => {
+    setPontosMedicao([]);
+    setPontosCalibracao([]);
+    setRegiaoAtual(null);
+    regiaoRef.current = null;
+    if (containerRef.current) containerRef.current.scrollTop = 0;
+  }, [paginaAtual]);
+
+  function pontoDoEvento(e: { clientX: number; clientY: number }): PontoPdf | null {
+    const rect = overlayRef.current?.getBoundingClientRect();
+    if (!rect || !dimensoes) return null;
+    return telaParaPdf(e.clientX, e.clientY, rect, dimensoes.largura, dimensoes.altura);
+  }
+
+  function aoPressionar(e: React.PointerEvent<HTMLDivElement>) {
+    if (ferramenta === "navegar") {
+      const el = containerRef.current;
+      if (!el) return;
+      panRef.current = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, st: el.scrollTop };
+      setArrastando(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } else if (ferramenta === "regiao") {
+      const ponto = pontoDoEvento(e);
+      if (!ponto) return;
+      regiaoRef.current = ponto;
+      setRegiaoAtual(retanguloParaRegiao(ponto, ponto));
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+  }
+
+  function aoMover(e: React.PointerEvent<HTMLDivElement>) {
+    if (ferramenta === "navegar" && panRef.current) {
+      const el = containerRef.current;
+      if (!el) return;
+      el.scrollLeft = panRef.current.sl - (e.clientX - panRef.current.x);
+      el.scrollTop = panRef.current.st - (e.clientY - panRef.current.y);
+    } else if (ferramenta === "regiao" && regiaoRef.current) {
+      const ponto = pontoDoEvento(e);
+      if (!ponto) return;
+      setRegiaoAtual(retanguloParaRegiao(regiaoRef.current, ponto));
+    }
+  }
+
+  function aoSoltar() {
+    if (ferramenta === "navegar") {
+      panRef.current = null;
+      setArrastando(false);
+    } else if (ferramenta === "regiao") {
+      if (regiaoRef.current && regiaoAtual) {
+        const limites = limitesDaRegiao(regiaoAtual);
+        if (limites && limites.largura > 2 && limites.altura > 2) {
+          const regiaoJson = encodeURIComponent(JSON.stringify(regiaoAtual));
+          router.push(
+            `/tarefas/nova?obra=${obraId}&planta=${planta.id}&pagina=${paginaAtual}&tipo=regiao&regiao=${regiaoJson}`,
+          );
+        }
+      }
+      regiaoRef.current = null;
+      setRegiaoAtual(null);
+    }
+  }
+
+  function aoClicar(e: React.MouseEvent<HTMLDivElement>) {
+    if (ferramenta === "medir") {
+      const ponto = pontoDoEvento(e);
+      if (!ponto) return;
+      setPontosMedicao((atual) => (atual.length >= 3 ? [ponto] : [...atual, ponto]));
+    } else if (ferramenta === "pino") {
+      const ponto = pontoDoEvento(e);
+      if (!ponto) return;
+      router.push(
+        `/tarefas/nova?obra=${obraId}&planta=${planta.id}&pagina=${paginaAtual}&tipo=ponto&x=${ponto.x.toFixed(2)}&y=${ponto.y.toFixed(2)}`,
+      );
+    } else if (ferramenta === "calibrar") {
+      const ponto = pontoDoEvento(e);
+      if (!ponto) return;
+      setPontosCalibracao((atual) => (atual.length >= 2 ? [ponto] : [...atual, ponto]));
+    }
+  }
+
+  function aumentarZoom() {
+    setAjusteLargura(false);
+    setEscala((e) => Math.min(5, Number((e * 1.25).toFixed(3))));
+  }
+
+  function diminuirZoom() {
+    setAjusteLargura(false);
+    setEscala((e) => Math.max(0.1, Number((e / 1.25).toFixed(3))));
+  }
+
+  function resetarZoom() {
+    setAjusteLargura(false);
+    setEscala(1);
+  }
+
+  async function renovarUrl() {
+    setRenovando(true);
+    const resultado = await renovarUrlPlanta(planta.id);
+    if ("url" in resultado) {
+      setUrlAtual(resultado.url);
+      setErroDocumento(null);
+    } else {
+      setErroDocumento(resultado.erro);
+    }
+    setRenovando(false);
+  }
+
+  async function salvarCalibracao(
+    distanciaReal: number,
+    unidade: "m" | "cm",
+  ): Promise<{ erro?: string }> {
+    if (pontosCalibracao.length !== 2) {
+      return { erro: "Selecione dois pontos na planta." };
+    }
+    const [p1, p2] = pontosCalibracao;
+    let unidadesPorPonto: number;
+    try {
+      unidadesPorPonto = calcularCalibracao(p1, p2, distanciaReal);
+    } catch (erro) {
+      return { erro: erro instanceof Error ? erro.message : "Pontos de calibragem invalidos." };
+    }
+
+    const resultado = await salvarCalibracaoAcao({
+      plantaId: planta.id,
+      pagina: paginaAtual,
+      unidadesPorPonto,
+      unidade,
+      refP1: p1,
+      refP2: p2,
+      distanciaReal,
+    });
+
+    if ("erro" in resultado) return { erro: resultado.erro };
+
+    setCalibracoesPorPagina((atual) => {
+      const novo = new Map(atual);
+      novo.set(paginaAtual, {
+        planta_id: planta.id,
+        pagina: paginaAtual,
+        unidades_por_ponto: unidadesPorPonto,
+        unidade,
+        ref_p1: p1,
+        ref_p2: p2,
+        distancia_real: distanciaReal,
+        calibrado_por: null,
+        criado_em: new Date().toISOString(),
+      });
+      return novo;
+    });
+    setPontosCalibracao([]);
+    setFerramenta("navegar");
+    return {};
+  }
+
+  const linhaMedicao =
+    ferramenta === "medir" && pontosMedicao.length >= 2
+      ? {
+          p1: pontosMedicao[0],
+          p2: pontosMedicao[1],
+          distancia: calibracao
+            ? formatarMedida(medirDistancia(pontosMedicao[0], pontosMedicao[1], calibracao), calibracao.unidade)
+            : `${formatarMedida(distanciaEmPontos(pontosMedicao[0], pontosMedicao[1]), "pt")} - calibre a pagina`,
+        }
+      : null;
+
+  const retanguloMedicao =
+    ferramenta === "medir" && pontosMedicao.length >= 3 && calibracao
+      ? (() => {
+          const regiao = retanguloParaRegiao(pontosMedicao[0], pontosMedicao[2]);
+          const area = medirArea(regiao.vertices, calibracao);
+          const perimetro = medirPerimetro(regiao.vertices, calibracao);
+          const centro = centroDaRegiao(regiao);
+          return {
+            regiao,
+            texto: `Area: ${formatarMedida(area, `${calibracao.unidade}²`)} · Perimetro: ${formatarMedida(perimetro, calibracao.unidade)}`,
+            centro,
+          };
+        })()
+      : null;
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="min-w-0 space-y-4">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-borda bg-fundo-card p-2 shadow-sm">
+          <div className="flex items-center gap-1">
+            {FERRAMENTAS.filter(
+              (f) => f.valor === "navegar" || f.valor === "medir" || podeEditar,
+            ).map((ferramentaOpcao) => {
+              const Icone = ferramentaOpcao.icone;
+              const ativa = ferramenta === ferramentaOpcao.valor;
+              return (
+                <button
+                  key={ferramentaOpcao.valor}
+                  type="button"
+                  onClick={() => {
+                    setFerramenta(ferramentaOpcao.valor);
+                    if (ferramentaOpcao.valor !== "calibrar") setPontosCalibracao([]);
+                  }}
+                  title={ferramentaOpcao.rotulo}
+                  aria-pressed={ativa}
+                  className={cn(
+                    "flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors",
+                    ativa
+                      ? "bg-azul-600 text-white"
+                      : "text-superficie-600 hover:bg-superficie-100",
+                  )}
+                >
+                  <Icone className="h-4 w-4" />
+                  <span className="hidden sm:inline">{ferramentaOpcao.rotulo}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={diminuirZoom}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
+              title="Diminuir zoom"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+            <span className="w-12 text-center text-sm tabular-nums text-superficie-700">
+              {Math.round(escala * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={aumentarZoom}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
+              title="Aumentar zoom"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setAjusteLargura(true)}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
+              title="Ajustar a largura"
+            >
+              <Maximize className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={resetarZoom}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100"
+              title="Zoom 100%"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+          </div>
+
+          {numPaginas > 1 && (
+            <>
+              <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                  disabled={paginaAtual <= 1}
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100 disabled:opacity-40"
+                  title="Pagina anterior"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <input
+                  type="number"
+                  min={1}
+                  max={numPaginas}
+                  value={paginaAtual}
+                  onChange={(e) => {
+                    const valor = Number(e.target.value);
+                    if (Number.isFinite(valor) && valor >= 1 && valor <= numPaginas) {
+                      setPaginaAtual(valor);
+                    }
+                  }}
+                  className="h-11 w-14 rounded-lg border border-borda bg-white px-2 text-center text-sm text-superficie-900 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
+                  aria-label="Numero da pagina"
+                />
+                <span className="text-sm text-superficie-500">/ {numPaginas}</span>
+                <button
+                  type="button"
+                  onClick={() => setPaginaAtual((p) => Math.min(numPaginas, p + 1))}
+                  disabled={paginaAtual >= numPaginas}
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100 disabled:opacity-40"
+                  title="Proxima pagina"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </>
+          )}
+
+          {ferramenta === "medir" && pontosMedicao.length > 0 && (
+            <>
+              <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
+              <button
+                type="button"
+                onClick={() => setPontosMedicao([])}
+                className="flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-superficie-600 hover:bg-superficie-100"
+              >
+                <X className="h-4 w-4" />
+                Limpar
+              </button>
+            </>
+          )}
+        </div>
+
+        <p className="text-xs text-superficie-500">{DICA_FERRAMENTA[ferramenta]}</p>
+
+        <Calibragem
+          calibracao={calibracaoLinha}
+          pontos={pontosCalibracao}
+          podeEditar={podeEditar}
+          aoIniciar={() => {
+            setFerramenta("calibrar");
+            setPontosCalibracao([]);
+          }}
+          aoSalvar={salvarCalibracao}
+          aoCancelar={() => {
+            setPontosCalibracao([]);
+            setFerramenta("navegar");
+          }}
+        />
+
+        <div
+          ref={containerRef}
+          className="relative h-[70vh] overflow-auto rounded-xl border border-borda bg-superficie-100/60"
+        >
+          <div className="flex min-h-full min-w-full p-4">
+            <div className="relative m-auto w-fit shadow-lg">
+              {urlAtual ? (
+                <Document
+                  file={urlAtual}
+                  onLoadSuccess={({ numPages: total }) => setNumPaginas(total)}
+                  onLoadError={() =>
+                    setErroDocumento(
+                      "Nao foi possivel carregar o PDF. O link pode ter expirado.",
+                    )
+                  }
+                  loading={<CarregandoPlanta />}
+                  error={
+                    <ErroPlanta
+                      erro={erroDocumento ?? "Nao foi possivel carregar o PDF."}
+                      aoTentar={renovarUrl}
+                      renovando={renovando}
+                    />
+                  }
+                >
+                  <Page
+                    pageNumber={paginaAtual}
+                    scale={escala}
+                    renderTextLayer={false}
+                    renderAnnotationLayer={false}
+                    onLoadSuccess={(pagina) => {
+                      const viewport = pagina.getViewport({ scale: 1 });
+                      setDimensoes((atual) =>
+                        atual &&
+                        atual.largura === viewport.width &&
+                        atual.altura === viewport.height
+                          ? atual
+                          : { largura: viewport.width, altura: viewport.height },
+                      );
+                    }}
+                    loading={
+                      <div className="flex h-[600px] w-[420px] max-w-full items-center justify-center">
+                        <Spinner />
+                      </div>
+                    }
+                    error={
+                      <p className="p-8 text-center text-sm text-perigo">
+                        Nao foi possivel renderizar esta pagina.
+                      </p>
+                    }
+                  />
+                </Document>
+              ) : (
+                <ErroPlanta
+                  erro="Nao foi possivel gerar o link de acesso ao PDF."
+                  aoTentar={renovarUrl}
+                  renovando={renovando}
+                />
+              )}
+
+              {dimensoes && (
+                <div
+                  ref={overlayRef}
+                  className="absolute inset-0 z-10"
+                  style={{
+                    cursor: arrastando ? "grabbing" : cursorPorFerramenta[ferramenta],
+                    touchAction: ferramenta === "regiao" ? "none" : "pan-x pan-y",
+                  }}
+                  onPointerDown={aoPressionar}
+                  onPointerMove={aoMover}
+                  onPointerUp={aoSoltar}
+                  onPointerCancel={aoSoltar}
+                  onClick={aoClicar}
+                >
+                  <svg
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                  >
+                    {linhaMedicao && (
+                      <LinhaSvg
+                        p1={linhaMedicao.p1}
+                        p2={linhaMedicao.p2}
+                        dimensoes={dimensoes}
+                        classe="stroke-azul-600"
+                      />
+                    )}
+                    {retanguloMedicao && (
+                      <RectSvg
+                        regiao={retanguloMedicao.regiao}
+                        dimensoes={dimensoes}
+                        classe="stroke-azul-600 fill-azul-600/10"
+                      />
+                    )}
+                    {ferramenta === "calibrar" && pontosCalibracao.length === 2 && (
+                      <LinhaSvg
+                        p1={pontosCalibracao[0]}
+                        p2={pontosCalibracao[1]}
+                        dimensoes={dimensoes}
+                        classe="stroke-perigo"
+                      />
+                    )}
+                    {ferramenta === "regiao" && regiaoAtual && (
+                      <RectSvg
+                        regiao={regiaoAtual}
+                        dimensoes={dimensoes}
+                        classe="stroke-azul-600 fill-azul-600/10"
+                      />
+                    )}
+                  </svg>
+
+                  {tarefasPagina
+                    .filter(
+                      (t) =>
+                        t.localizacao_tipo === "ponto" &&
+                        t.ponto_x != null &&
+                        t.ponto_y != null,
+                    )
+                    .map((tarefa) => {
+                      const pos = pdfParaPercentual(
+                        { x: tarefa.ponto_x!, y: tarefa.ponto_y! },
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      return (
+                        <div
+                          key={tarefa.id}
+                          className="absolute"
+                          style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/tarefas/${tarefa.id}`);
+                            }}
+                            onMouseEnter={() => setPinoAtivo(tarefa.id)}
+                            onMouseLeave={() => setPinoAtivo(null)}
+                            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full p-2"
+                            aria-label={`Tarefa: ${tarefa.titulo}`}
+                          >
+                            <span
+                              className={cn(
+                                "block h-4 w-4 rounded-full shadow ring-2 ring-white",
+                                CORES_PINO[tarefa.prioridade],
+                              )}
+                            />
+                          </button>
+                          {pinoAtivo === tarefa.id && (
+                            <div className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2">
+                              <DicaTarefa tarefa={tarefa} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {tarefasPagina
+                    .filter(
+                      (t) => t.localizacao_tipo === "regiao" && t.regiao,
+                    )
+                    .map((tarefa) => {
+                      const limites = limitesDaRegiao(tarefa.regiao!);
+                      if (!limites) return null;
+                      const canto1 = pdfParaPercentual(
+                        { x: limites.x, y: limites.y },
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      const canto2 = pdfParaPercentual(
+                        { x: limites.x + limites.largura, y: limites.y + limites.altura },
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      return (
+                        <div
+                          key={tarefa.id}
+                          className={cn(
+                            "absolute cursor-pointer rounded-sm border-2",
+                            CORES_REGIAO[tarefa.prioridade],
+                          )}
+                          style={{
+                            left: `${canto1.esquerda}%`,
+                            top: `${canto1.topo}%`,
+                            width: `${canto2.esquerda - canto1.esquerda}%`,
+                            height: `${canto2.topo - canto1.topo}%`,
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/tarefas/${tarefa.id}`);
+                          }}
+                          onMouseEnter={() => setPinoAtivo(tarefa.id)}
+                          onMouseLeave={() => setPinoAtivo(null)}
+                        >
+                          {pinoAtivo === tarefa.id && (
+                            <div className="pointer-events-none absolute z-30 -translate-y-full pb-2">
+                              <DicaTarefa tarefa={tarefa} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {ferramenta === "medir" &&
+                    pontosMedicao.map((ponto, indice) => (
+                      <Marcador
+                        key={indice}
+                        ponto={ponto}
+                        dimensoes={dimensoes}
+                        cor="bg-azul-600"
+                      />
+                    ))}
+
+                  {ferramenta === "calibrar" &&
+                    pontosCalibracao.map((ponto, indice) => (
+                      <Marcador
+                        key={indice}
+                        ponto={ponto}
+                        dimensoes={dimensoes}
+                        cor="bg-perigo"
+                      />
+                    ))}
+
+                  {linhaMedicao && (
+                    <RotuloMedicao
+                      ponto={{
+                        x: (linhaMedicao.p1.x + linhaMedicao.p2.x) / 2,
+                        y: (linhaMedicao.p1.y + linhaMedicao.p2.y) / 2,
+                      }}
+                      texto={linhaMedicao.distancia}
+                      dimensoes={dimensoes}
+                    />
+                  )}
+
+                  {retanguloMedicao && retanguloMedicao.centro && (
+                    <RotuloMedicao
+                      ponto={retanguloMedicao.centro}
+                      texto={retanguloMedicao.texto}
+                      dimensoes={dimensoes}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <ListaTarefasPlanta tarefas={tarefas} paginaAtual={paginaAtual} />
+    </div>
+  );
+}
+
+function LinhaSvg({
+  p1,
+  p2,
+  dimensoes,
+  classe,
+}: {
+  p1: PontoPdf;
+  p2: PontoPdf;
+  dimensoes: DimensoesPagina;
+  classe: string;
+}) {
+  const a = pdfParaPercentual(p1, dimensoes.largura, dimensoes.altura);
+  const b = pdfParaPercentual(p2, dimensoes.largura, dimensoes.altura);
+  return (
+    <line
+      x1={a.esquerda}
+      y1={a.topo}
+      x2={b.esquerda}
+      y2={b.topo}
+      className={cn("stroke-[2]", classe)}
+      vectorEffect="non-scaling-stroke"
+    />
+  );
+}
+
+function RectSvg({
+  regiao,
+  dimensoes,
+  classe,
+}: {
+  regiao: RegiaoPdf;
+  dimensoes: DimensoesPagina;
+  classe: string;
+}) {
+  const limites = limitesDaRegiao(regiao);
+  if (!limites) return null;
+  const canto1 = pdfParaPercentual(
+    { x: limites.x, y: limites.y },
+    dimensoes.largura,
+    dimensoes.altura,
+  );
+  const canto2 = pdfParaPercentual(
+    { x: limites.x + limites.largura, y: limites.y + limites.altura },
+    dimensoes.largura,
+    dimensoes.altura,
+  );
+  return (
+    <rect
+      x={canto1.esquerda}
+      y={canto1.topo}
+      width={canto2.esquerda - canto1.esquerda}
+      height={canto2.topo - canto1.topo}
+      className={cn("stroke-[2]", classe)}
+      vectorEffect="non-scaling-stroke"
+    />
+  );
+}

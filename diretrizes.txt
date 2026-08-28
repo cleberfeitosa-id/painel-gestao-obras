@@ -1,0 +1,29 @@
+Vamos criar um painel de gestão para as obras da empresa Vasconcelos Engenharia.
+
+O painel deverá permitir: 
+-Login com email e senha;
+-Cadastro de novos usuários;
+-Cadastro de novas obras;
+-Upload de plantas em PDF com calibragem de escala;
+-Criação de tarefas vinculadas a um ponto ou região identificado no PDF;
+-Para cada tarefa, deverá ser possível:
+    -Definir status (pendente, em execução, concluído);
+    -Definir responsável;
+    -Definir prazo;
+    -Adicionar comentários;
+    -Adicionar imagens;
+    -Adicionar vídeos;
+    -Adicionar arquivos;
+    -Definir prioridade;
+
+O sistema deve permitir buscas e filtros por obra, usuário, status, prazo, prioridade e localização no PDF.
+
+Além disso, deve ser possível cadastrar um responsável para cada obra e para cada tarefa, podendo ser uma mesma pessoa ou pessoas diferentes.
+Cada nova tarefa deve enviar notificação para o e-mail do usuário responsável.
+
+Ao finalizar cada tarefa deve ser possível fazer upload de imagens, vídeos e arquivos, sendo a obrigatoriedade a ser definida no cadastro da tarefa.
+
+Deve ser possível gerar um relatório diário das atividades realizadas no dia com seus respectivos registros fotográficos;
+
+Outras Funcionalidades:
+Deve ser possível em formato de calendário realizar planejamento de atividades para dias posteriores, e cada tarefa realizada no dia deve constar no calendário diário daquele dia.
