@@ -45,8 +45,8 @@ export function BarraLateral({ papel }: BarraLateralProps) {
   }
 
   const conteudoNavegacao = (
-    <nav className="flex flex-1 flex-col px-3 py-4">
-      <div className="flex items-center gap-3 px-3 mb-6">
+    <nav className="flex flex-1 flex-col px-2 py-3">
+      <div className="flex items-center gap-2 px-2 mb-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-azul-600">
           <Building2 className="h-5 w-5 text-white" />
         </div>
@@ -69,14 +69,14 @@ export function BarraLateral({ papel }: BarraLateralProps) {
                 href={item.href}
                 onClick={() => setAberto(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium transition-colors",
                   ativo
                     ? "bg-azul-50 text-azul-700"
                     : "text-superficie-600 hover:bg-superficie-100 hover:text-superficie-900",
                 )}
               >
                 <Icone className="h-5 w-5 flex-shrink-0" />
-                {item.rotulo}
+                <span className="truncate">{item.rotulo}</span>
               </Link>
             </li>
           );
@@ -96,7 +96,7 @@ export function BarraLateral({ papel }: BarraLateralProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-white border-r border-borda transition-transform duration-200 ease-in-out",
+          "fixed inset-y-0 left-0 z-50 flex w-36 flex-col bg-white border-r border-borda transition-transform duration-200 ease-in-out",
           "lg:translate-x-0",
           aberto ? "translate-x-0" : "-translate-x-full",
         )}

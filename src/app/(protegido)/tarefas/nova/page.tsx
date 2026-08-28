@@ -111,11 +111,17 @@ export default async function NovaTarefaPage({
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <Link
-          href="/tarefas"
+          href={
+            params.obra && params.planta
+              ? `/obras/${params.obra}/plantas/${params.planta}`
+              : "/tarefas"
+          }
           className="inline-flex items-center gap-1 text-sm font-medium text-azul-600 hover:text-azul-700"
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar para tarefas
+          {params.obra && params.planta
+            ? "Voltar para a planta"
+            : "Voltar para tarefas"}
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-superficie-900">Nova tarefa</h1>
         <p className="mt-1 text-sm text-superficie-500">
