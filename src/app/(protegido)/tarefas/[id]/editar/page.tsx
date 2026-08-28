@@ -5,19 +5,34 @@ import { createClient } from "@/lib/supabase/server";
 import { Cartao, CartaoCabecalho, CartaoTitulo, CartaoConteudo } from "@/components/ui";
 import { FormularioTarefa } from "@/components/tarefas/formulario-tarefa";
 import { atualizarTarefa } from "../../acoes";
-import type { ObraRow, PerfilRow, TarefaRow } from "@/lib/supabase/database.types";
+import type {
+  ExecutorRow,
+  ObraRow,
+  PerfilRow,
+  TarefaRow,
+} from "@/lib/supabase/database.types";
 
 async function buscarDados(id: string) {
   const supabase = await createClient();
-  const [{ data: tarefa }, { data: obras }, { data: perfis }] = await Promise.all([
-    supabase.from("tarefas").select("*").eq("id", id).single(),
-    supabase.from("obras").select("id, nome").order("nome"),
-    supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
-  ]);
+  const [{ data: tarefa }, { data: obras }, { data: perfis }, { data: executores }] =
+    await Promise.all([
+      supabase.from("tarefas").select("*").eq("id", id).single(),
+      supabase.from("obras").select("id, nome").order("nome"),
+      supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
+      supabase
+        .from("executores")
+        .select("id, nome, obra_id, ativo")
+        .order("nome"),
+    ]);
   return {
     tarefa: (tarefa ?? null) as TarefaRow | null,
     obras: (obras ?? []) as Pick<ObraRow, "id" | "nome">[],
     responsaveis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
+    supervisores: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
+    executores: (executores ?? []) as Pick<
+      ExecutorRow,
+      "id" | "nome" | "obra_id" | "ativo"
+    >[],
   };
 }
 
@@ -27,7 +42,8 @@ export default async function EditarTarefaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { tarefa, obras, responsaveis } = await buscarDados(id);
+  const { tarefa, obras, responsaveis, executores, supervisores } =
+    await buscarDados(id);
 
   if (!tarefa) notFound();
 
@@ -58,6 +74,8 @@ export default async function EditarTarefaPage({
             acao={atualizarTarefa}
             obras={obras}
             responsaveis={responsaveis}
+            executores={executores}
+            supervisores={supervisores}
             tarefa={tarefa}
           />
         </CartaoConteudo>

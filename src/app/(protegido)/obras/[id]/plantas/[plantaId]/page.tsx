@@ -6,7 +6,7 @@ import { BUCKET_PLANTAS, urlAssinada } from "@/lib/armazenamento";
 import { Botao } from "@/components/ui";
 import { AreaPlanta } from "@/components/plantas/area-planta";
 import { BotaoExcluirPlanta } from "@/components/plantas/botao-excluir-planta";
-import type { TarefaPlanta } from "@/components/plantas/tipos";
+import type { ExecutorFiltro, TarefaPlanta } from "@/components/plantas/tipos";
 import type {
   PlantaCalibracaoRow,
   PlantaRow,
@@ -28,7 +28,7 @@ export default async function DetalhePlantaPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ data: planta }, { data: calibracoes }, { data: tarefas }, { data: perfil }] =
+  const [{ data: planta }, { data: calibracoes }, { data: tarefas }, { data: perfil }, { data: executores }] =
     await Promise.all([
       supabase
         .from("plantas")
@@ -42,12 +42,18 @@ export default async function DetalhePlantaPage({
       supabase
         .from("tarefas")
         .select(
-          "id, titulo, status, prioridade, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, responsavel:perfis!tarefas_responsavel_id_fkey(nome)",
+          "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome)",
         )
         .eq("planta_id", plantaId),
       user
         ? supabase.from("perfis").select("papel").eq("id", user.id).single()
         : Promise.resolve({ data: null }),
+      supabase
+        .from("executores")
+        .select("id, nome")
+        .eq("obra_id", id)
+        .eq("ativo", true)
+        .order("nome"),
     ]);
 
   if (!planta || planta.obra_id !== id) notFound();
@@ -60,6 +66,7 @@ export default async function DetalhePlantaPage({
     titulo: tarefa.titulo,
     status: tarefa.status,
     prioridade: tarefa.prioridade,
+    aprovacao: tarefa.aprovacao,
     prazo: tarefa.prazo,
     pagina: tarefa.pagina,
     localizacao_tipo: tarefa.localizacao_tipo,
@@ -67,6 +74,12 @@ export default async function DetalhePlantaPage({
     ponto_y: tarefa.ponto_y,
     regiao: tarefa.regiao as RegiaoPdf | null,
     responsavel: tarefa.responsavel,
+    executor: tarefa.executor,
+  }));
+
+  const executoresLista: ExecutorFiltro[] = (executores ?? []).map((e) => ({
+    id: e.id,
+    nome: e.nome,
   }));
 
   return (
@@ -114,6 +127,7 @@ export default async function DetalhePlantaPage({
         urlPdf={urlPdf}
         calibracoes={(calibracoes ?? []) as PlantaCalibracaoRow[]}
         tarefas={tarefasPlanta}
+        executores={executoresLista}
         podeEditar={podeEditar}
       />
     </div>

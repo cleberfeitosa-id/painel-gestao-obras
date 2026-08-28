@@ -1,11 +1,17 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { MapPin } from "lucide-react";
 import { Botao, Campo, AreaTexto, Selecao } from "@/components/ui";
 import { OPCOES_STATUS_TAREFA, OPCOES_PRIORIDADE } from "@/lib/domain/rotulos";
-import type { ObraRow, PerfilRow, TarefaRow } from "@/lib/supabase/database.types";
+import { hojeChave } from "@/lib/datas";
+import type {
+  ExecutorRow,
+  ObraRow,
+  PerfilRow,
+  TarefaRow,
+} from "@/lib/supabase/database.types";
 
 type ResultadoFormulario = { erro?: string };
 
@@ -25,8 +31,11 @@ interface FormularioTarefaProps {
   ) => Promise<ResultadoFormulario>;
   obras: Pick<ObraRow, "id" | "nome">[];
   responsaveis: Pick<PerfilRow, "id" | "nome">[];
+  executores: Pick<ExecutorRow, "id" | "nome" | "obra_id" | "ativo">[];
+  supervisores: Pick<PerfilRow, "id" | "nome">[];
   tarefa?: TarefaRow;
   localizacaoInicial?: LocalizacaoInicial;
+  obraIdInicial?: string;
 }
 
 function BotaoEnviar({ rotulo }: { rotulo: string }) {
@@ -65,10 +74,43 @@ export function FormularioTarefa({
   acao,
   obras,
   responsaveis,
+  executores,
+  supervisores,
   tarefa,
   localizacaoInicial,
+  obraIdInicial,
 }: FormularioTarefaProps) {
   const [estado, acaoFormulario] = useActionState(acao, {});
+  const [prazo, setPrazo] = useState(tarefa?.prazo ?? (tarefa ? "" : hojeChave()));
+  const [dataPlanejada, setDataPlanejada] = useState(
+    tarefa?.data_planejada ?? (tarefa ? "" : hojeChave())
+  );
+  const [obraId, setObraId] = useState(tarefa?.obra_id ?? obraIdInicial ?? "");
+  const [executorId, setExecutorId] = useState(tarefa?.executor_id ?? "");
+
+  const isNovaTarefa = !tarefa;
+  const hoje = hojeChave();
+
+  const executoresDaObra = executores.filter(
+    (executor) =>
+      executor.obra_id === obraId &&
+      (executor.ativo || executor.id === tarefa?.executor_id)
+  );
+
+  function mudarObra(valor: string) {
+    setObraId(valor);
+    const executorAtual = executores.find((e) => e.id === executorId);
+    if (executorAtual && executorAtual.obra_id !== valor) {
+      setExecutorId("");
+    }
+  }
+
+  // Prazo nao pode ser anterior a hoje (nova tarefa) nem a data planejada.
+  const prazoMin = isNovaTarefa
+    ? dataPlanejada && dataPlanejada > hoje
+      ? dataPlanejada
+      : hoje
+    : dataPlanejada || undefined;
 
   const localizacao = localizacaoInicial ?? {
     localizacao_tipo: tarefa?.localizacao_tipo ?? "nenhuma",
@@ -77,6 +119,20 @@ export function FormularioTarefa({
     ponto_x: tarefa?.ponto_x ?? undefined,
     ponto_y: tarefa?.ponto_y ?? undefined,
     regiao: tarefa?.regiao ?? undefined,
+  };
+
+  const handlePrazoChange = (valor: string) => {
+    setPrazo(valor);
+    if (dataPlanejada && valor && dataPlanejada > valor) {
+      setDataPlanejada(valor);
+    }
+  };
+
+  const handleDataPlanejadaChange = (valor: string) => {
+    setDataPlanejada(valor);
+    if (prazo && valor && valor > prazo) {
+      setPrazo(valor);
+    }
   };
 
   return (
@@ -123,19 +179,41 @@ export function FormularioTarefa({
       />
 
       <div className="grid gap-6 sm:grid-cols-2">
-        <Selecao
-          rotulo="Obra"
-          obrigatorio
-          name="obra_id"
-          defaultValue={tarefa?.obra_id ?? ""}
-        >
-          <option value="">Selecione a obra</option>
-          {obras.map((obra) => (
-            <option key={obra.id} value={obra.id}>
-              {obra.nome}
-            </option>
-          ))}
-        </Selecao>
+        {isNovaTarefa && obraIdInicial ? (
+          // Select desabilitado nao envia valor: o hidden garante o obra_id.
+          <div>
+            <input type="hidden" name="obra_id" value={obraIdInicial} />
+            <Selecao
+              rotulo="Obra"
+              obrigatorio
+              name="obra_id_desabilitado"
+              value={obraIdInicial}
+              disabled
+              dica="Obra pré-selecionada automaticamente."
+            >
+              {obras.map((obra) => (
+                <option key={obra.id} value={obra.id}>
+                  {obra.nome}
+                </option>
+              ))}
+            </Selecao>
+          </div>
+        ) : (
+          <Selecao
+            rotulo="Obra"
+            obrigatorio
+            name="obra_id"
+            value={obraId}
+            onChange={(e) => mudarObra(e.target.value)}
+          >
+            <option value="">Selecione a obra</option>
+            {obras.map((obra) => (
+              <option key={obra.id} value={obra.id}>
+                {obra.nome}
+              </option>
+            ))}
+          </Selecao>
+        )}
         <Selecao
           rotulo="Responsavel"
           name="responsavel_id"
@@ -144,6 +222,36 @@ export function FormularioTarefa({
         >
           <option value="">Sem responsavel</option>
           {responsaveis.map((perfil) => (
+            <option key={perfil.id} value={perfil.id}>
+              {perfil.nome}
+            </option>
+          ))}
+        </Selecao>
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Selecao
+          rotulo="Executor"
+          name="executor_id"
+          value={executorId}
+          onChange={(e) => setExecutorId(e.target.value)}
+          dica="Pessoa que executa a tarefa, sem necessidade de cadastro."
+        >
+          <option value="">Sem executor definido</option>
+          {executoresDaObra.map((executor) => (
+            <option key={executor.id} value={executor.id}>
+              {executor.nome}
+            </option>
+          ))}
+        </Selecao>
+        <Selecao
+          rotulo="Supervisor"
+          name="supervisor_id"
+          defaultValue={tarefa?.supervisor_id ?? ""}
+          dica="Usuario cadastrado que valida e aprova a execucao."
+        >
+          <option value="">Sem supervisor</option>
+          {supervisores.map((perfil) => (
             <option key={perfil.id} value={perfil.id}>
               {perfil.nome}
             </option>
@@ -183,14 +291,19 @@ export function FormularioTarefa({
           rotulo="Prazo"
           name="prazo"
           type="date"
-          defaultValue={tarefa?.prazo ?? ""}
+          value={prazo}
+          onChange={(e) => handlePrazoChange(e.target.value)}
+          min={prazoMin}
           dica="Data limite para conclusao."
         />
         <Campo
           rotulo="Data planejada"
           name="data_planejada"
           type="date"
-          defaultValue={tarefa?.data_planejada ?? ""}
+          value={dataPlanejada}
+          onChange={(e) => handleDataPlanejadaChange(e.target.value)}
+          min={isNovaTarefa ? hoje : undefined}
+          max={prazo || undefined}
           dica="Data prevista para inicio."
         />
       </div>

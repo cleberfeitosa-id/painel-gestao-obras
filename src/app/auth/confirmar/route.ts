@@ -25,12 +25,12 @@ export async function GET(request: NextRequest) {
   if (tokenHash && tipo) {
     const { error } = await supabase.auth.verifyOtp({
       token_hash: tokenHash,
-      type: tipo as "signup" | "magiclink" | "recovery",
+      type: tipo as "signup" | "magiclink" | "recovery" | "invite",
     });
     if (error) {
       redirect("/erro");
     }
-    redirect("/painel");
+    redirect(tipo === "invite" ? "/definir-senha" : "/painel");
   }
 
   redirect("/erro");

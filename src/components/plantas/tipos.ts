@@ -1,4 +1,6 @@
 import type {
+  AprovacaoTarefa,
+  ExecutorRow,
   PlantaCalibracaoRow,
   PlantaRow,
   PrioridadeTarefa,
@@ -12,6 +14,7 @@ export type TarefaPlanta = {
   titulo: string;
   status: StatusTarefa;
   prioridade: PrioridadeTarefa;
+  aprovacao: AprovacaoTarefa;
   prazo: string | null;
   pagina: number | null;
   localizacao_tipo: TipoLocalizacao;
@@ -19,7 +22,10 @@ export type TarefaPlanta = {
   ponto_y: number | null;
   regiao: RegiaoPdf | null;
   responsavel: { nome: string } | null;
+  executor: { id: string; nome: string } | null;
 };
+
+export type ExecutorFiltro = Pick<ExecutorRow, "id" | "nome">;
 
 export type PropsAreaPlanta = {
   obraId: string;
@@ -28,5 +34,6 @@ export type PropsAreaPlanta = {
   urlPdf: string | null;
   calibracoes: PlantaCalibracaoRow[];
   tarefas: TarefaPlanta[];
+  executores: ExecutorFiltro[];
   podeEditar: boolean;
 };

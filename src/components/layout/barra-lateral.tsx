@@ -23,6 +23,7 @@ interface BarraLateralProps {
 const itensNavegacao = [
   { href: "/painel", rotulo: "Painel", icone: LayoutDashboard },
   { href: "/obras", rotulo: "Obras", icone: HardHat },
+  { href: "/plantas", rotulo: "Plantas", icone: FileText },
   { href: "/tarefas", rotulo: "Tarefas", icone: CheckSquare },
   { href: "/calendario", rotulo: "Calendario", icone: Calendar },
   { href: "/relatorios", rotulo: "Relatorios", icone: FileText },

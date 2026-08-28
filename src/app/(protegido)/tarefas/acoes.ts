@@ -4,9 +4,11 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { notificarResponsavel } from "@/lib/email";
 import { assinarUpload, removerArquivo, BUCKET_ANEXOS } from "@/lib/armazenamento";
 import type {
+  AprovacaoTarefa,
   MomentoAnexo,
   PrioridadeTarefa,
   StatusTarefa,
@@ -20,18 +22,43 @@ type Resultado = { erro?: string };
 const esquemaLocalizacao = z
   .object({
     localizacao_tipo: z.enum(["nenhuma", "ponto", "regiao"]),
-    planta_id: z.string().uuid().nullable().optional(),
-    pagina: z.coerce.number().int().positive().nullable().optional(),
-    ponto_x: z.coerce.number().nullable().optional(),
-    ponto_y: z.coerce.number().nullable().optional(),
-    regiao: z
-      .object({
-        vertices: z
-          .array(z.object({ x: z.number(), y: z.number() }))
-          .min(3, "A regiao precisa de pelo menos 3 vertices."),
-      })
-      .nullable()
-      .optional(),
+    planta_id: z.preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.string().uuid().nullable().optional()
+    ),
+    pagina: z.preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.coerce.number().int().positive().nullable().optional()
+    ),
+    ponto_x: z.preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.coerce.number().nullable().optional()
+    ),
+    ponto_y: z.preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.coerce.number().nullable().optional()
+    ),
+    regiao: z.preprocess(
+      (val) => {
+        if (val === "" || val == null) return undefined;
+        if (typeof val === "string") {
+          try {
+            return JSON.parse(val);
+          } catch {
+            return val;
+          }
+        }
+        return val;
+      },
+      z
+        .object({
+          vertices: z
+            .array(z.object({ x: z.number(), y: z.number() }))
+            .min(3, "A regiao precisa de pelo menos 3 vertices."),
+        })
+        .nullable()
+        .optional()
+    ),
   })
   .superRefine((dados, ctx) => {
     // Satisfaz as CHECK constraints do banco: ponto exige x/y, regiao exige
@@ -66,6 +93,14 @@ const esquemaTarefa = z.object({
   descricao: z.string().trim().max(4000).optional().or(z.literal("")),
   obra_id: z.string().uuid("Selecione uma obra valida."),
   responsavel_id: z.string().uuid().nullable().optional().or(z.literal("")),
+  executor_id: z.preprocess(
+    (val) => (val === "" ? undefined : val),
+    z.string().uuid().nullable().optional()
+  ),
+  supervisor_id: z.preprocess(
+    (val) => (val === "" ? undefined : val),
+    z.string().uuid().nullable().optional()
+  ),
   status: z.enum(["pendente", "em_execucao", "concluido"]),
   prioridade: z.enum(["baixa", "media", "alta", "urgente"]),
   prazo: z.string().optional().or(z.literal("")),
@@ -74,6 +109,16 @@ const esquemaTarefa = z.object({
   exige_video: z.boolean().optional(),
   exige_arquivo: z.boolean().optional(),
   ...esquemaLocalizacao.shape,
+}).superRefine((dados, ctx) => {
+  if (dados.prazo && dados.data_planejada) {
+    if (dados.data_planejada > dados.prazo) {
+      ctx.addIssue({
+        code: "custom",
+        message: "A data planejada de inicio nao pode ser posterior ao prazo.",
+        path: ["data_planejada"],
+      });
+    }
+  }
 });
 
 type DadosTarefa = z.infer<typeof esquemaTarefa>;
@@ -126,6 +171,8 @@ function normalizar(dados: DadosTarefa) {
     descricao: dados.descricao || null,
     obra_id: dados.obra_id,
     responsavel_id: dados.responsavel_id || null,
+    executor_id: dados.executor_id || null,
+    supervisor_id: dados.supervisor_id || null,
     status: dados.status as StatusTarefa,
     prioridade: dados.prioridade as PrioridadeTarefa,
     prazo: dados.prazo || null,
@@ -140,6 +187,24 @@ function normalizar(dados: DadosTarefa) {
     ponto_y: localizacao === "ponto" ? (dados.ponto_y ?? null) : null,
     regiao: localizacao === "regiao" ? dados.regiao : null,
   };
+}
+
+async function validarExecutorDaObra(
+  executorId: string | null | undefined,
+  obraId: string,
+): Promise<string | null> {
+  if (!executorId) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("executores")
+    .select("id")
+    .eq("id", executorId)
+    .eq("obra_id", obraId)
+    .single();
+  if (!data) {
+    return "O executor selecionado nao pertence a obra da tarefa.";
+  }
+  return null;
 }
 
 async function enviarNotificacao(
@@ -189,6 +254,8 @@ export async function criarTarefa(
     descricao: formData.get("descricao"),
     obra_id: formData.get("obra_id"),
     responsavel_id: formData.get("responsavel_id"),
+    executor_id: formData.get("executor_id"),
+    supervisor_id: formData.get("supervisor_id"),
     status: formData.get("status"),
     prioridade: formData.get("prioridade"),
     prazo: formData.get("prazo"),
@@ -210,6 +277,12 @@ export async function criarTarefa(
   }
 
   const supabase = await createClient();
+  const erroExecutor = await validarExecutorDaObra(
+    resultado.data.executor_id,
+    resultado.data.obra_id,
+  );
+  if (erroExecutor) return { erro: erroExecutor };
+
   const { data, error } = await supabase
     .from("tarefas")
     .insert({ ...normalizar(resultado.data), criado_por: user.id })
@@ -247,6 +320,8 @@ export async function atualizarTarefa(
     descricao: formData.get("descricao"),
     obra_id: formData.get("obra_id"),
     responsavel_id: formData.get("responsavel_id"),
+    executor_id: formData.get("executor_id"),
+    supervisor_id: formData.get("supervisor_id"),
     status: formData.get("status"),
     prioridade: formData.get("prioridade"),
     prazo: formData.get("prazo"),
@@ -268,6 +343,12 @@ export async function atualizarTarefa(
   }
 
   const supabase = await createClient();
+  const erroExecutor = await validarExecutorDaObra(
+    resultado.data.executor_id,
+    resultado.data.obra_id,
+  );
+  if (erroExecutor) return { erro: erroExecutor };
+
   const { error } = await supabase
     .from("tarefas")
     .update(normalizar(resultado.data))
@@ -344,6 +425,98 @@ export async function alterarStatus(
 
   if (error) {
     return { erro: "Nao foi possivel alterar o status. Tente novamente." };
+  }
+
+  revalidatePath("/tarefas");
+  revalidatePath(`/tarefas/${tarefaId}`);
+  revalidatePath("/painel");
+  return {};
+}
+
+export async function avaliarTarefa(
+  tarefaId: string,
+  decisao: "aprovado" | "reprovado",
+  motivo?: string,
+): Promise<Resultado> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tarefas")
+    .select("*")
+    .eq("id", tarefaId)
+    .single();
+  const tarefa = data as TarefaRow | null;
+  if (!tarefa) return { erro: "Tarefa nao encontrada." };
+
+  const papel = await papelDoUsuario(user.id);
+  const eSupervisor = tarefa.supervisor_id === user.id;
+  if (!eGestor(papel) && !eSupervisor) {
+    return { erro: "Voce nao tem permissao para avaliar esta tarefa." };
+  }
+
+  if (tarefa.status !== "concluido") {
+    return { erro: "Somente tarefas concluidas podem ser avaliadas." };
+  }
+  // Reprovada e refeita volta a ser avaliavel; so a aprovacao e terminal.
+  if (tarefa.aprovacao === "aprovado") {
+    return { erro: "Esta tarefa ja foi aprovada." };
+  }
+  if (decisao !== "aprovado" && decisao !== "reprovado") {
+    return { erro: "Decisao invalida." };
+  }
+
+  const motivoLimpo = motivo?.trim() ?? "";
+  if (decisao === "reprovado" && !motivoLimpo) {
+    return { erro: "Informe o motivo da reprovacao." };
+  }
+
+  // RLS em `tarefas` so permite escrita a gestores e ao responsavel. Um
+  // supervisor colaborador nao pode atualizar a linha pelo client normal;
+  // a permissao ja foi conferida acima, entao o UPDATE passa pelo client
+  // admin (bypassa RLS) de forma deliberada.
+  const admin = createAdminClient();
+  const atualizacao: {
+    aprovacao: AprovacaoTarefa;
+    avaliado_por: string;
+    avaliado_em: string;
+    motivo_reprovacao: string | null;
+    status?: StatusTarefa;
+  } =
+    decisao === "aprovado"
+      ? {
+          aprovacao: "aprovado",
+          avaliado_por: user.id,
+          avaliado_em: new Date().toISOString(),
+          motivo_reprovacao: null,
+        }
+      : {
+          aprovacao: "reprovado",
+          avaliado_por: user.id,
+          avaliado_em: new Date().toISOString(),
+          motivo_reprovacao: motivoLimpo,
+          status: "em_execucao",
+        };
+
+  const { error: erroTarefa } = await admin
+    .from("tarefas")
+    .update(atualizacao)
+    .eq("id", tarefaId);
+  if (erroTarefa) {
+    return { erro: "Nao foi possivel registrar a avaliacao. Tente novamente." };
+  }
+
+  const { error: erroHistorico } = await admin
+    .from("tarefa_aprovacoes")
+    .insert({
+      tarefa_id: tarefaId,
+      supervisor_id: user.id,
+      decisao,
+      motivo: decisao === "reprovado" ? motivoLimpo : null,
+    });
+  if (erroHistorico) {
+    return { erro: "Nao foi possivel registrar o historico da avaliacao." };
   }
 
   revalidatePath("/tarefas");

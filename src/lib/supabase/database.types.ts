@@ -14,6 +14,96 @@ export type Database = {
   }
   public: {
     Tables: {
+      executores: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          contato: string | null
+          criado_em: string
+          criado_por: string | null
+          id: string
+          nome: string
+          obra_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          contato?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          nome: string
+          obra_id: string
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          contato?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          nome?: string
+          obra_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "executores_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "executores_obra_id_fkey"
+            columns: ["obra_id"]
+            isOneToOne: false
+            referencedRelation: "obras"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tarefa_aprovacoes: {
+        Row: {
+          criado_em: string
+          decisao: Database["public"]["Enums"]["aprovacao_tarefa"]
+          id: string
+          motivo: string | null
+          supervisor_id: string
+          tarefa_id: string
+        }
+        Insert: {
+          criado_em?: string
+          decisao: Database["public"]["Enums"]["aprovacao_tarefa"]
+          id?: string
+          motivo?: string | null
+          supervisor_id: string
+          tarefa_id: string
+        }
+        Update: {
+          criado_em?: string
+          decisao?: Database["public"]["Enums"]["aprovacao_tarefa"]
+          id?: string
+          motivo?: string | null
+          supervisor_id?: string
+          tarefa_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_aprovacoes_supervisor_id_fkey"
+            columns: ["supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_aprovacoes_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacoes: {
         Row: {
           assunto: string
@@ -123,9 +213,11 @@ export type Database = {
       }
       perfis: {
         Row: {
+          aceito_em: string | null
           ativo: boolean
           atualizado_em: string
           cargo: string | null
+          convidado_por: string | null
           criado_em: string
           email: string
           id: string
@@ -134,9 +226,11 @@ export type Database = {
           telefone: string | null
         }
         Insert: {
+          aceito_em?: string | null
           ativo?: boolean
           atualizado_em?: string
           cargo?: string | null
+          convidado_por?: string | null
           criado_em?: string
           email: string
           id: string
@@ -145,9 +239,11 @@ export type Database = {
           telefone?: string | null
         }
         Update: {
+          aceito_em?: string | null
           ativo?: boolean
           atualizado_em?: string
           cargo?: string | null
+          convidado_por?: string | null
           criado_em?: string
           email?: string
           id?: string
@@ -155,7 +251,15 @@ export type Database = {
           papel?: Database["public"]["Enums"]["papel_usuario"]
           telefone?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "perfis_convidado_por_fkey"
+            columns: ["convidado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       planta_calibracoes: {
         Row: {
@@ -357,17 +461,22 @@ export type Database = {
       }
       tarefas: {
         Row: {
+          aprovacao: Database["public"]["Enums"]["aprovacao_tarefa"]
           atualizado_em: string
+          avaliado_em: string | null
+          avaliado_por: string | null
           concluida_em: string | null
           criado_em: string
           criado_por: string | null
           data_planejada: string | null
           descricao: string | null
+          executor_id: string | null
           exige_arquivo: boolean
           exige_foto: boolean
           exige_video: boolean
           id: string
           localizacao_tipo: Database["public"]["Enums"]["tipo_localizacao"]
+          motivo_reprovacao: string | null
           obra_id: string
           pagina: number | null
           planta_id: string | null
@@ -378,20 +487,26 @@ export type Database = {
           regiao: Json | null
           responsavel_id: string | null
           status: Database["public"]["Enums"]["status_tarefa"]
+          supervisor_id: string | null
           titulo: string
         }
         Insert: {
+          aprovacao?: Database["public"]["Enums"]["aprovacao_tarefa"]
           atualizado_em?: string
+          avaliado_em?: string | null
+          avaliado_por?: string | null
           concluida_em?: string | null
           criado_em?: string
           criado_por?: string | null
           data_planejada?: string | null
           descricao?: string | null
+          executor_id?: string | null
           exige_arquivo?: boolean
           exige_foto?: boolean
           exige_video?: boolean
           id?: string
           localizacao_tipo?: Database["public"]["Enums"]["tipo_localizacao"]
+          motivo_reprovacao?: string | null
           obra_id: string
           pagina?: number | null
           planta_id?: string | null
@@ -402,20 +517,26 @@ export type Database = {
           regiao?: Json | null
           responsavel_id?: string | null
           status?: Database["public"]["Enums"]["status_tarefa"]
+          supervisor_id?: string | null
           titulo: string
         }
         Update: {
+          aprovacao?: Database["public"]["Enums"]["aprovacao_tarefa"]
           atualizado_em?: string
+          avaliado_em?: string | null
+          avaliado_por?: string | null
           concluida_em?: string | null
           criado_em?: string
           criado_por?: string | null
           data_planejada?: string | null
           descricao?: string | null
+          executor_id?: string | null
           exige_arquivo?: boolean
           exige_foto?: boolean
           exige_video?: boolean
           id?: string
           localizacao_tipo?: Database["public"]["Enums"]["tipo_localizacao"]
+          motivo_reprovacao?: string | null
           obra_id?: string
           pagina?: number | null
           planta_id?: string | null
@@ -426,9 +547,31 @@ export type Database = {
           regiao?: Json | null
           responsavel_id?: string | null
           status?: Database["public"]["Enums"]["status_tarefa"]
+          supervisor_id?: string | null
           titulo?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tarefas_avaliado_por_fkey"
+            columns: ["avaliado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefas_executor_id_fkey"
+            columns: ["executor_id"]
+            isOneToOne: false
+            referencedRelation: "executores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefas_supervisor_id_fkey"
+            columns: ["supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tarefas_criado_por_fkey"
             columns: ["criado_por"]
@@ -472,6 +615,7 @@ export type Database = {
       }
     }
     Enums: {
+      aprovacao_tarefa: "pendente" | "aprovado" | "reprovado"
       momento_anexo: "criacao" | "andamento" | "conclusao"
       papel_usuario: "admin" | "gestor" | "colaborador"
       prioridade_tarefa: "baixa" | "media" | "alta" | "urgente"
@@ -606,6 +750,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      aprovacao_tarefa: ["pendente", "aprovado", "reprovado"],
       momento_anexo: ["criacao", "andamento", "conclusao"],
       papel_usuario: ["admin", "gestor", "colaborador"],
       prioridade_tarefa: ["baixa", "media", "alta", "urgente"],
@@ -627,6 +772,7 @@ export type Atualizacao<T extends keyof Database["public"]["Tables"]> =
 type EnumsPublicos = Database["public"]["Enums"];
 
 export type PapelUsuario = EnumsPublicos["papel_usuario"];
+export type AprovacaoTarefa = EnumsPublicos["aprovacao_tarefa"];
 export type StatusObra = EnumsPublicos["status_obra"];
 export type StatusTarefa = EnumsPublicos["status_tarefa"];
 export type PrioridadeTarefa = EnumsPublicos["prioridade_tarefa"];
@@ -640,6 +786,8 @@ export type RegiaoPdf = { vertices: PontoPdf[] };
 export type PerfilRow = Tabelas<"perfis">;
 export type ObraRow = Tabelas<"obras">;
 export type PlantaRow = Tabelas<"plantas">;
+export type ExecutorRow = Tabelas<"executores">;
+export type TarefaAprovacaoRow = Tabelas<"tarefa_aprovacoes">;
 export type TarefaComentarioRow = Tabelas<"tarefa_comentarios">;
 export type TarefaAnexoRow = Tabelas<"tarefa_anexos">;
 export type NotificacaoRow = Tabelas<"notificacoes">;

@@ -1,4 +1,5 @@
 import type {
+  AprovacaoTarefa,
   MomentoAnexo,
   PapelUsuario,
   PrioridadeTarefa,
@@ -99,6 +100,80 @@ export const MOMENTO_ANEXO: Record<MomentoAnexo, { rotulo: string }> = {
   conclusao: { rotulo: "Conclusão" },
 };
 
+export const APROVACAO_TAREFA: Record<AprovacaoTarefa, Opcao<AprovacaoTarefa>> = {
+  pendente: {
+    valor: "pendente",
+    rotulo: "Aguardando validação",
+    classe: "bg-slate-100 text-slate-700 ring-slate-600/20",
+  },
+  aprovado: {
+    valor: "aprovado",
+    rotulo: "Aprovado",
+    classe: "bg-emerald-100 text-emerald-800 ring-emerald-600/25",
+  },
+  reprovado: {
+    valor: "reprovado",
+    rotulo: "Reprovado",
+    classe: "bg-red-100 text-red-800 ring-red-600/25",
+  },
+};
+
+// A planta pinta o pino por SITUACAO: a aprovacao do supervisor tem precedencia
+// sobre o status de execucao, por isso as duas colunas viram um valor unico.
+export type SituacaoTarefa = StatusTarefa | "aprovado" | "reprovado";
+
+export const SITUACAO_TAREFA: Record<
+  SituacaoTarefa,
+  { valor: SituacaoTarefa; rotulo: string; classe: string; pino: string; regiao: string }
+> = {
+  pendente: {
+    valor: "pendente",
+    rotulo: "Não iniciado",
+    classe: STATUS_TAREFA.pendente.classe,
+    pino: "bg-slate-400",
+    regiao: "border-slate-400/80 bg-slate-400/10",
+  },
+  em_execucao: {
+    valor: "em_execucao",
+    rotulo: "Em execução",
+    classe: STATUS_TAREFA.em_execucao.classe,
+    pino: "bg-amber-500",
+    regiao: "border-amber-500/80 bg-amber-500/10",
+  },
+  concluido: {
+    valor: "concluido",
+    rotulo: "Concluído",
+    classe: STATUS_TAREFA.concluido.classe,
+    pino: "bg-sky-500",
+    regiao: "border-sky-500/80 bg-sky-500/10",
+  },
+  aprovado: {
+    valor: "aprovado",
+    rotulo: "Aprovado",
+    classe: APROVACAO_TAREFA.aprovado.classe,
+    pino: "bg-emerald-500",
+    regiao: "border-emerald-500/80 bg-emerald-500/10",
+  },
+  reprovado: {
+    valor: "reprovado",
+    rotulo: "Reprovado",
+    classe: APROVACAO_TAREFA.reprovado.classe,
+    pino: "bg-red-500",
+    regiao: "border-red-500/80 bg-red-500/10",
+  },
+};
+
+export function situacaoDaTarefa(tarefa: {
+  status: StatusTarefa;
+  aprovacao: AprovacaoTarefa;
+}): SituacaoTarefa {
+  if (tarefa.aprovacao === "aprovado") return "aprovado";
+  if (tarefa.aprovacao === "reprovado") return "reprovado";
+  return tarefa.status;
+}
+
+export const OPCOES_APROVACAO = Object.values(APROVACAO_TAREFA);
+export const OPCOES_SITUACAO_TAREFA = Object.values(SITUACAO_TAREFA);
 export const OPCOES_STATUS_TAREFA = Object.values(STATUS_TAREFA);
 export const OPCOES_PRIORIDADE = Object.values(PRIORIDADE_TAREFA);
 export const OPCOES_STATUS_OBRA = Object.values(STATUS_OBRA);

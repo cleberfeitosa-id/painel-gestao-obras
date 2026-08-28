@@ -18,7 +18,7 @@ import {
   ZoomOut,
   type LucideIcon,
 } from "lucide-react";
-import { Document, Page } from "react-pdf";
+import { Document, Page, pdfjs } from "react-pdf";
 import { Botao, Etiqueta, Spinner } from "@/components/ui";
 import {
   calcularCalibracao,
@@ -34,7 +34,12 @@ import {
   telaParaPdf,
   type Calibracao,
 } from "@/lib/pdf/coordenadas";
-import { PRIORIDADE_TAREFA, STATUS_TAREFA } from "@/lib/domain/rotulos";
+import {
+  OPCOES_SITUACAO_TAREFA,
+  PRIORIDADE_TAREFA,
+  situacaoDaTarefa,
+  SITUACAO_TAREFA,
+} from "@/lib/domain/rotulos";
 import { situacaoPrazo } from "@/lib/datas";
 import { cn } from "@/lib/utils";
 import { Calibragem } from "./calibragem";
@@ -50,10 +55,20 @@ import type {
   RegiaoPdf,
 } from "@/lib/supabase/database.types";
 import type { PropsAreaPlanta, TarefaPlanta } from "./tipos";
+import type { SituacaoTarefa } from "@/lib/domain/rotulos";
 
 type Ferramenta = "navegar" | "medir" | "pino" | "regiao" | "calibrar";
 
 type DimensoesPagina = { largura: number; altura: number };
+
+// Config do worker do PDF.js no MESMO modulo em que o <Document> e usado
+// (recomendacao oficial do react-pdf). O `new URL(..., import.meta.url)` faz o
+// bundler emitir o worker como asset estatico; sem isso o viewer falha com
+// "No GlobalWorkerOptions.workerSrc specified".
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url,
+).toString();
 
 const FERRAMENTAS: Array<{
   valor: Ferramenta;
@@ -77,20 +92,6 @@ const DICA_FERRAMENTA: Record<Ferramenta, string> = {
   calibrar: "Clique em dois pontos de distancia conhecida para calibrar a escala.",
 };
 
-const CORES_PINO: Record<PrioridadeTarefa, string> = {
-  baixa: "bg-sky-500",
-  media: "bg-slate-500",
-  alta: "bg-orange-500",
-  urgente: "bg-red-500",
-};
-
-const CORES_REGIAO: Record<PrioridadeTarefa, string> = {
-  baixa: "border-sky-500/80 bg-sky-500/10",
-  media: "border-slate-500/80 bg-slate-500/10",
-  alta: "border-orange-500/80 bg-orange-500/10",
-  urgente: "border-red-500/80 bg-red-500/10",
-};
-
 const cursorPorFerramenta: Record<Ferramenta, string> = {
   navegar: "grab",
   medir: "crosshair",
@@ -101,14 +102,19 @@ const cursorPorFerramenta: Record<Ferramenta, string> = {
 
 function DicaTarefa({ tarefa }: { tarefa: TarefaPlanta }) {
   const prazoInfo = situacaoPrazo(tarefa.prazo, tarefa.status === "concluido");
+  const situacao = situacaoDaTarefa({
+    status: tarefa.status,
+    aprovacao: tarefa.aprovacao,
+  });
+  const opcaoSituacao = SITUACAO_TAREFA[situacao];
   return (
     <div className="w-56 rounded-lg border border-borda bg-white p-3 shadow-lg">
       <p className="line-clamp-2 text-sm font-medium text-superficie-900">
         {tarefa.titulo}
       </p>
       <div className="mt-2 flex flex-wrap gap-1">
-        <Etiqueta className={STATUS_TAREFA[tarefa.status].classe}>
-          {STATUS_TAREFA[tarefa.status].rotulo}
+        <Etiqueta className={opcaoSituacao.classe}>
+          {opcaoSituacao.rotulo}
         </Etiqueta>
         <Etiqueta className={PRIORIDADE_TAREFA[tarefa.prioridade].classe}>
           {PRIORIDADE_TAREFA[tarefa.prioridade].rotulo}
@@ -199,6 +205,7 @@ export function VisualizadorPlanta({
   urlPdf,
   calibracoes,
   tarefas,
+  executores,
   podeEditar,
 }: PropsAreaPlanta) {
   const router = useRouter();
@@ -217,6 +224,10 @@ export function VisualizadorPlanta({
   const [pontosCalibracao, setPontosCalibracao] = useState<PontoPdf[]>([]);
   const [regiaoAtual, setRegiaoAtual] = useState<RegiaoPdf | null>(null);
   const [pinoAtivo, setPinoAtivo] = useState<string | null>(null);
+
+  const [filtroSituacao, setFiltroSituacao] = useState<"todas" | SituacaoTarefa>("todas");
+  const [filtroPrioridade, setFiltroPrioridade] = useState<"todas" | PrioridadeTarefa>("todas");
+  const [filtroExecutor, setFiltroExecutor] = useState<"todos" | "sem" | string>("todos");
 
   const [calibracoesPorPagina, setCalibracoesPorPagina] = useState<
     Map<number, PlantaCalibracaoRow>
@@ -239,6 +250,19 @@ export function VisualizadorPlanta({
     () => tarefas.filter((t) => t.pagina === paginaAtual),
     [tarefas, paginaAtual],
   );
+
+  const tarefasFiltradas = useMemo(() => {
+    return tarefasPagina.filter((t) => {
+      if (filtroSituacao !== "todas") {
+        const sit = situacaoDaTarefa({ status: t.status, aprovacao: t.aprovacao });
+        if (sit !== filtroSituacao) return false;
+      }
+      if (filtroPrioridade !== "todas" && t.prioridade !== filtroPrioridade) return false;
+      if (filtroExecutor === "sem" && t.executor != null) return false;
+      if (filtroExecutor !== "todos" && filtroExecutor !== "sem" && t.executor?.id !== filtroExecutor) return false;
+      return true;
+    });
+  }, [tarefasPagina, filtroSituacao, filtroPrioridade, filtroExecutor]);
 
   const aplicarAjusteLargura = useCallback(() => {
     if (!ajusteLargura || !dimensoes) return;
@@ -569,6 +593,15 @@ export function VisualizadorPlanta({
 
         <p className="text-xs text-superficie-500">{DICA_FERRAMENTA[ferramenta]}</p>
 
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-borda bg-fundo-card px-3 py-2 text-xs" role="group" aria-label="Legenda de cores">
+          {OPCOES_SITUACAO_TAREFA.map((opcao) => (
+            <span key={opcao.valor} className="inline-flex items-center gap-1.5">
+              <span className={cn("inline-block h-2.5 w-2.5 rounded-full", opcao.pino)} />
+              <span className="text-superficie-600">{opcao.rotulo}</span>
+            </span>
+          ))}
+        </div>
+
         <Calibragem
           calibracao={calibracaoLinha}
           pontos={pontosCalibracao}
@@ -694,7 +727,7 @@ export function VisualizadorPlanta({
                     )}
                   </svg>
 
-                  {tarefasPagina
+                  {tarefasFiltradas
                     .filter(
                       (t) =>
                         t.localizacao_tipo === "ponto" &&
@@ -707,6 +740,7 @@ export function VisualizadorPlanta({
                         dimensoes.largura,
                         dimensoes.altura,
                       );
+                      const sit = situacaoDaTarefa({ status: tarefa.status, aprovacao: tarefa.aprovacao });
                       return (
                         <div
                           key={tarefa.id}
@@ -727,7 +761,7 @@ export function VisualizadorPlanta({
                             <span
                               className={cn(
                                 "block h-4 w-4 rounded-full shadow ring-2 ring-white",
-                                CORES_PINO[tarefa.prioridade],
+                                SITUACAO_TAREFA[sit].pino,
                               )}
                             />
                           </button>
@@ -740,7 +774,7 @@ export function VisualizadorPlanta({
                       );
                     })}
 
-                  {tarefasPagina
+                  {tarefasFiltradas
                     .filter(
                       (t) => t.localizacao_tipo === "regiao" && t.regiao,
                     )
@@ -757,12 +791,13 @@ export function VisualizadorPlanta({
                         dimensoes.largura,
                         dimensoes.altura,
                       );
+                      const sit = situacaoDaTarefa({ status: tarefa.status, aprovacao: tarefa.aprovacao });
                       return (
                         <div
                           key={tarefa.id}
                           className={cn(
                             "absolute cursor-pointer rounded-sm border-2",
-                            CORES_REGIAO[tarefa.prioridade],
+                            SITUACAO_TAREFA[sit].regiao,
                           )}
                           style={{
                             left: `${canto1.esquerda}%`,
@@ -831,7 +866,18 @@ export function VisualizadorPlanta({
         </div>
       </div>
 
-      <ListaTarefasPlanta tarefas={tarefas} paginaAtual={paginaAtual} />
+      <ListaTarefasPlanta
+        tarefas={tarefasFiltradas}
+        todasTarefasPagina={tarefasPagina}
+        paginaAtual={paginaAtual}
+        executores={executores}
+        filtroSituacao={filtroSituacao}
+        aoMudarSituacao={setFiltroSituacao}
+        filtroPrioridade={filtroPrioridade}
+        aoMudarPrioridade={setFiltroPrioridade}
+        filtroExecutor={filtroExecutor}
+        aoMudarExecutor={setFiltroExecutor}
+      />
     </div>
   );
 }

@@ -13,7 +13,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { STATUS_TAREFA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
+import { STATUS_TAREFA, PRIORIDADE_TAREFA, APROVACAO_TAREFA } from "@/lib/domain/rotulos";
 import { situacaoPrazo, formatarData, formatarDataHora } from "@/lib/datas";
 import { urlsAssinadas, BUCKET_ANEXOS } from "@/lib/armazenamento";
 import {
@@ -28,17 +28,22 @@ import {
 import { AlterarStatus } from "@/components/tarefas/alterar-status";
 import { Comentarios } from "@/components/tarefas/comentarios";
 import { Anexos } from "@/components/tarefas/anexos";
+import { AprovacaoTarefa } from "@/components/tarefas/aprovacao-tarefa";
 import type {
   TarefaRow,
   PerfilRow,
   ObraRow,
+  ExecutorRow,
   TarefaComentarioRow,
   TarefaAnexoRow,
 } from "@/lib/supabase/database.types";
 
-interface TarefaComDados extends TarefaRow {
+interface TarefaComDados extends Omit<TarefaRow, "avaliado_por"> {
   obras: Pick<ObraRow, "id" | "nome">;
   responsavel: Pick<PerfilRow, "id" | "nome"> | null;
+  executor: Pick<ExecutorRow, "id" | "nome"> | null;
+  supervisor: Pick<PerfilRow, "id" | "nome"> | null;
+  avaliado_por: Pick<PerfilRow, "id" | "nome"> | null;
 }
 
 interface ComentarioComAutor extends TarefaComentarioRow {
@@ -62,7 +67,7 @@ async function buscarTarefa(id: string) {
   const { data } = await supabase
     .from("tarefas")
     .select(
-      "*, obras!inner(id, nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome)",
+      "*, obras!inner(id, nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome), avaliado_por:perfis!tarefas_avaliado_por_fkey(id, nome)",
     )
     .eq("id", id)
     .single();
@@ -133,6 +138,10 @@ export default async function DetalheTarefaPage({
 
   const prazoInfo = situacaoPrazo(tarefa.prazo, tarefa.status === "concluido");
   const podeEscrever = usuario.eGestor || tarefa.responsavel_id === usuario.id;
+  const podeAvaliar =
+    (usuario.eGestor || tarefa.supervisor_id === usuario.id) &&
+    tarefa.status === "concluido" &&
+    tarefa.aprovacao === "pendente";
 
   const temFoto = complementos.anexos.some((a) => a.tipo === "imagem");
   const temVideo = complementos.anexos.some((a) => a.tipo === "video");
@@ -180,6 +189,9 @@ export default async function DetalheTarefaPage({
               </Etiqueta>
               <Etiqueta className={PRIORIDADE_TAREFA[tarefa.prioridade].classe}>
                 {PRIORIDADE_TAREFA[tarefa.prioridade].rotulo}
+              </Etiqueta>
+              <Etiqueta className={APROVACAO_TAREFA[tarefa.aprovacao].classe}>
+                {APROVACAO_TAREFA[tarefa.aprovacao].rotulo}
               </Etiqueta>
             </div>
             <p className="mt-1 text-sm text-superficie-500">
@@ -234,6 +246,22 @@ export default async function DetalheTarefaPage({
                     ) : (
                       <span className="text-sm text-superficie-400">—</span>
                     )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
+                    Executor
+                  </dt>
+                  <dd className="mt-1 text-sm text-superficie-900">
+                    {tarefa.executor ? tarefa.executor.nome : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
+                    Supervisor
+                  </dt>
+                  <dd className="mt-1 text-sm text-superficie-900">
+                    {tarefa.supervisor ? tarefa.supervisor.nome : "—"}
                   </dd>
                 </div>
                 <div>
@@ -346,6 +374,45 @@ export default async function DetalheTarefaPage({
                   Concluida em {formatarDataHora(tarefa.concluida_em)}
                 </p>
               )}
+            </CartaoConteudo>
+          </Cartao>
+
+          <Cartao>
+            <CartaoCabecalho>
+              <CartaoTitulo>Aprovação</CartaoTitulo>
+            </CartaoCabecalho>
+            <CartaoConteudo>
+              <div className="flex flex-wrap items-center gap-2">
+                <Etiqueta className={APROVACAO_TAREFA[tarefa.aprovacao].classe}>
+                  {APROVACAO_TAREFA[tarefa.aprovacao].rotulo}
+                </Etiqueta>
+                {tarefa.avaliado_em && (
+                  <span className="text-xs text-superficie-500">
+                    {formatarDataHora(tarefa.avaliado_em)}
+                  </span>
+                )}
+              </div>
+
+              {tarefa.aprovacao === "reprovado" && tarefa.motivo_reprovacao && (
+                <div className="mt-3 rounded-lg border border-perigo/30 bg-perigo/5 px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-wider text-perigo">
+                    Motivo da reprovação
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-superficie-700">
+                    {tarefa.motivo_reprovacao}
+                  </p>
+                </div>
+              )}
+
+              {tarefa.avaliado_por && (
+                <p className="mt-3 text-xs text-superficie-500">
+                  Avaliada por {tarefa.avaliado_por.nome}
+                </p>
+              )}
+
+              <div className="mt-4">
+                <AprovacaoTarefa tarefaId={tarefa.id} podeAvaliar={podeAvaliar} />
+              </div>
             </CartaoConteudo>
           </Cartao>
 

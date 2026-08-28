@@ -5,7 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { Cartao, CartaoCabecalho, CartaoTitulo, CartaoConteudo } from "@/components/ui";
 import { FormularioTarefa, type LocalizacaoInicial } from "@/components/tarefas/formulario-tarefa";
 import { criarTarefa } from "../acoes";
-import type { ObraRow, PerfilRow } from "@/lib/supabase/database.types";
+import type {
+  ExecutorRow,
+  ObraRow,
+  PerfilRow,
+} from "@/lib/supabase/database.types";
 
 const esquemaPonto = z.object({
   obra: z.string().uuid(),
@@ -42,13 +46,23 @@ const esquemaRegiao = z.object({
 
 async function buscarOpcoes() {
   const supabase = await createClient();
-  const [{ data: obras }, { data: perfis }] = await Promise.all([
-    supabase.from("obras").select("id, nome").order("nome"),
-    supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
-  ]);
+  const [{ data: obras }, { data: perfis }, { data: executores }] =
+    await Promise.all([
+      supabase.from("obras").select("id, nome").order("nome"),
+      supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
+      supabase
+        .from("executores")
+        .select("id, nome, obra_id, ativo")
+        .order("nome"),
+    ]);
   return {
     obras: (obras ?? []) as Pick<ObraRow, "id" | "nome">[],
     responsaveis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
+    supervisores: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
+    executores: (executores ?? []) as Pick<
+      ExecutorRow,
+      "id" | "nome" | "obra_id" | "ativo"
+    >[],
   };
 }
 
@@ -61,6 +75,14 @@ export default async function NovaTarefaPage({
   const [opcoes] = await Promise.all([buscarOpcoes()]);
 
   let localizacao: LocalizacaoInicial | undefined;
+  let obraIdInicial: string | undefined;
+
+  if (params.obra) {
+    const obraEncontrada = opcoes.obras.find((o) => o.id === params.obra);
+    if (obraEncontrada) {
+      obraIdInicial = obraEncontrada.id;
+    }
+  }
 
   if (params.tipo === "ponto") {
     const resultado = esquemaPonto.safeParse(params);
@@ -110,7 +132,10 @@ export default async function NovaTarefaPage({
             acao={criarTarefa}
             obras={opcoes.obras}
             responsaveis={opcoes.responsaveis}
+            executores={opcoes.executores}
+            supervisores={opcoes.supervisores}
             localizacaoInicial={localizacao}
+            obraIdInicial={obraIdInicial}
           />
         </CartaoConteudo>
       </Cartao>

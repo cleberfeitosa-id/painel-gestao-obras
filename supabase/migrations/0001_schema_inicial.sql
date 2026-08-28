@@ -445,10 +445,12 @@ drop policy if exists plantas_storage_leitura on storage.objects;
 create policy plantas_storage_leitura on storage.objects
   for select to authenticated using (bucket_id = 'plantas');
 
+-- Upload via URL assinada NAO carrega auth.uid(); e_gestor() retornaria false
+-- e o PUT falharia com 403 (RLS). O papel ja e validado em assinarUploadPlanta.
 drop policy if exists plantas_storage_escrita on storage.objects;
 create policy plantas_storage_escrita on storage.objects
   for insert to authenticated
-  with check (bucket_id = 'plantas' and public.e_gestor());
+  with check (bucket_id = 'plantas');
 
 drop policy if exists plantas_storage_remocao on storage.objects;
 create policy plantas_storage_remocao on storage.objects

@@ -16,6 +16,7 @@ import {
   Celula,
 } from "@/components/ui";
 import { EditarPapel } from "@/components/usuarios/editar-papel";
+import { ConvidarUsuario } from "@/components/usuarios/convidar-usuario";
 import type { PerfilRow } from "@/lib/supabase/database.types";
 
 async function buscarPerfilAtual() {
@@ -71,11 +72,14 @@ export default async function UsuariosPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-superficie-900">Usuarios</h1>
-        <p className="mt-1 text-sm text-superficie-500">
-          Gerencie os acessos e papeis da equipe.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-superficie-900">Usuarios</h1>
+          <p className="mt-1 text-sm text-superficie-500">
+            Gerencie os acessos e papeis da equipe.
+          </p>
+        </div>
+        <ConvidarUsuario />
       </div>
 
       {usuarios.length === 0 ? (
@@ -127,7 +131,11 @@ export default async function UsuariosPage() {
                         </Etiqueta>
                       </Celula>
                       <Celula>
-                        {usuario.ativo ? (
+                        {usuario.aceito_em === null ? (
+                          <Etiqueta className="bg-amber-100 text-amber-800 ring-amber-600/25">
+                            Convite pendente
+                          </Etiqueta>
+                        ) : usuario.ativo ? (
                           <Etiqueta className="bg-emerald-100 text-emerald-800 ring-emerald-600/25">
                             Ativo
                           </Etiqueta>

@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Clock,
   Hammer,
+  Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_OBRA, STATUS_TAREFA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
@@ -140,6 +141,12 @@ export default async function DetalheObraPage({
                 Nova tarefa
               </Botao>
             </Link>
+            <Link href={`/obras/${obra.id}/executores`}>
+              <Botao variante="contorno">
+                <Users className="h-4 w-4" />
+                Executores
+              </Botao>
+            </Link>
             <Link href={`/obras/${obra.id}/editar`}>
               <Botao variante="contorno">
                 <Pencil className="h-4 w-4" />
@@ -221,6 +228,12 @@ export default async function DetalheObraPage({
             <CartaoCabecalho>
               <div className="flex items-center justify-between">
                 <CartaoTitulo>Plantas</CartaoTitulo>
+                <Link href={`/obras/${obra.id}/plantas/nova`}>
+                  <Botao variante="contorno" tamanho="sm">
+                    <Plus className="h-4 w-4" />
+                    Enviar plantas
+                  </Botao>
+                </Link>
               </div>
             </CartaoCabecalho>
             <CartaoConteudo>
@@ -228,7 +241,15 @@ export default async function DetalheObraPage({
                 <EstadoVazio
                   icone={<FileText className="h-8 w-8" />}
                   titulo="Nenhuma planta anexada"
-                  descricao="As plantas desta obra aparecerao aqui quando forem enviadas."
+                  descricao="Envie as plantas em PDF para marcar tarefas em pontos e regiões."
+                  acao={
+                    <Link href={`/obras/${obra.id}/plantas/nova`}>
+                      <Botao variante="primario">
+                        <Plus className="h-4 w-4" />
+                        Enviar plantas
+                      </Botao>
+                    </Link>
+                  }
                 />
               ) : (
                 <ul className="divide-y divide-superficie-100">

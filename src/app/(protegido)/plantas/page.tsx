@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
+  Botao,
   Cartao,
   CartaoCabecalho,
   CartaoConteudo,
@@ -49,7 +50,12 @@ export default async function PlantasPage() {
             <EstadoVazio
               icone={<FileText className="h-8 w-8" />}
               titulo="Nenhuma planta enviada"
-              descricao="As plantas aparecerao aqui quando forem enviadas pelas obras."
+              descricao="O envio é feito dentro de cada obra. Abra uma obra e use “Enviar plantas”."
+              acao={
+                <Link href="/obras">
+                  <Botao variante="primario">Ir para obras</Botao>
+                </Link>
+              }
             />
           </CartaoConteudo>
         </Cartao>
