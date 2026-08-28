@@ -742,9 +742,7 @@ export async function avaliarTarefa(
   const tarefa = data as TarefaRow | null;
   if (!tarefa) return { erro: "Tarefa nao encontrada." };
 
-  const papel = await papelDoUsuario(user.id);
-  const eSupervisor = tarefa.supervisor_id === user.id;
-  if (!eGestor(papel) && !eSupervisor) {
+  if (tarefa.supervisor_id !== user.id) {
     return { erro: "Voce nao tem permissao para avaliar esta tarefa." };
   }
 

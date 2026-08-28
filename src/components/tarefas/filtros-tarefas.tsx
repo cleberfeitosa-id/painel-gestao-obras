@@ -5,11 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { Campo, Selecao, Botao } from "@/components/ui";
 import { OPCOES_STATUS_TAREFA, OPCOES_PRIORIDADE } from "@/lib/domain/rotulos";
-import type { ObraRow, PerfilRow } from "@/lib/supabase/database.types";
+import type { ExecutorRow, ObraRow, PerfilRow } from "@/lib/supabase/database.types";
 
 interface FiltrosTarefasProps {
   obras: Pick<ObraRow, "id" | "nome">[];
   responsaveis: Pick<PerfilRow, "id" | "nome">[];
+  supervisores: Pick<PerfilRow, "id" | "nome">[];
+  executores: Pick<ExecutorRow, "id" | "nome">[];
 }
 
 const OPCOES_PRAZO = [
@@ -30,7 +32,12 @@ const OPCOES_ORDENAR = [
   { valor: "criacao", rotulo: "Criacao" },
 ];
 
-export function FiltrosTarefas({ obras, responsaveis }: FiltrosTarefasProps) {
+export function FiltrosTarefas({
+  obras,
+  responsaveis,
+  supervisores,
+  executores,
+}: FiltrosTarefasProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [busca, setBusca] = useState(searchParams.get("busca") ?? "");
@@ -42,6 +49,8 @@ export function FiltrosTarefas({ obras, responsaveis }: FiltrosTarefasProps) {
         "busca",
         "obra",
         "responsavel",
+        "supervisor",
+        "executor",
         "status",
         "prioridade",
         "prazo",
@@ -110,6 +119,32 @@ export function FiltrosTarefas({ obras, responsaveis }: FiltrosTarefasProps) {
             {responsaveis.map((perfil) => (
               <option key={perfil.id} value={perfil.id}>
                 {perfil.nome}
+              </option>
+            ))}
+          </Selecao>
+          <Selecao
+            rotulo="Supervisor"
+            name="supervisor"
+            value={searchParams.get("supervisor") ?? ""}
+            onChange={(e) => aplicar({ supervisor: e.target.value })}
+          >
+            <option value="">Todos os supervisores</option>
+            {supervisores.map((perfil) => (
+              <option key={perfil.id} value={perfil.id}>
+                {perfil.nome}
+              </option>
+            ))}
+          </Selecao>
+          <Selecao
+            rotulo="Executor"
+            name="executor"
+            value={searchParams.get("executor") ?? ""}
+            onChange={(e) => aplicar({ executor: e.target.value })}
+          >
+            <option value="">Todos os executores</option>
+            {executores.map((executor) => (
+              <option key={executor.id} value={executor.id}>
+                {executor.nome}
               </option>
             ))}
           </Selecao>
@@ -213,6 +248,8 @@ const chaves = [
   "busca",
   "obra",
   "responsavel",
+  "supervisor",
+  "executor",
   "status",
   "prioridade",
   "prazo",

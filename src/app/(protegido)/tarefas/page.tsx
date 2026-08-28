@@ -23,6 +23,7 @@ import { FiltrosTarefas } from "@/components/tarefas/filtros-tarefas";
 import { BotaoExcluirTarefa } from "@/components/tarefas/botao-excluir-tarefa";
 import { BotaoDuplicarTarefa } from "@/components/tarefas/botao-duplicar-tarefa";
 import type {
+  ExecutorRow,
   ObraRow,
   PerfilRow,
   TarefaRow,
@@ -33,6 +34,8 @@ import type {
 interface TarefaComDados extends TarefaRow {
   obras: { nome: string };
   responsavel: Pick<PerfilRow, "id" | "nome"> | null;
+  executor: Pick<ExecutorRow, "id" | "nome"> | null;
+  supervisor: Pick<PerfilRow, "id" | "nome"> | null;
 }
 
 const COR_PRAZO: Record<string, string> = {
@@ -49,7 +52,7 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
   let query = supabase
     .from("tarefas")
     .select(
-      "*, obras!inner(nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome)",
+      "*, obras!inner(nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome)",
     );
 
   const busca = params.busca?.trim();
@@ -58,6 +61,8 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
   }
   if (params.obra) query = query.eq("obra_id", params.obra);
   if (params.responsavel) query = query.eq("responsavel_id", params.responsavel);
+  if (params.supervisor) query = query.eq("supervisor_id", params.supervisor);
+  if (params.executor) query = query.eq("executor_id", params.executor);
   if (params.status) query = query.eq("status", params.status as StatusTarefa);
   if (params.prioridade)
     query = query.eq("prioridade", params.prioridade as PrioridadeTarefa);
@@ -112,12 +117,14 @@ async function buscarOpcoes() {
   const [
     { data: obras },
     { data: perfis },
+    { data: executores },
     {
       data: { user },
     },
   ] = await Promise.all([
     supabase.from("obras").select("id, nome").order("nome"),
     supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
+    supabase.from("executores").select("id, nome").order("nome"),
     supabase.auth.getUser(),
   ]);
 
@@ -134,6 +141,8 @@ async function buscarOpcoes() {
   return {
     obras: (obras ?? []) as Pick<ObraRow, "id" | "nome">[],
     responsaveis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
+    supervisores: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
+    executores: (executores ?? []) as Pick<ExecutorRow, "id" | "nome">[],
     podeExcluir: papel === "admin" || papel === "gestor",
   };
 }
@@ -152,6 +161,8 @@ export default async function TarefasPage({
     busca: params.busca,
     obra: params.obra,
     responsavel: params.responsavel,
+    supervisor: params.supervisor,
+    executor: params.executor,
     status: statusValido.includes(params.status as StatusTarefa)
       ? params.status
       : undefined,
@@ -175,7 +186,7 @@ export default async function TarefasPage({
     buscarTarefas(filtros),
     buscarOpcoes(),
   ]);
-  const { obras, responsaveis, podeExcluir } = opcoes;
+  const { obras, responsaveis, supervisores, executores, podeExcluir } = opcoes;
 
   const temFiltros = Object.values(filtros).some(Boolean);
 
@@ -198,7 +209,12 @@ export default async function TarefasPage({
 
       <Cartao>
         <CartaoConteudo>
-          <FiltrosTarefas obras={obras} responsaveis={responsaveis} />
+          <FiltrosTarefas
+            obras={obras}
+            responsaveis={responsaveis}
+            supervisores={supervisores}
+            executores={executores}
+          />
         </CartaoConteudo>
       </Cartao>
 
@@ -236,6 +252,8 @@ export default async function TarefasPage({
                     <CelulaCabecalho>Tarefa</CelulaCabecalho>
                     <CelulaCabecalho>Obra</CelulaCabecalho>
                     <CelulaCabecalho>Responsavel</CelulaCabecalho>
+                    <CelulaCabecalho>Supervisor</CelulaCabecalho>
+                    <CelulaCabecalho>Executor</CelulaCabecalho>
                     <CelulaCabecalho>Status</CelulaCabecalho>
                     <CelulaCabecalho>Prioridade</CelulaCabecalho>
                     <CelulaCabecalho>Prazo</CelulaCabecalho>
@@ -267,6 +285,27 @@ export default async function TarefasPage({
                               <span className="text-superficie-700">
                                 {tarefa.responsavel.nome}
                               </span>
+                            </span>
+                          ) : (
+                            <span className="text-superficie-400">—</span>
+                          )}
+                        </Celula>
+                        <Celula>
+                          {tarefa.supervisor ? (
+                            <span className="flex items-center gap-2">
+                              <Avatar nome={tarefa.supervisor.nome} tamanho="sm" />
+                              <span className="text-superficie-700">
+                                {tarefa.supervisor.nome}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-superficie-400">—</span>
+                          )}
+                        </Celula>
+                        <Celula>
+                          {tarefa.executor ? (
+                            <span className="text-superficie-700">
+                              {tarefa.executor.nome}
                             </span>
                           ) : (
                             <span className="text-superficie-400">—</span>
@@ -376,6 +415,15 @@ export default async function TarefasPage({
                               <MapPin className="h-4 w-4 text-azul-600" />
                             )}
                         </div>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-superficie-600">
+                        <span>
+                          Supervisor:{" "}
+                          {tarefa.supervisor ? tarefa.supervisor.nome : "—"}
+                        </span>
+                        <span>
+                          Executor: {tarefa.executor ? tarefa.executor.nome : "—"}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1.5 text-xs">
                         <Clock className="h-3.5 w-3.5 text-superficie-400" />

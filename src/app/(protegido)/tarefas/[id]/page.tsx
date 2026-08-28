@@ -141,7 +141,7 @@ export default async function DetalheTarefaPage({
   const prazoInfo = situacaoPrazo(tarefa.prazo, tarefa.status === "concluido");
   const podeEscrever = usuario.eGestor || tarefa.responsavel_id === usuario.id;
   const podeAvaliar =
-    (usuario.eGestor || tarefa.supervisor_id === usuario.id) &&
+    tarefa.supervisor_id === usuario.id &&
     tarefa.status === "concluido" &&
     tarefa.aprovacao === "pendente";
 

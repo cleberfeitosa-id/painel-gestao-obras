@@ -91,11 +91,6 @@ export default async function DetalhePlantaPage({
     executor: tarefa.executor,
   }));
 
-  const executoresLista: ExecutorFiltro[] = (executores ?? []).map((e) => ({
-    id: e.id,
-    nome: e.nome,
-  }));
-
   const tarefasObraLista: TarefaObraAssociacao[] = (tarefasObra ?? []).map(
     (tarefa) => ({
       id: tarefa.id,
@@ -158,7 +153,7 @@ export default async function DetalhePlantaPage({
         calibracoes={(calibracoes ?? []) as PlantaCalibracaoRow[]}
         tarefas={tarefasPlanta}
         tarefasObra={tarefasObraLista}
-        executores={executoresLista}
+        executores={(executores ?? []) as ExecutorFiltro[]}
         podeEditar={podeEditar}
       />
     </div>

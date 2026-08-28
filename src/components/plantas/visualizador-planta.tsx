@@ -307,7 +307,8 @@ export function VisualizadorPlanta({
   const [pontosCalibracao, setPontosCalibracao] = useState<PontoPdf[]>([]);
   const [regiaoAtual, setRegiaoAtual] = useState<RegiaoPdf | null>(null);
   const [posicaoMouse, setPosicaoMouse] = useState<PontoPdf | null>(null);
-  const [pinoAtivo, setPinoAtivo] = useState<string | null>(null);
+  const [dicaTarefa, setDicaTarefa] = useState<string | null>(null);
+  const [tarefaDestaque, setTarefaDestaque] = useState<string | null>(null);
   const [confirmacao, setConfirmacao] = useState<ConfirmacaoLocalizacao | null>(null);
   const [associacaoTipo, setAssociacaoTipo] = useState<"pino" | "regiao">("pino");
   const [tarefaAssociacao, setTarefaAssociacao] = useState("");
@@ -323,6 +324,20 @@ export function VisualizadorPlanta({
   const [calibracoesPorPagina, setCalibracoesPorPagina] = useState<
     Map<number, PlantaCalibracaoRow>
   >(() => new Map(calibracoes.map((c) => [c.pagina, c])));
+
+  const timerDicaRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const aoEntrarPino = useCallback((id: string) => {
+    if (timerDicaRef.current) clearTimeout(timerDicaRef.current);
+    setDicaTarefa(null);
+    timerDicaRef.current = setTimeout(() => setDicaTarefa(id), 450);
+  }, []);
+
+  const aoSairPino = useCallback(() => {
+    if (timerDicaRef.current) clearTimeout(timerDicaRef.current);
+    timerDicaRef.current = null;
+    setDicaTarefa(null);
+  }, []);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -1167,8 +1182,13 @@ export function VisualizadorPlanta({
                       return (
                         <div
                           key={tarefa.id}
-                          className="absolute"
+                          className={cn(
+                            "absolute -translate-x-1/2 -translate-y-1/2",
+                            tarefaDestaque === tarefa.id &&
+                              "rounded-lg border-2 border-dashed border-azul-600 bg-azul-600/30 p-1",
+                          )}
                           style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
+                          onPointerDown={(e) => e.stopPropagation()}
                         >
                           <button
                             type="button"
@@ -1176,9 +1196,9 @@ export function VisualizadorPlanta({
                               e.stopPropagation();
                               router.push(`/tarefas/${tarefa.id}`);
                             }}
-                            onMouseEnter={() => setPinoAtivo(tarefa.id)}
-                            onMouseLeave={() => setPinoAtivo(null)}
-                            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full p-2"
+                            onMouseEnter={() => aoEntrarPino(tarefa.id)}
+                            onMouseLeave={aoSairPino}
+                            className="rounded-full p-2"
                             aria-label={`Tarefa: ${tarefa.titulo}`}
                           >
                             <span
@@ -1188,7 +1208,7 @@ export function VisualizadorPlanta({
                               )}
                             />
                           </button>
-                          {pinoAtivo === tarefa.id && (
+                          {dicaTarefa === tarefa.id && (
                             <div className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2">
                               <DicaTarefa tarefa={tarefa} />
                             </div>
@@ -1221,6 +1241,8 @@ export function VisualizadorPlanta({
                           className={cn(
                             "absolute cursor-pointer rounded-sm border-2",
                             SITUACAO_TAREFA[sit].regiao,
+                            tarefaDestaque === tarefa.id &&
+                              "!border-dashed !border-azul-600 bg-azul-500/30",
                           )}
                           style={{
                             left: `${Math.min(canto1.esquerda, canto2.esquerda)}%`,
@@ -1228,14 +1250,15 @@ export function VisualizadorPlanta({
                             width: `${Math.abs(canto2.esquerda - canto1.esquerda)}%`,
                             height: `${Math.abs(canto2.topo - canto1.topo)}%`,
                           }}
+                          onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
                             router.push(`/tarefas/${tarefa.id}`);
                           }}
-                          onMouseEnter={() => setPinoAtivo(tarefa.id)}
-                          onMouseLeave={() => setPinoAtivo(null)}
+                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
+                          onMouseLeave={aoSairPino}
                         >
-                          {pinoAtivo === tarefa.id && (
+                          {dicaTarefa === tarefa.id && (
                             <div className="pointer-events-none absolute z-30 -translate-y-full pb-2">
                               <DicaTarefa tarefa={tarefa} />
                             </div>
@@ -1494,6 +1517,8 @@ export function VisualizadorPlanta({
           aoMudarPrioridade={setFiltroPrioridade}
           filtroExecutor={filtroExecutor}
           aoMudarExecutor={setFiltroExecutor}
+          tarefaDestaque={tarefaDestaque}
+          aoDestaque={setTarefaDestaque}
         />
       </div>
     </div>

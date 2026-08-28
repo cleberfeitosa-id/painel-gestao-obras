@@ -18,6 +18,7 @@ import {
   SITUACAO_TAREFA,
 } from "@/lib/domain/rotulos";
 import { situacaoPrazo } from "@/lib/datas";
+import { cn } from "@/lib/utils";
 import type {
   PrioridadeTarefa,
 } from "@/lib/supabase/database.types";
@@ -35,6 +36,8 @@ interface ListaTarefasPlantaProps {
   aoMudarPrioridade: (valor: "todas" | PrioridadeTarefa) => void;
   filtroExecutor: "todos" | "sem" | string;
   aoMudarExecutor: (valor: "todos" | "sem" | string) => void;
+  tarefaDestaque: string | null;
+  aoDestaque: (id: string | null) => void;
 }
 
 export function ListaTarefasPlanta({
@@ -48,6 +51,8 @@ export function ListaTarefasPlanta({
   aoMudarPrioridade,
   filtroExecutor,
   aoMudarExecutor,
+  tarefaDestaque,
+  aoDestaque,
 }: ListaTarefasPlantaProps) {
   const temFiltros =
     filtroSituacao !== "todas" ||
@@ -136,8 +141,16 @@ export function ListaTarefasPlanta({
                 status: tarefa.status,
                 aprovacao: tarefa.aprovacao,
               });
+              const destacada = tarefaDestaque === tarefa.id;
               return (
-                <li key={tarefa.id}>
+                <li
+                  key={tarefa.id}
+                  onMouseEnter={() => aoDestaque(tarefa.id)}
+                  onMouseLeave={() => aoDestaque(null)}
+                  className={cn(
+                    destacada && "bg-azul-50 ring-1 ring-inset ring-azul-200",
+                  )}
+                >
                   <a
                     href={`/tarefas/${tarefa.id}`}
                     className="block py-3 hover:bg-superficie-50"
