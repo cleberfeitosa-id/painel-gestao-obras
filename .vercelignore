@@ -1,0 +1,9 @@
+# Artefatos de build e dependencias - o build remoto da Vercel regenera tudo
+.next
+node_modules
+out
+build
+*.tsbuildinfo
+
+# Arquivos locais que nao devem subir para o build
+diretrizes.txt
