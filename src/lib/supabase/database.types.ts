@@ -104,6 +104,58 @@ export type Database = {
           },
         ]
       }
+      lote_rascunhos: {
+        Row: {
+          criado_em: string
+          criado_por: string
+          id: string
+          localizacoes: Json
+          obra_id: string
+          pagina: number
+          planta_id: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por: string
+          id?: string
+          localizacoes: Json
+          obra_id: string
+          pagina: number
+          planta_id: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string
+          id?: string
+          localizacoes?: Json
+          obra_id?: string
+          pagina?: number
+          planta_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lote_rascunhos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_rascunhos_obra_id_fkey"
+            columns: ["obra_id"]
+            isOneToOne: false
+            referencedRelation: "obras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_rascunhos_planta_id_fkey"
+            columns: ["planta_id"]
+            isOneToOne: false
+            referencedRelation: "plantas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacoes: {
         Row: {
           assunto: string
@@ -787,6 +839,7 @@ export type PerfilRow = Tabelas<"perfis">;
 export type ObraRow = Tabelas<"obras">;
 export type PlantaRow = Tabelas<"plantas">;
 export type ExecutorRow = Tabelas<"executores">;
+export type LoteRascunhoRow = Tabelas<"lote_rascunhos">;
 export type TarefaAprovacaoRow = Tabelas<"tarefa_aprovacoes">;
 export type TarefaComentarioRow = Tabelas<"tarefa_comentarios">;
 export type TarefaAnexoRow = Tabelas<"tarefa_anexos">;

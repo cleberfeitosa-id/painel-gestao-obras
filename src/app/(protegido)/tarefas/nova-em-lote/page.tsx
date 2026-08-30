@@ -29,22 +29,7 @@ const esquemaLocalizacao = z.object({
 });
 
 const esquemaParams = z.object({
-  obra: z.string().uuid(),
-  planta: z.string().uuid(),
-  pagina: z.coerce.number().int().positive(),
-  localizacoes: z
-    .string()
-    .transform((valor, ctx) => {
-      try {
-        return JSON.parse(valor);
-      } catch {
-        ctx.addIssue({ code: "custom", message: "Localizacoes invalidas." });
-        return z.NEVER;
-      }
-    })
-    .pipe(
-      z.array(esquemaLocalizacao).min(1, "Adicione pelo menos uma localizacao."),
-    ),
+  lote: z.string().uuid(),
 });
 
 async function buscarOpcoes() {
@@ -75,31 +60,53 @@ export default async function NovaEmLotePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
+  const supabase = await createClient();
   const [opcoes] = await Promise.all([buscarOpcoes()]);
 
   const resultado = esquemaParams.safeParse(params);
-  const localizacoes: LocalizacaoLote[] = resultado.success
-    ? resultado.data.localizacoes.map((loc) => ({
-        localizacao_tipo: loc.localizacao_tipo,
-        planta_id: loc.planta_id,
-        pagina: loc.pagina,
-        ponto_x: loc.ponto_x ?? undefined,
-        ponto_y: loc.ponto_y ?? undefined,
-        regiao: loc.regiao ?? undefined,
-      }))
-    : [];
+  const loteId = resultado.success ? resultado.data.lote : null;
 
-  const obraEncontrada = resultado.success
-    ? opcoes.obras.find((o) => o.id === resultado.data.obra)
-    : undefined;
+  let localizacoes: LocalizacaoLote[] = [];
+  let obraEncontrada: Pick<ObraRow, "id" | "nome"> | undefined;
+  let plantaId: string | null = null;
+
+  if (loteId) {
+    const { data: rascunho } = await supabase
+      .from("lote_rascunhos")
+      .select("id, obra_id, planta_id, pagina, localizacoes")
+      .eq("id", loteId)
+      .maybeSingle();
+
+    if (rascunho && rascunho.obra_id) {
+      const parse = z
+        .array(esquemaLocalizacao)
+        .min(1, "Adicione pelo menos uma localizacao.")
+        .safeParse(rascunho.localizacoes);
+      if (parse.success) {
+        localizacoes = parse.data.map((loc) => ({
+          localizacao_tipo: loc.localizacao_tipo,
+          planta_id: loc.planta_id,
+          pagina: loc.pagina,
+          ponto_x: loc.ponto_x ?? undefined,
+          ponto_y: loc.ponto_y ?? undefined,
+          regiao: loc.regiao ?? undefined,
+        }));
+      }
+      obraEncontrada = opcoes.obras.find((o) => o.id === rascunho.obra_id);
+      plantaId = rascunho.planta_id;
+    }
+  }
+
+  const obraParaVoltar =
+    obraEncontrada && localizacoes.length > 0 ? obraEncontrada : undefined;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <Link
           href={
-            resultado.success && resultado.data.planta
-              ? `/obras/${resultado.data.obra}/plantas/${resultado.data.planta}`
+            obraParaVoltar && plantaId
+              ? `/obras/${obraParaVoltar.id}/plantas/${plantaId}`
               : "/tarefas"
           }
           className="inline-flex items-center gap-1 text-sm font-medium text-azul-600 hover:text-azul-700"
@@ -111,26 +118,15 @@ export default async function NovaEmLotePage({
           Criar tarefas em lote
         </h1>
         <p className="mt-1 text-sm text-superficie-500">
-          Preencha uma vez e os dados serao replicados para as{" "}
           {localizacoes.length > 0
-            ? `${localizacoes.length} ${
+            ? `Preencha uma vez e os dados serao replicados para as ${localizacoes.length} ${
                 localizacoes.length === 1 ? "localizacao" : "localizacoes"
-              }`
-            : "localizacoes"}{" "}
-          selecionadas.
+              } selecionadas.`
+            : "Selecione os pontos ou regioes na planta para criar tarefas em lote."}
         </p>
       </div>
 
-      {localizacoes.length === 0 || !obraEncontrada ? (
-        <Cartao>
-          <CartaoConteudo>
-            <p className="text-sm text-superficie-600">
-              Nenhuma localizacao valida foi informada. Volte para a planta e
-              selecione os pontos ou regioes desejados.
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-      ) : (
+      {obraParaVoltar ? (
         <Cartao>
           <CartaoCabecalho>
             <CartaoTitulo>Dados das tarefas</CartaoTitulo>
@@ -143,8 +139,19 @@ export default async function NovaEmLotePage({
               executores={opcoes.executores}
               supervisores={opcoes.supervisores}
               localizacoesLote={localizacoes}
-              obraIdInicial={obraEncontrada.id}
+              obraIdInicial={obraParaVoltar.id}
+              loteId={loteId ?? undefined}
             />
+          </CartaoConteudo>
+        </Cartao>
+      ) : (
+        <Cartao>
+          <CartaoConteudo>
+            <p className="text-sm text-superficie-600">
+              {loteId
+                ? "Rascunho de lote nao encontrado ou expirado. Volte para a planta e selecione os pontos ou regioes desejados."
+                : "Nenhuma localizacao valida foi informada. Volte para a planta e selecione os pontos ou regioes desejados."}
+            </p>
           </CartaoConteudo>
         </Cartao>
       )}

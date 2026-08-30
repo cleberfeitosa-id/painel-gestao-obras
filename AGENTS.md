@@ -36,7 +36,7 @@ Painel web p/ gestão de obras da Vasconcelos Engenharia: obras, plantas em PDF 
 | Tipos DB gerados | `src/lib/supabase/database.types.ts` |
 
 ## CODE MAP (domínio)
-Modelo: `perfis` · `obras` · `plantas` · `planta_calibracoes` · `tarefas` · `tarefa_comentarios` · `tarefa_anexos` · `notificacoes`.
+Modelo: `perfis` · `obras` · `plantas` · `planta_calibracoes` · `tarefas` · `tarefa_comentarios` · `tarefa_anexos` · `notificacoes` · `executores` · `tarefa_aprovacoes` · `lote_rascunhos`.
 7 enums: `papel_usuario`, `status_obra`, `status_tarefa`, `prioridade_tarefa`, `tipo_localizacao`, `tipo_anexo`, `momento_anexo`.
 
 | Fluxo | Cadeia |
@@ -44,6 +44,7 @@ Modelo: `perfis` · `obras` · `plantas` · `planta_calibracoes` · `tarefas` ·
 | **Calibragem** | 2 cliques → `telaParaPdf` → modal `calibragem.tsx` → `calcularCalibracao` → action `salvarCalibracao` → upsert `planta_calibracoes` (PK `planta_id,pagina`) |
 | **Pino/região** | clique/arraste → `telaParaPdf`/`retanguloParaRegiao` → querystring → `criarTarefa` grava `ponto_x/ponto_y` ou `regiao` em espaço PDF |
 | **Render do pino** | `pdfParaPercentual` → `left/top` em % do quadro (imune a zoom/DPI) |
+| **Lote** | pinos/regiões em modo Lote → action `salvarRascunhoLote` grava `lote_rascunhos` (localizacoes jsonb) → URL `nova-em-lote?lote=<id>` (curta; NUNCA querystring com localizacoes — estoura limite de URL) → `criarTarefasEmLote` cria as tarefas e **consome** o rascunho (delete) |
 | **RDO** | `relatorios/[data]` = 4 queries paralelas (concluídas no dia + anexos do dia + comentários do dia → união = "em andamento" + contagem em aberto) → `botao-imprimir.tsx` (`useReactToPrint`, espera imagens carregarem) |
 | **Upload** | action assina URL (`assinarUpload`) → navegador envia bytes direto ao Storage → `registrarAnexo`/`registrarPlanta` grava a linha |
 

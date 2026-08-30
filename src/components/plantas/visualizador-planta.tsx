@@ -51,7 +51,10 @@ import {
   renovarUrlPlanta,
   salvarCalibracao as salvarCalibracaoAcao,
 } from "@/app/(protegido)/obras/[id]/plantas/acoes";
-import { associarLocalizacao } from "@/app/(protegido)/tarefas/acoes";
+import {
+  associarLocalizacao,
+  salvarRascunhoLote,
+} from "@/app/(protegido)/tarefas/acoes";
 import type {
   PlantaCalibracaoRow,
   PontoPdf,
@@ -314,6 +317,8 @@ export function VisualizadorPlanta({
   const [tarefaAssociacao, setTarefaAssociacao] = useState("");
   const [associando, setAssociando] = useState(false);
   const [erroAssociacao, setErroAssociacao] = useState<string | null>(null);
+  const [criandoLote, setCriandoLote] = useState(false);
+  const [erroLote, setErroLote] = useState<string | null>(null);
   const [modoLote, setModoLote] = useState(false);
   const [loteMarcadores, setLoteMarcadores] = useState<LoteMarcador[]>([]);
 
@@ -635,8 +640,10 @@ export function VisualizadorPlanta({
     setConfirmacao(null);
   }
 
-  function criarEmLote() {
+  async function criarEmLote() {
     if (loteMarcadores.length === 0) return;
+    setCriandoLote(true);
+    setErroLote(null);
     const localizacoes = loteMarcadores.map((marcador) =>
       marcador.localizacao_tipo === "ponto"
         ? {
@@ -653,10 +660,18 @@ export function VisualizadorPlanta({
             regiao: marcador.regiao,
           },
     );
-    const json = encodeURIComponent(JSON.stringify(localizacoes));
-    router.push(
-      `/tarefas/nova-em-lote?obra=${obraId}&planta=${planta.id}&pagina=${paginaAtual}&localizacoes=${json}`,
-    );
+    const resultado = await salvarRascunhoLote({
+      obra_id: obraId,
+      planta_id: planta.id,
+      pagina: paginaAtual,
+      localizacoes,
+    });
+    setCriandoLote(false);
+    if ("erro" in resultado) {
+      setErroLote(resultado.erro);
+      return;
+    }
+    router.push(`/tarefas/nova-em-lote?lote=${resultado.id}`);
   }
 
   function limparLote() {
@@ -1448,7 +1463,11 @@ export function VisualizadorPlanta({
               formulario e replicar os dados para cada localizacao.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Botao type="button" onClick={criarEmLote}>
+              <Botao
+                type="button"
+                onClick={() => void criarEmLote()}
+                carregando={criandoLote}
+              >
                 Criar {loteMarcadores.length === 1 ? "tarefa" : "tarefas"}
               </Botao>
               <Botao
@@ -1459,6 +1478,11 @@ export function VisualizadorPlanta({
                 Limpar
               </Botao>
             </div>
+            {erroLote && (
+              <p role="alert" className="mt-2 text-sm text-perigo">
+                {erroLote}
+              </p>
+            )}
           </div>
         )}
 

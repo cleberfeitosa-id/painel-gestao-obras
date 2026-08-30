@@ -364,6 +364,7 @@ const esquemaCriarLote = z
     exige_foto: z.boolean().optional(),
     exige_video: z.boolean().optional(),
     exige_arquivo: z.boolean().optional(),
+    lote_id: z.string().uuid().optional(),
     localizacoes: z.preprocess(
       (val) => {
         if (typeof val === "string") {
@@ -418,6 +419,7 @@ export async function criarTarefasEmLote(
     exige_foto: formData.get("exige_foto") === "on",
     exige_video: formData.get("exige_video") === "on",
     exige_arquivo: formData.get("exige_arquivo") === "on",
+    lote_id: formData.get("lote_id"),
     localizacoes: formData.get("localizacoes"),
   };
 
@@ -495,6 +497,16 @@ export async function criarTarefasEmLote(
 
   const obraId = dados.obra_id;
   const plantaId = dados.localizacoes[0]?.planta_id;
+
+  // Consome o rascunho do lote apos criar as tarefas.
+  if (dados.lote_id) {
+    await supabase
+      .from("lote_rascunhos")
+      .delete()
+      .eq("id", dados.lote_id)
+      .eq("criado_por", user.id);
+  }
+
   revalidatePath("/tarefas");
   revalidatePath("/painel");
   if (plantaId) revalidatePath(`/obras/${obraId}/plantas/${plantaId}`);
@@ -1089,4 +1101,63 @@ export async function excluirAnexo(
 
   revalidatePath(`/tarefas/${tarefaId}`);
   return {};
+}
+
+const esquemaRascunhoLote = z.object({
+  obra_id: z.string().uuid(),
+  planta_id: z.string().uuid(),
+  pagina: z.coerce.number().int().positive(),
+  localizacoes: z
+    .array(esquemaLocalizacaoLote)
+    .min(1, "Adicione pelo menos uma localizacao na planta."),
+});
+
+export async function salvarRascunhoLote(
+  dados: unknown,
+): Promise<{ id: string } | { erro: string }> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  const papel = await papelDoUsuario(user.id);
+  if (!eGestor(papel)) {
+    return { erro: "Voce nao tem permissao para criar tarefas." };
+  }
+
+  const resultado = esquemaRascunhoLote.safeParse(dados);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("lote_rascunhos")
+    .insert({
+      criado_por: user.id,
+      obra_id: resultado.data.obra_id,
+      planta_id: resultado.data.planta_id,
+      pagina: resultado.data.pagina,
+      localizacoes: resultado.data.localizacoes,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { erro: "Nao foi possivel salvar o lote. Tente novamente." };
+  }
+
+  // Limpeza lazy: rascunhos abandonados do proprio usuario, exceto o criado
+  // agora. Nunca deixa uma falha de limpeza derrubar o salvamento.
+  try {
+    const limite = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase
+      .from("lote_rascunhos")
+      .delete()
+      .eq("criado_por", user.id)
+      .lt("criado_em", limite)
+      .neq("id", data.id);
+  } catch (erro) {
+    console.error("[tarefas] falha ao limpar rascunhos antigos:", erro);
+  }
+
+  return { id: data.id };
 }

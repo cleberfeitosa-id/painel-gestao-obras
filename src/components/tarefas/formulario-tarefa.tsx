@@ -46,6 +46,7 @@ interface FormularioTarefaProps {
   localizacaoInicial?: LocalizacaoInicial;
   localizacoesLote?: LocalizacaoLote[];
   obraIdInicial?: string;
+  loteId?: string;
 }
 
 function BotaoEnviar({ rotulo }: { rotulo: string }) {
@@ -90,6 +91,7 @@ export function FormularioTarefa({
   localizacaoInicial,
   localizacoesLote,
   obraIdInicial,
+  loteId,
 }: FormularioTarefaProps) {
   const [estado, acaoFormulario] = useActionState(acao, {});
   const [prazo, setPrazo] = useState(tarefa?.prazo ?? (tarefa ? "" : hojeChave()));
@@ -151,11 +153,14 @@ export function FormularioTarefa({
       {tarefa && <input type="hidden" name="id" value={tarefa.id} />}
 
       {localizacoesLote ? (
-        <input
-          type="hidden"
-          name="localizacoes"
-          value={JSON.stringify(localizacoesLote)}
-        />
+        <>
+          <input
+            type="hidden"
+            name="localizacoes"
+            value={JSON.stringify(localizacoesLote)}
+          />
+          {loteId && <input type="hidden" name="lote_id" value={loteId} />}
+        </>
       ) : (
         <>
           <input type="hidden" name="localizacao_tipo" value={localizacao.localizacao_tipo} />
