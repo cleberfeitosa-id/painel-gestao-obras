@@ -23,6 +23,7 @@ export type TarefaPlanta = {
   regiao: RegiaoPdf | null;
   responsavel: { nome: string } | null;
   executor: { id: string; nome: string } | null;
+  tags_tarefa: { id: string; nome: string } | null;
 };
 
 export type ExecutorFiltro = Pick<ExecutorRow, "id" | "nome">;
@@ -44,5 +45,6 @@ export type PropsAreaPlanta = {
   tarefas: TarefaPlanta[];
   tarefasObra: TarefaObraAssociacao[];
   executores: ExecutorFiltro[];
+  tags: { id: string; nome: string }[];
   podeEditar: boolean;
 };

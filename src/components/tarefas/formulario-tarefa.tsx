@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { MapPin } from "lucide-react";
 import { Botao, Campo, AreaTexto, Selecao } from "@/components/ui";
+import { criarTag } from "@/app/(protegido)/tarefas/acoes";
 import { OPCOES_STATUS_TAREFA, OPCOES_PRIORIDADE } from "@/lib/domain/rotulos";
 import { hojeChave } from "@/lib/datas";
 import type {
@@ -42,6 +43,7 @@ interface FormularioTarefaProps {
   responsaveis: Pick<PerfilRow, "id" | "nome">[];
   executores: Pick<ExecutorRow, "id" | "nome" | "obra_id" | "ativo">[];
   supervisores: Pick<PerfilRow, "id" | "nome">[];
+  tags?: { id: string; nome: string }[];
   tarefa?: TarefaRow;
   localizacaoInicial?: LocalizacaoInicial;
   localizacoesLote?: LocalizacaoLote[];
@@ -87,6 +89,7 @@ export function FormularioTarefa({
   responsaveis,
   executores,
   supervisores,
+  tags,
   tarefa,
   localizacaoInicial,
   localizacoesLote,
@@ -100,6 +103,10 @@ export function FormularioTarefa({
   );
   const [obraId, setObraId] = useState(tarefa?.obra_id ?? obraIdInicial ?? "");
   const [executorId, setExecutorId] = useState(tarefa?.executor_id ?? "");
+  
+  const [listaTags, setListaTags] = useState(tags ?? []);
+  const [tagSelecionada, setTagSelecionada] = useState(tarefa?.tag_id ?? "");
+  const [criandoTag, setCriandoTag] = useState(false);
 
   const isNovaTarefa = !tarefa;
   const hoje = hojeChave();
@@ -146,6 +153,23 @@ export function FormularioTarefa({
     if (prazo && valor && valor > prazo) {
       setPrazo(valor);
     }
+  };
+
+  const handleCriarTag = async () => {
+    const nome = window.prompt("Digite o nome da nova tag:");
+    if (!nome?.trim()) return;
+
+    setCriandoTag(true);
+    const resultado = await criarTag(nome);
+    setCriandoTag(false);
+
+    if ("erro" in resultado) {
+      alert(resultado.erro);
+      return;
+    }
+
+    setListaTags((atual) => [...atual, { id: resultado.id, nome: resultado.nome }].sort((a, b) => a.nome.localeCompare(b.nome)));
+    setTagSelecionada(resultado.id);
   };
 
   return (
@@ -328,6 +352,28 @@ export function FormularioTarefa({
             </option>
           ))}
         </Selecao>
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Selecao
+          rotulo="Tag"
+          name="tag_id"
+          value={tagSelecionada}
+          onChange={(e) => setTagSelecionada(e.target.value)}
+          dica="Agrupe tarefas usando tags."
+        >
+          <option value="">Sem tag</option>
+          {listaTags.map((tag) => (
+            <option key={tag.id} value={tag.id}>
+              {tag.nome}
+            </option>
+          ))}
+        </Selecao>
+        <div className="flex items-end pb-7">
+          <Botao type="button" variante="secundario" onClick={handleCriarTag} carregando={criandoTag}>
+            Nova tag
+          </Botao>
+        </div>
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2">

@@ -12,6 +12,8 @@ interface FiltrosTarefasProps {
   responsaveis: Pick<PerfilRow, "id" | "nome">[];
   supervisores: Pick<PerfilRow, "id" | "nome">[];
   executores: Pick<ExecutorRow, "id" | "nome">[];
+  plantas: { id: string; nome: string }[];
+  tags: { id: string; nome: string }[];
 }
 
 const OPCOES_PRAZO = [
@@ -37,6 +39,8 @@ export function FiltrosTarefas({
   responsaveis,
   supervisores,
   executores,
+  plantas,
+  tags,
 }: FiltrosTarefasProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -56,6 +60,7 @@ export function FiltrosTarefas({
         "prazo",
         "planta",
         "pagina",
+        "tag",
         "localizacao",
         "ordenar",
       ];
@@ -95,7 +100,7 @@ export function FiltrosTarefas({
             dica="Pressione Enter para buscar."
           />
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:items-end">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:flex-wrap lg:items-end">
           <Selecao
             rotulo="Obra"
             name="obra"
@@ -106,6 +111,32 @@ export function FiltrosTarefas({
             {obras.map((obra) => (
               <option key={obra.id} value={obra.id}>
                 {obra.nome}
+              </option>
+            ))}
+          </Selecao>
+          <Selecao
+            rotulo="Planta"
+            name="planta"
+            value={searchParams.get("planta") ?? ""}
+            onChange={(e) => aplicar({ planta: e.target.value })}
+          >
+            <option value="">Todas as plantas</option>
+            {plantas.map((planta) => (
+              <option key={planta.id} value={planta.id}>
+                {planta.nome}
+              </option>
+            ))}
+          </Selecao>
+          <Selecao
+            rotulo="Tag"
+            name="tag"
+            value={searchParams.get("tag") ?? ""}
+            onChange={(e) => aplicar({ tag: e.target.value })}
+          >
+            <option value="">Todas as tags</option>
+            {tags.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.nome}
               </option>
             ))}
           </Selecao>
@@ -255,6 +286,7 @@ const chaves = [
   "prazo",
   "planta",
   "pagina",
+  "tag",
   "localizacao",
   "ordenar",
 ];

@@ -20,19 +20,21 @@ import {
   Celula,
 } from "@/components/ui";
 import { FiltrosTarefas } from "@/components/tarefas/filtros-tarefas";
-import { BotaoExcluirTarefa } from "@/components/tarefas/botao-excluir-tarefa";
-import { BotaoDuplicarTarefa } from "@/components/tarefas/botao-duplicar-tarefa";
+import { ListaTarefas } from "@/components/tarefas/lista-tarefas";
 import type {
   ExecutorRow,
   ObraRow,
+  PlantaRow,
   PerfilRow,
   TarefaRow,
   StatusTarefa,
   PrioridadeTarefa,
 } from "@/lib/supabase/database.types";
 
-interface TarefaComDados extends TarefaRow {
+export interface TarefaComDados extends TarefaRow {
   obras: { nome: string };
+  plantas: { nome: string } | null;
+  tags_tarefa: { nome: string } | null;
   responsavel: Pick<PerfilRow, "id" | "nome"> | null;
   executor: Pick<ExecutorRow, "id" | "nome"> | null;
   supervisor: Pick<PerfilRow, "id" | "nome"> | null;
@@ -52,7 +54,7 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
   let query = supabase
     .from("tarefas")
     .select(
-      "*, obras!inner(nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome)",
+      "*, obras!inner(nome), plantas!tarefas_planta_id_fkey(nome), tags_tarefa(nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome)",
     );
 
   const busca = params.busca?.trim();
@@ -64,8 +66,8 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
   if (params.supervisor) query = query.eq("supervisor_id", params.supervisor);
   if (params.executor) query = query.eq("executor_id", params.executor);
   if (params.status) query = query.eq("status", params.status as StatusTarefa);
-  if (params.prioridade)
-    query = query.eq("prioridade", params.prioridade as PrioridadeTarefa);
+  if (params.prioridade) query = query.eq("prioridade", params.prioridade as PrioridadeTarefa);
+  if (params.tag_id) query = query.eq("tag_id", params.tag_id);
   if (params.planta) query = query.eq("planta_id", params.planta);
   if (params.pagina) query = query.eq("pagina", Number(params.pagina));
 
@@ -118,6 +120,8 @@ async function buscarOpcoes() {
     { data: obras },
     { data: perfis },
     { data: executores },
+    { data: plantas },
+    { data: tags },
     {
       data: { user },
     },
@@ -125,6 +129,8 @@ async function buscarOpcoes() {
     supabase.from("obras").select("id, nome").order("nome"),
     supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
     supabase.from("executores").select("id, nome").order("nome"),
+    supabase.from("plantas").select("id, nome").order("nome"),
+    supabase.from("tags_tarefa").select("id, nome").order("nome"),
     supabase.auth.getUser(),
   ]);
 
@@ -143,6 +149,8 @@ async function buscarOpcoes() {
     responsaveis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
     supervisores: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
     executores: (executores ?? []) as Pick<ExecutorRow, "id" | "nome">[],
+    plantas: (plantas ?? []) as Pick<PlantaRow, "id" | "nome">[],
+    tags: (tags ?? []) as { id: string; nome: string }[],
     podeExcluir: papel === "admin" || papel === "gestor",
   };
 }
@@ -174,6 +182,7 @@ export default async function TarefasPage({
       : undefined,
     planta: params.planta,
     pagina: params.pagina,
+    tag_id: params.tag,
     localizacao: ["com_local", "sem_local"].includes(params.localizacao ?? "")
       ? params.localizacao
       : undefined,
@@ -186,7 +195,7 @@ export default async function TarefasPage({
     buscarTarefas(filtros),
     buscarOpcoes(),
   ]);
-  const { obras, responsaveis, supervisores, executores, podeExcluir } = opcoes;
+  const { obras, responsaveis, supervisores, executores, plantas, tags, podeExcluir } = opcoes;
 
   const temFiltros = Object.values(filtros).some(Boolean);
 
@@ -199,12 +208,21 @@ export default async function TarefasPage({
             Acompanhe e gerencie as tarefas dos canteiros.
           </p>
         </div>
-        <Link href="/tarefas/nova">
-          <Botao variante="primario">
-            <Plus className="h-4 w-4" />
-            Nova tarefa
-          </Botao>
-        </Link>
+        <div className="flex gap-2">
+          {podeExcluir && (
+            <Link href="/tarefas/tags">
+              <Botao variante="secundario">
+                Gerenciar tags
+              </Botao>
+            </Link>
+          )}
+          <Link href="/tarefas/nova">
+            <Botao variante="primario">
+              <Plus className="h-4 w-4" />
+              Nova tarefa
+            </Botao>
+          </Link>
+        </div>
       </div>
 
       <Cartao>
@@ -214,246 +232,21 @@ export default async function TarefasPage({
             responsaveis={responsaveis}
             supervisores={supervisores}
             executores={executores}
+            plantas={plantas}
+            tags={tags}
           />
         </CartaoConteudo>
       </Cartao>
 
-      {tarefas.length === 0 ? (
-        <Cartao>
-          <EstadoVazio
-            icone={<CheckSquare className="h-8 w-8" />}
-            titulo={
-              temFiltros ? "Nenhuma tarefa encontrada" : "Nenhuma tarefa cadastrada"
-            }
-            descricao={
-              temFiltros
-                ? "Ajuste os filtros ou o termo de busca para encontrar tarefas."
-                : "Crie a primeira tarefa para comecar o acompanhamento dos canteiros."
-            }
-            acao={
-              !temFiltros ? (
-                <Link href="/tarefas/nova">
-                  <Botao variante="primario">
-                    <Plus className="h-4 w-4" />
-                    Criar tarefa
-                  </Botao>
-                </Link>
-              ) : undefined
-            }
-          />
-        </Cartao>
-      ) : (
-        <>
-          <Cartao className="hidden lg:block">
-            <Tabela>
-              <table className="w-full">
-                <Cabecalho>
-                  <LinhaCabecalho>
-                    <CelulaCabecalho>Tarefa</CelulaCabecalho>
-                    <CelulaCabecalho>Obra</CelulaCabecalho>
-                    <CelulaCabecalho>Responsavel</CelulaCabecalho>
-                    <CelulaCabecalho>Supervisor</CelulaCabecalho>
-                    <CelulaCabecalho>Executor</CelulaCabecalho>
-                    <CelulaCabecalho>Status</CelulaCabecalho>
-                    <CelulaCabecalho>Prioridade</CelulaCabecalho>
-                    <CelulaCabecalho>Prazo</CelulaCabecalho>
-                    <CelulaCabecalho>Local</CelulaCabecalho>
-                    {podeExcluir && <CelulaCabecalho>Acoes</CelulaCabecalho>}
-                  </LinhaCabecalho>
-                </Cabecalho>
-                <Corpo>
-                  {tarefas.map((tarefa) => {
-                    const prazoInfo = situacaoPrazo(
-                      tarefa.prazo,
-                      tarefa.status === "concluido",
-                    );
-                    return (
-                      <Linha key={tarefa.id}>
-                        <Celula>
-                          <Link
-                            href={`/tarefas/${tarefa.id}`}
-                            className="font-medium text-azul-600 hover:text-azul-700"
-                          >
-                            {tarefa.titulo}
-                          </Link>
-                        </Celula>
-                        <Celula>{tarefa.obras.nome}</Celula>
-                        <Celula>
-                          {tarefa.responsavel ? (
-                            <span className="flex items-center gap-2">
-                              <Avatar nome={tarefa.responsavel.nome} tamanho="sm" />
-                              <span className="text-superficie-700">
-                                {tarefa.responsavel.nome}
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-superficie-400">—</span>
-                          )}
-                        </Celula>
-                        <Celula>
-                          {tarefa.supervisor ? (
-                            <span className="flex items-center gap-2">
-                              <Avatar nome={tarefa.supervisor.nome} tamanho="sm" />
-                              <span className="text-superficie-700">
-                                {tarefa.supervisor.nome}
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-superficie-400">—</span>
-                          )}
-                        </Celula>
-                        <Celula>
-                          {tarefa.executor ? (
-                            <span className="text-superficie-700">
-                              {tarefa.executor.nome}
-                            </span>
-                          ) : (
-                            <span className="text-superficie-400">—</span>
-                          )}
-                        </Celula>
-                        <Celula>
-                          <Etiqueta className={STATUS_TAREFA[tarefa.status].classe}>
-                            {STATUS_TAREFA[tarefa.status].rotulo}
-                          </Etiqueta>
-                        </Celula>
-                        <Celula>
-                          <Etiqueta
-                            className={PRIORIDADE_TAREFA[tarefa.prioridade].classe}
-                          >
-                            {PRIORIDADE_TAREFA[tarefa.prioridade].rotulo}
-                          </Etiqueta>
-                        </Celula>
-                        <Celula>
-                          <span className={COR_PRAZO[prazoInfo.situacao]}>
-                            {prazoInfo.texto}
-                          </span>
-                        </Celula>
-                        <Celula>
-                          {tarefa.localizacao_tipo !== "nenhuma" &&
-                          tarefa.planta_id ? (
-                            <Link
-                              href={`/obras/${tarefa.obra_id}/plantas/${tarefa.planta_id}`}
-                              className="inline-flex items-center gap-1 text-azul-600 hover:text-azul-700"
-                              aria-label="Ver localizacao na planta"
-                            >
-                              <MapPin className="h-4 w-4" />
-                            </Link>
-                          ) : (
-                            <span className="text-superficie-300">—</span>
-                          )}
-                        </Celula>
-                        {podeExcluir && (
-                          <Celula>
-                            <div className="flex items-center justify-end gap-1">
-                              <BotaoDuplicarTarefa
-                                tarefaId={tarefa.id}
-                                titulo={tarefa.titulo}
-                                compacto
-                              />
-                              <BotaoExcluirTarefa
-                                tarefaId={tarefa.id}
-                                titulo={tarefa.titulo}
-                                compacto
-                              />
-                            </div>
-                          </Celula>
-                        )}
-                      </Linha>
-                    );
-                  })}
-                </Corpo>
-              </table>
-            </Tabela>
-          </Cartao>
-
-          <div className="grid gap-4 lg:hidden">
-            {tarefas.map((tarefa) => {
-              const prazoInfo = situacaoPrazo(
-                tarefa.prazo,
-                tarefa.status === "concluido",
-              );
-              return (
-                <div key={tarefa.id}>
-                  <Cartao className="transition-shadow group-hover:shadow-md">
-                    <Link
-                      href={`/tarefas/${tarefa.id}`}
-                      className="group block"
-                    >
-                      <CartaoConteudo className="space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="font-semibold text-superficie-900">
-                          {tarefa.titulo}
-                        </p>
-                        <Etiqueta className={STATUS_TAREFA[tarefa.status].classe}>
-                          {STATUS_TAREFA[tarefa.status].rotulo}
-                        </Etiqueta>
-                      </div>
-                      <p className="text-sm text-superficie-500">{tarefa.obras.nome}</p>
-                      <div className="flex items-center justify-between border-t border-borda pt-3">
-                        <div className="flex items-center gap-2">
-                          {tarefa.responsavel ? (
-                            <>
-                              <Avatar nome={tarefa.responsavel.nome} tamanho="sm" />
-                              <span className="text-xs text-superficie-600">
-                                {tarefa.responsavel.nome}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-xs text-superficie-400">
-                              Sem responsavel
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Etiqueta
-                            className={PRIORIDADE_TAREFA[tarefa.prioridade].classe}
-                          >
-                            {PRIORIDADE_TAREFA[tarefa.prioridade].rotulo}
-                          </Etiqueta>
-                          {tarefa.localizacao_tipo !== "nenhuma" &&
-                            tarefa.planta_id && (
-                              <MapPin className="h-4 w-4 text-azul-600" />
-                            )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-superficie-600">
-                        <span>
-                          Supervisor:{" "}
-                          {tarefa.supervisor ? tarefa.supervisor.nome : "—"}
-                        </span>
-                        <span>
-                          Executor: {tarefa.executor ? tarefa.executor.nome : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <Clock className="h-3.5 w-3.5 text-superficie-400" />
-                        <span className={COR_PRAZO[prazoInfo.situacao]}>
-                          {prazoInfo.texto}
-                        </span>
-                      </div>
-                    </CartaoConteudo>
-                    </Link>
-                    {podeExcluir && (
-                      <div className="flex items-center justify-end gap-2 border-t border-borda px-4 py-2">
-                        <BotaoDuplicarTarefa
-                          tarefaId={tarefa.id}
-                          titulo={tarefa.titulo}
-                          compacto
-                        />
-                        <BotaoExcluirTarefa
-                          tarefaId={tarefa.id}
-                          titulo={tarefa.titulo}
-                          compacto
-                        />
-                      </div>
-                    )}
-                  </Cartao>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+      <ListaTarefas
+        tarefas={tarefas}
+        podeExcluir={podeExcluir}
+        temFiltros={temFiltros}
+        responsaveis={responsaveis}
+        supervisores={supervisores}
+        executores={executores}
+        tags={tags}
+      />
     </div>
   );
 }

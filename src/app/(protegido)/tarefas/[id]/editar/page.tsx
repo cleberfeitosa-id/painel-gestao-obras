@@ -14,7 +14,7 @@ import type {
 
 async function buscarDados(id: string) {
   const supabase = await createClient();
-  const [{ data: tarefa }, { data: obras }, { data: perfis }, { data: executores }] =
+  const [{ data: tarefa }, { data: obras }, { data: perfis }, { data: executores }, { data: tags }] =
     await Promise.all([
       supabase.from("tarefas").select("*").eq("id", id).single(),
       supabase.from("obras").select("id, nome").order("nome"),
@@ -23,6 +23,7 @@ async function buscarDados(id: string) {
         .from("executores")
         .select("id, nome, obra_id, ativo")
         .order("nome"),
+      supabase.from("tags_tarefa").select("id, nome").order("nome"),
     ]);
   return {
     tarefa: (tarefa ?? null) as TarefaRow | null,
@@ -33,6 +34,7 @@ async function buscarDados(id: string) {
       ExecutorRow,
       "id" | "nome" | "obra_id" | "ativo"
     >[],
+    tags: (tags ?? []) as { id: string; nome: string }[],
   };
 }
 
@@ -42,7 +44,7 @@ export default async function EditarTarefaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { tarefa, obras, responsaveis, executores, supervisores } =
+  const { tarefa, obras, responsaveis, executores, supervisores, tags } =
     await buscarDados(id);
 
   if (!tarefa) notFound();
@@ -76,6 +78,7 @@ export default async function EditarTarefaPage({
             responsaveis={responsaveis}
             executores={executores}
             supervisores={supervisores}
+            tags={tags}
             tarefa={tarefa}
           />
         </CartaoConteudo>

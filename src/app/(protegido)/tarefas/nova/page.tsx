@@ -46,7 +46,7 @@ const esquemaRegiao = z.object({
 
 async function buscarOpcoes() {
   const supabase = await createClient();
-  const [{ data: obras }, { data: perfis }, { data: executores }] =
+  const [{ data: obras }, { data: perfis }, { data: executores }, { data: tags }] =
     await Promise.all([
       supabase.from("obras").select("id, nome").order("nome"),
       supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
@@ -54,6 +54,7 @@ async function buscarOpcoes() {
         .from("executores")
         .select("id, nome, obra_id, ativo")
         .order("nome"),
+      supabase.from("tags_tarefa").select("id, nome").order("nome"),
     ]);
   return {
     obras: (obras ?? []) as Pick<ObraRow, "id" | "nome">[],
@@ -63,6 +64,7 @@ async function buscarOpcoes() {
       ExecutorRow,
       "id" | "nome" | "obra_id" | "ativo"
     >[],
+    tags: (tags ?? []) as { id: string; nome: string }[],
   };
 }
 
@@ -140,6 +142,7 @@ export default async function NovaTarefaPage({
             responsaveis={opcoes.responsaveis}
             executores={opcoes.executores}
             supervisores={opcoes.supervisores}
+            tags={opcoes.tags}
             localizacaoInicial={localizacao}
             obraIdInicial={obraIdInicial}
           />

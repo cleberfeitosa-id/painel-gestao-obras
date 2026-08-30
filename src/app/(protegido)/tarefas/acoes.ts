@@ -103,6 +103,10 @@ const esquemaTarefa = z.object({
   ),
   status: z.enum(["pendente", "em_execucao", "concluido"]),
   prioridade: z.enum(["baixa", "media", "alta", "urgente"]),
+  tag_id: z.preprocess(
+    (val) => (val === "" ? undefined : val),
+    z.string().uuid().nullable().optional()
+  ),
   prazo: z.string().optional().or(z.literal("")),
   data_planejada: z.string().optional().or(z.literal("")),
   exige_foto: z.boolean().optional(),
@@ -175,6 +179,7 @@ function normalizar(dados: DadosTarefa) {
     supervisor_id: dados.supervisor_id || null,
     status: dados.status as StatusTarefa,
     prioridade: dados.prioridade as PrioridadeTarefa,
+    tag_id: dados.tag_id || null,
     prazo: dados.prazo || null,
     data_planejada: dados.data_planejada || null,
     exige_foto: dados.exige_foto ?? false,
@@ -266,6 +271,7 @@ export async function criarTarefa(
     supervisor_id: formData.get("supervisor_id"),
     status: formData.get("status"),
     prioridade: formData.get("prioridade"),
+    tag_id: formData.get("tag_id"),
     prazo: formData.get("prazo"),
     data_planejada: formData.get("data_planejada"),
     exige_foto: formData.get("exige_foto") === "on",
@@ -359,6 +365,10 @@ const esquemaCriarLote = z
     ),
     status: z.enum(["pendente", "em_execucao", "concluido"]),
     prioridade: z.enum(["baixa", "media", "alta", "urgente"]),
+    tag_id: z.preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.string().uuid().nullable().optional()
+    ),
     prazo: z.string().optional().or(z.literal("")),
     data_planejada: z.string().optional().or(z.literal("")),
     exige_foto: z.boolean().optional(),
@@ -414,6 +424,7 @@ export async function criarTarefasEmLote(
     supervisor_id: formData.get("supervisor_id"),
     status: formData.get("status"),
     prioridade: formData.get("prioridade"),
+    tag_id: formData.get("tag_id"),
     prazo: formData.get("prazo"),
     data_planejada: formData.get("data_planejada"),
     exige_foto: formData.get("exige_foto") === "on",
@@ -445,6 +456,7 @@ export async function criarTarefasEmLote(
     supervisor_id: dados.supervisor_id || null,
     status: dados.status as StatusTarefa,
     prioridade: dados.prioridade as PrioridadeTarefa,
+    tag_id: dados.tag_id || null,
     prazo: dados.prazo || null,
     data_planejada: dados.data_planejada || null,
     exige_foto: dados.exige_foto ?? false,
@@ -606,6 +618,80 @@ export async function associarLocalizacao(
   return {};
 }
 
+export async function atualizarTarefasEmLote(
+  ids: string[],
+  formData: FormData,
+): Promise<Resultado> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  if (ids.length === 0) return { erro: "Nenhuma tarefa selecionada." };
+
+  const papel = await papelDoUsuario(user.id);
+  const gestor = eGestor(papel);
+
+  let idsPermitidos = ids;
+  if (!gestor) {
+    // Colaborador so pode editar suas proprias tarefas
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("tarefas")
+      .select("id")
+      .in("id", ids)
+      .eq("responsavel_id", user.id);
+    idsPermitidos = (data ?? []).map((t) => t.id);
+    
+    if (idsPermitidos.length === 0) {
+      return { erro: "Voce nao tem permissao para editar as tarefas selecionadas." };
+    }
+  }
+
+  const updates: any = {};
+  
+  const status = formData.get("status");
+  if (status) updates.status = status;
+  
+  const prioridade = formData.get("prioridade");
+  if (prioridade) updates.prioridade = prioridade;
+  
+  const responsavel_id = formData.get("responsavel_id");
+  if (responsavel_id) updates.responsavel_id = responsavel_id === "remover" ? null : responsavel_id;
+  
+  const executor_id = formData.get("executor_id");
+  if (executor_id) updates.executor_id = executor_id === "remover" ? null : executor_id;
+  
+  const supervisor_id = formData.get("supervisor_id");
+  if (supervisor_id) updates.supervisor_id = supervisor_id === "remover" ? null : supervisor_id;
+  
+  const tag_id = formData.get("tag_id");
+  if (tag_id) updates.tag_id = tag_id === "remover" ? null : tag_id;
+  
+  const prazo = formData.get("prazo");
+  if (prazo) updates.prazo = prazo;
+  
+  const data_planejada = formData.get("data_planejada");
+  if (data_planejada) updates.data_planejada = data_planejada;
+
+  if (Object.keys(updates).length === 0) {
+    return { erro: "Nenhuma alteracao informada." };
+  }
+
+  const supabaseAdmin = await createAdminClient();
+  const { error } = await supabaseAdmin
+    .from("tarefas")
+    .update(updates)
+    .in("id", idsPermitidos);
+
+  if (error) {
+    console.error("[tarefas] erro ao atualizar em lote:", error);
+    return { erro: "Falha ao atualizar as tarefas." };
+  }
+
+  revalidatePath("/tarefas");
+  revalidatePath("/painel");
+  return {};
+}
+
 export async function atualizarTarefa(
   _estadoAnterior: Resultado,
   formData: FormData,
@@ -628,6 +714,7 @@ export async function atualizarTarefa(
     supervisor_id: formData.get("supervisor_id"),
     status: formData.get("status"),
     prioridade: formData.get("prioridade"),
+    tag_id: formData.get("tag_id"),
     prazo: formData.get("prazo"),
     data_planejada: formData.get("data_planejada"),
     exige_foto: formData.get("exige_foto") === "on",
@@ -862,6 +949,7 @@ export async function duplicarTarefa(
       supervisor_id: tarefa.supervisor_id,
       status: "pendente",
       prioridade: tarefa.prioridade,
+      tag_id: tarefa.tag_id,
       prazo: tarefa.prazo,
       data_planejada: tarefa.data_planejada,
       exige_foto: tarefa.exige_foto,
@@ -1160,4 +1248,64 @@ export async function salvarRascunhoLote(
   }
 
   return { id: data.id };
+}
+
+export async function listarTags(): Promise<{ id: string; nome: string }[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tags_tarefa")
+    .select("id, nome")
+    .order("nome");
+  return data ?? [];
+}
+
+export async function criarTag(nome: string): Promise<{ id: string; nome: string } | { erro: string }> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  const schema = z.string().trim().min(1, "O nome da tag é obrigatório.").max(60, "O nome da tag é muito longo.");
+  const resultado = schema.safeParse(nome);
+  
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0].message };
+  }
+
+  const supabase = await createClient();
+  const nomeValidado = resultado.data;
+
+  const { data, error } = await supabase
+    .from("tags_tarefa")
+    .insert({ nome: nomeValidado, criado_por: user.id })
+    .select("id, nome")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") { // unique_violation
+      return { erro: "Esta tag já existe." };
+    }
+    return { erro: "Falha ao criar tag." };
+  }
+
+  return { id: data.id, nome: data.nome };
+}
+
+export async function excluirTag(tagId: string): Promise<Resultado> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada." };
+
+  const papel = await papelDoUsuario(user.id);
+  if (!eGestor(papel)) {
+    return { erro: "Apenas administradores e gestores podem remover tags globais." };
+  }
+
+  const supabaseAdmin = await createAdminClient();
+  const { error } = await supabaseAdmin.from("tags_tarefa").delete().eq("id", tagId);
+
+  if (error) {
+    console.error("[tags] falha ao excluir tag:", error);
+    return { erro: "Falha ao excluir a tag. Pode estar em uso." };
+  }
+
+  revalidatePath("/tarefas");
+  return {};
 }

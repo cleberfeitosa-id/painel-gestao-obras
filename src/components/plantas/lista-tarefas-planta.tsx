@@ -36,6 +36,9 @@ interface ListaTarefasPlantaProps {
   aoMudarPrioridade: (valor: "todas" | PrioridadeTarefa) => void;
   filtroExecutor: "todos" | "sem" | string;
   aoMudarExecutor: (valor: "todos" | "sem" | string) => void;
+  filtroTag: "todas" | "sem" | string;
+  aoMudarTag: (valor: "todas" | "sem" | string) => void;
+  tags: { id: string; nome: string }[];
   tarefaDestaque: string | null;
   aoDestaque: (id: string | null) => void;
 }
@@ -51,13 +54,17 @@ export function ListaTarefasPlanta({
   aoMudarPrioridade,
   filtroExecutor,
   aoMudarExecutor,
+  filtroTag,
+  aoMudarTag,
+  tags,
   tarefaDestaque,
   aoDestaque,
 }: ListaTarefasPlantaProps) {
   const temFiltros =
     filtroSituacao !== "todas" ||
     filtroPrioridade !== "todas" ||
-    filtroExecutor !== "todos";
+    filtroExecutor !== "todos" ||
+    filtroTag !== "todas";
 
   return (
     <Cartao className="h-fit">
@@ -96,19 +103,35 @@ export function ListaTarefasPlanta({
           </Selecao>
         </div>
 
-        <Selecao
-          rotulo="Executor"
-          value={filtroExecutor}
-          onChange={(e) => aoMudarExecutor(e.target.value)}
-        >
-          <option value="todos">Todos os executores</option>
-          <option value="sem">Sem executor</option>
-          {executores.map((executor) => (
-            <option key={executor.id} value={executor.id}>
-              {executor.nome}
-            </option>
-          ))}
-        </Selecao>
+        <div className="grid grid-cols-2 gap-2">
+          <Selecao
+            rotulo="Executor"
+            value={filtroExecutor}
+            onChange={(e) => aoMudarExecutor(e.target.value)}
+          >
+            <option value="todos">Todos os executores</option>
+            <option value="sem">Sem executor</option>
+            {executores.map((executor) => (
+              <option key={executor.id} value={executor.id}>
+                {executor.nome}
+              </option>
+            ))}
+          </Selecao>
+
+          <Selecao
+            rotulo="Tag"
+            value={filtroTag}
+            onChange={(e) => aoMudarTag(e.target.value)}
+          >
+            <option value="todas">Todas as tags</option>
+            <option value="sem">Sem tag</option>
+            {tags.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.nome}
+              </option>
+            ))}
+          </Selecao>
+        </div>
 
         {temFiltros && (
           <p className="text-xs text-superficie-500">

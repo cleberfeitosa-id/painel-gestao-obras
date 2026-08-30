@@ -292,6 +292,7 @@ export function VisualizadorPlanta({
   tarefas,
   tarefasObra,
   executores,
+  tags,
   podeEditar,
 }: PropsAreaPlanta) {
   const router = useRouter();
@@ -325,6 +326,7 @@ export function VisualizadorPlanta({
   const [filtroSituacao, setFiltroSituacao] = useState<"todas" | SituacaoTarefa>("todas");
   const [filtroPrioridade, setFiltroPrioridade] = useState<"todas" | PrioridadeTarefa>("todas");
   const [filtroExecutor, setFiltroExecutor] = useState<"todos" | "sem" | string>("todos");
+  const [filtroTag, setFiltroTag] = useState<"todas" | "sem" | string>("todas");
 
   const [calibracoesPorPagina, setCalibracoesPorPagina] = useState<
     Map<number, PlantaCalibracaoRow>
@@ -364,6 +366,7 @@ export function VisualizadorPlanta({
     : null;
 
   const emAssociacao = ferramenta === "associar";
+  const modoInterativo = ferramenta === "navegar";
   const modoDesenho: "pino" | "regiao" | null =
     ferramenta === "pino"
       ? "pino"
@@ -387,9 +390,11 @@ export function VisualizadorPlanta({
       if (filtroPrioridade !== "todas" && t.prioridade !== filtroPrioridade) return false;
       if (filtroExecutor === "sem" && t.executor != null) return false;
       if (filtroExecutor !== "todos" && filtroExecutor !== "sem" && t.executor?.id !== filtroExecutor) return false;
+      if (filtroTag === "sem" && t.tags_tarefa != null) return false;
+      if (filtroTag !== "todas" && filtroTag !== "sem" && t.tags_tarefa?.id !== filtroTag) return false;
       return true;
     });
-  }, [tarefasPagina, filtroSituacao, filtroPrioridade, filtroExecutor]);
+  }, [tarefasPagina, filtroSituacao, filtroPrioridade, filtroExecutor, filtroTag]);
 
   const aplicarAjusteLargura = useCallback(() => {
     if (!ajusteLargura || !dimensoes) return;
@@ -1201,6 +1206,7 @@ export function VisualizadorPlanta({
                             "absolute -translate-x-1/2 -translate-y-1/2",
                             tarefaDestaque === tarefa.id &&
                               "rounded-lg border-2 border-dashed border-azul-600 bg-azul-600/30 p-1",
+                            !modoInterativo && "pointer-events-none"
                           )}
                           style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
                           onPointerDown={(e) => e.stopPropagation()}
@@ -1258,6 +1264,7 @@ export function VisualizadorPlanta({
                             SITUACAO_TAREFA[sit].regiao,
                             tarefaDestaque === tarefa.id &&
                               "!border-dashed !border-azul-600 bg-azul-500/30",
+                            !modoInterativo && "pointer-events-none"
                           )}
                           style={{
                             left: `${Math.min(canto1.esquerda, canto2.esquerda)}%`,
@@ -1541,6 +1548,9 @@ export function VisualizadorPlanta({
           aoMudarPrioridade={setFiltroPrioridade}
           filtroExecutor={filtroExecutor}
           aoMudarExecutor={setFiltroExecutor}
+          filtroTag={filtroTag}
+          aoMudarTag={setFiltroTag}
+          tags={tags}
           tarefaDestaque={tarefaDestaque}
           aoDestaque={setTarefaDestaque}
         />

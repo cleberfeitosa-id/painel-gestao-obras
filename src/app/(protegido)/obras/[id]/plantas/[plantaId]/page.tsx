@@ -39,6 +39,7 @@ export default async function DetalhePlantaPage({
     { data: tarefasObra },
     { data: perfil },
     { data: executores },
+    { data: tags },
   ] = await Promise.all([
     supabase
       .from("plantas")
@@ -52,7 +53,7 @@ export default async function DetalhePlantaPage({
     supabase
       .from("tarefas")
       .select(
-        "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome)",
+        "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
       )
       .eq("planta_id", plantaId),
     supabase
@@ -68,6 +69,7 @@ export default async function DetalhePlantaPage({
       .eq("obra_id", id)
       .eq("ativo", true)
       .order("nome"),
+    supabase.from("tags_tarefa").select("id, nome").order("nome"),
   ]);
 
   if (!planta || planta.obra_id !== id) notFound();
@@ -89,6 +91,7 @@ export default async function DetalhePlantaPage({
     regiao: tarefa.regiao as RegiaoPdf | null,
     responsavel: tarefa.responsavel,
     executor: tarefa.executor,
+    tags_tarefa: tarefa.tags_tarefa,
   }));
 
   const tarefasObraLista: TarefaObraAssociacao[] = (tarefasObra ?? []).map(
@@ -154,6 +157,7 @@ export default async function DetalhePlantaPage({
         tarefas={tarefasPlanta}
         tarefasObra={tarefasObraLista}
         executores={(executores ?? []) as ExecutorFiltro[]}
+        tags={(tags ?? []) as { id: string; nome: string }[]}
         podeEditar={podeEditar}
       />
     </div>
