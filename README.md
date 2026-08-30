@@ -117,6 +117,18 @@ O projeto está conectado à Vercel. Todo push na branch `main` dispara um novo 
 
 Ao criar o ambiente, cadastre as variáveis da tabela acima em **Project Settings → Environment Variables** e, em seguida, ajuste no Supabase (**Authentication → URL Configuration**) a *Site URL* e as *Redirect URLs* para o domínio de produção, incluindo `https://SEU-DOMINIO/auth/confirmar`.
 
+### E-mails de confirmação indo para `localhost`
+
+O link do convite é montado com `NEXT_PUBLIC_APP_URL`, e o e-mail do Supabase cai na *Site URL* do projeto quando o `redirectTo` é inválido. Se o convidado recebe um link para `localhost` (ou `undefined/auth/confirmar`), confira, **nesta ordem**:
+
+1. **Vercel** → Project Settings → Environment Variables → garanta `NEXT_PUBLIC_APP_URL=https://painel-gestao-obras-one.vercel.app` nas environments *Production* (e *Preview*, se houver) e redeploy.
+2. **Supabase** → Authentication → URL Configuration → *Site URL* `https://painel-gestao-obras-one.vercel.app` e *Redirect URLs* com `https://painel-gestao-obras-one.vercel.app/auth/confirmar` (mantendo `http://localhost:3000/auth/confirmar` para desenvolvimento).
+3. **Código**: `src/lib/url-app.ts` deriva a URL do Host da requisição quando a env falta — o convite nunca mais sai com `undefined/...`.
+
+### Operações pontuais
+
+- **Reconvidar usuário sem perfil** (ex.: linha de `perfis` apagada à mão, mas a conta em `auth.users` permanece — o erro é "Perfil nao encontrado"): rode `node scripts/reinvitar-convite.mjs EMAIL --url https://painel-gestao-obras-one.vercel.app`. O script recria o perfil a partir dos metadados e imprime um link `…/auth/confirmar?token_hash=…&type=invite`, que leva à página `Definir senha`.
+
 ## Limitações conhecidas
 
 - **Confirmação de e-mail ativa.** Novos usuários precisam confirmar o endereço antes do primeiro acesso. Para desativar em ambiente de testes: Authentication → Providers → Email → *Confirm email*.

@@ -19,7 +19,7 @@ export default function DefinirSenhaPage() {
             Definir senha
           </h1>
           <p className="mt-2 text-center text-sm text-superficie-500">
-            Escolha uma senha para ativar sua conta e acessar o painel.
+            Defina uma senha para acessar o painel.
           </p>
 
           <form action={enviar} className="mt-6 space-y-4">

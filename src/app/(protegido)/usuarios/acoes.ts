@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { urlPublicaApp } from "@/lib/url-app";
 import type { PapelUsuario } from "@/lib/supabase/database.types";
 
 const esquemaPapel = z.enum(["admin", "gestor", "colaborador"]);
@@ -86,6 +87,16 @@ export async function convidarUsuario(
   if (!user) return { erro: "Sessao expirada. Entre novamente." };
 
   const admin = createAdminClient();
+
+  let urlConvite: string;
+  try {
+    urlConvite = await urlPublicaApp();
+  } catch {
+    return {
+      erro: "URL publica da aplicacao nao configurada (NEXT_PUBLIC_APP_URL).",
+    };
+  }
+
   const { data: convidado, error } = await admin.auth.admin.inviteUserByEmail(
     email,
     {
@@ -95,7 +106,7 @@ export async function convidarUsuario(
         cargo: cargo || undefined,
         telefone: telefone || undefined,
       },
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirmar`,
+      redirectTo: `${urlConvite}/auth/confirmar`,
     },
   );
 

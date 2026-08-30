@@ -30,7 +30,9 @@ export async function GET(request: NextRequest) {
     if (error) {
       redirect("/erro");
     }
-    redirect(tipo === "invite" ? "/definir-senha" : "/painel");
+    redirect(
+      tipo === "invite" || tipo === "recovery" ? "/definir-senha" : "/painel",
+    );
   }
 
   redirect("/erro");
