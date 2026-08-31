@@ -133,17 +133,35 @@ export function ListaTarefas({
           />
         </Celula>
         <Celula>
-          <Link
-            href={`/tarefas/${tarefa.id}`}
-            className="font-medium text-azul-600 hover:text-azul-700"
-          >
-            {tarefa.titulo}
-          </Link>
-          {tarefa.tags_tarefa && (
-            <span className="ml-2 inline-flex items-center rounded-md bg-superficie-100 px-2 py-0.5 text-xs font-medium text-superficie-600">
-              {tarefa.tags_tarefa.nome}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Link
+              href={`/tarefas/${tarefa.id}`}
+              className="font-medium text-azul-600 hover:text-azul-700"
+            >
+              {tarefa.titulo}
+            </Link>
+            {tarefa.tags_tarefa && (
+              <span className="inline-flex items-center rounded-md bg-superficie-100 px-2 py-0.5 text-xs font-medium text-superficie-600">
+                {tarefa.tags_tarefa.nome}
+              </span>
+            )}
+            {tarefa.tarefa_medicoes && tarefa.tarefa_medicoes.length > 0 && (
+              <span
+                className="inline-flex items-center rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 text-[11px] font-medium"
+                title={tarefa.tarefa_medicoes
+                  .map((tm) =>
+                    tm.catalogo_precos
+                      ? `${tm.catalogo_precos.medicoes?.titulo ?? "Medição"}: ${tm.catalogo_precos.nome} (${tm.quantidade} ${tm.catalogo_precos.unidade})`
+                      : `Medição (${tm.quantidade})`
+                  )
+                  .join("\n")}
+              >
+                {tarefa.tarefa_medicoes.length === 1 && tarefa.tarefa_medicoes[0].catalogo_precos
+                  ? `${tarefa.tarefa_medicoes[0].catalogo_precos.medicoes?.titulo ?? "Medição"}: ${tarefa.tarefa_medicoes[0].catalogo_precos.nome}`
+                  : `${tarefa.tarefa_medicoes.length} medições`}
+              </span>
+            )}
+          </div>
         </Celula>
         <Celula>{tarefa.obras.nome}</Celula>
         <Celula>
@@ -237,14 +255,34 @@ export function ListaTarefas({
           >
             <CartaoConteudo className="space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <p className="font-semibold text-superficie-900">
-                  {tarefa.titulo}
-                  {tarefa.tags_tarefa && (
-                    <span className="ml-2 inline-flex items-center rounded-md bg-superficie-100 px-2 py-0.5 text-xs font-medium text-superficie-600">
-                      {tarefa.tags_tarefa.nome}
-                    </span>
-                  )}
-                </p>
+                <div>
+                  <p className="font-semibold text-superficie-900">
+                    {tarefa.titulo}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {tarefa.tags_tarefa && (
+                      <span className="inline-flex items-center rounded-md bg-superficie-100 px-2 py-0.5 text-xs font-medium text-superficie-600">
+                        {tarefa.tags_tarefa.nome}
+                      </span>
+                    )}
+                    {tarefa.tarefa_medicoes && tarefa.tarefa_medicoes.length > 0 && (
+                      <span
+                        className="inline-flex items-center rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 text-[11px] font-medium"
+                        title={tarefa.tarefa_medicoes
+                          .map((tm) =>
+                            tm.catalogo_precos
+                              ? `${tm.catalogo_precos.medicoes?.titulo ?? "Medição"}: ${tm.catalogo_precos.nome} (${tm.quantidade} ${tm.catalogo_precos.unidade})`
+                              : `Medição (${tm.quantidade})`
+                          )
+                          .join("\n")}
+                      >
+                        {tarefa.tarefa_medicoes.length === 1 && tarefa.tarefa_medicoes[0].catalogo_precos
+                          ? `${tarefa.tarefa_medicoes[0].catalogo_precos.medicoes?.titulo ?? "Medição"}: ${tarefa.tarefa_medicoes[0].catalogo_precos.nome}`
+                          : `${tarefa.tarefa_medicoes.length} medições`}
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <Etiqueta className={STATUS_TAREFA[tarefa.status].classe}>
                   {STATUS_TAREFA[tarefa.status].rotulo}
                 </Etiqueta>

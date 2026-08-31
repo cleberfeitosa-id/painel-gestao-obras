@@ -1,23 +1,12 @@
 import Link from "next/link";
-import { Plus, CheckSquare, MapPin, Clock } from "lucide-react";
+import { Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { STATUS_TAREFA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
-import { situacaoPrazo, hojeChave, chaveDia, paraData } from "@/lib/datas";
+import { hojeChave, chaveDia, paraData } from "@/lib/datas";
 import { endOfWeek } from "date-fns";
 import {
   Cartao,
   CartaoConteudo,
-  Etiqueta,
-  EstadoVazio,
   Botao,
-  Avatar,
-  Tabela,
-  Cabecalho,
-  LinhaCabecalho,
-  CelulaCabecalho,
-  Corpo,
-  Linha,
-  Celula,
 } from "@/components/ui";
 import { FiltrosTarefas } from "@/components/tarefas/filtros-tarefas";
 import { ListaTarefas } from "@/components/tarefas/lista-tarefas";
@@ -38,15 +27,23 @@ export interface TarefaComDados extends TarefaRow {
   responsavel: Pick<PerfilRow, "id" | "nome"> | null;
   executor: Pick<ExecutorRow, "id" | "nome"> | null;
   supervisor: Pick<PerfilRow, "id" | "nome"> | null;
+  tarefa_medicoes?: {
+    id: string;
+    catalogo_id: string;
+    quantidade: number;
+    catalogo_precos: {
+      id: string;
+      nome: string;
+      unidade: string;
+      valor_unitario: number;
+      medicao_id?: string;
+      medicoes: {
+        id: string;
+        titulo: string;
+      } | null;
+    } | null;
+  }[];
 }
-
-const COR_PRAZO: Record<string, string> = {
-  atrasado: "text-red-600",
-  hoje: "text-amber-600",
-  proximo: "text-amber-600",
-  ok: "text-superficie-500",
-  sem_prazo: "text-superficie-400",
-};
 
 async function buscarTarefas(params: Record<string, string | undefined>) {
   const supabase = await createClient();
@@ -54,7 +51,7 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
   let query = supabase
     .from("tarefas")
     .select(
-      "*, obras!inner(nome), plantas!tarefas_planta_id_fkey(nome), tags_tarefa(nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome)",
+      "*, obras!inner(nome), plantas!tarefas_planta_id_fkey(nome), tags_tarefa(nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome), tarefa_medicoes(id, catalogo_id, quantidade, catalogo_precos(id, nome, unidade, valor_unitario, medicao_id, medicoes(id, titulo)))",
     );
 
   const busca = params.busca?.trim();
@@ -110,8 +107,29 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
       query = query.order("criado_em", { ascending: false });
   }
 
-  const { data } = await query;
-  return (data ?? []) as TarefaComDados[];
+  const { data, error } = await query;
+  if (error) {
+    console.error("Erro ao buscar tarefas:", error);
+    return [];
+  }
+
+  let lista = (data ?? []) as TarefaComDados[];
+
+  if (params.medicao === "com_medicao") {
+    lista = lista.filter((t) => (t.tarefa_medicoes?.length ?? 0) > 0);
+  } else if (params.medicao === "sem_medicao") {
+    lista = lista.filter((t) => (t.tarefa_medicoes?.length ?? 0) === 0);
+  } else if (params.medicao) {
+    lista = lista.filter((t) =>
+      t.tarefa_medicoes?.some(
+        (tm) =>
+          tm.catalogo_precos?.medicoes?.id === params.medicao ||
+          tm.catalogo_precos?.medicao_id === params.medicao,
+      ),
+    );
+  }
+
+  return lista;
 }
 
 async function buscarOpcoes() {
@@ -123,6 +141,7 @@ async function buscarOpcoes() {
     { data: plantas },
     { data: tags },
     { data: catalogo },
+    { data: medicoes },
     {
       data: { user },
     },
@@ -133,6 +152,7 @@ async function buscarOpcoes() {
     supabase.from("plantas").select("id, nome").order("nome"),
     supabase.from("tags_tarefa").select("id, nome").order("nome"),
     supabase.from("catalogo_precos").select("id, nome, unidade, medicoes!inner(id, titulo, obra_id)").order("nome"),
+    supabase.from("medicoes").select("id, titulo, obra_id, obras(nome)").order("titulo"),
     supabase.auth.getUser(),
   ]);
 
@@ -158,6 +178,12 @@ async function buscarOpcoes() {
       nome: string;
       unidade: string;
       medicoes: { id: string; titulo: string; obra_id: string };
+    }[],
+    medicoes: (medicoes ?? []) as {
+      id: string;
+      titulo: string;
+      obra_id: string;
+      obras: { nome: string } | null;
     }[],
     podeExcluir: papel === "admin" || papel === "gestor",
   };
@@ -194,6 +220,7 @@ export default async function TarefasPage({
     localizacao: ["com_local", "sem_local"].includes(params.localizacao ?? "")
       ? params.localizacao
       : undefined,
+    medicao: params.medicao,
     ordenar: ["prazo", "prioridade", "criacao"].includes(params.ordenar ?? "")
       ? params.ordenar
       : undefined,
@@ -203,7 +230,7 @@ export default async function TarefasPage({
     buscarTarefas(filtros),
     buscarOpcoes(),
   ]);
-  const { obras, responsaveis, supervisores, executores, plantas, tags, catalogoPrecos, podeExcluir } = opcoes;
+  const { obras, responsaveis, supervisores, executores, plantas, tags, catalogoPrecos, medicoes, podeExcluir } = opcoes;
 
   const temFiltros = Object.values(filtros).some(Boolean);
 
@@ -242,6 +269,7 @@ export default async function TarefasPage({
             executores={executores}
             plantas={plantas}
             tags={tags}
+            medicoes={medicoes}
           />
         </CartaoConteudo>
       </Cartao>

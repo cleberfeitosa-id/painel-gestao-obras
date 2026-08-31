@@ -14,6 +14,12 @@ interface FiltrosTarefasProps {
   executores: Pick<ExecutorRow, "id" | "nome">[];
   plantas: { id: string; nome: string }[];
   tags: { id: string; nome: string }[];
+  medicoes?: {
+    id: string;
+    titulo: string;
+    obra_id: string;
+    obras: { nome: string } | null;
+  }[];
 }
 
 const OPCOES_PRAZO = [
@@ -26,6 +32,11 @@ const OPCOES_PRAZO = [
 const OPCOES_LOCALIZACAO = [
   { valor: "com_local", rotulo: "Com localizacao" },
   { valor: "sem_local", rotulo: "Sem localizacao" },
+];
+
+const OPCOES_MEDIACAO = [
+  { valor: "com_medicao", rotulo: "Com medição" },
+  { valor: "sem_medicao", rotulo: "Sem medição" },
 ];
 
 const OPCOES_ORDENAR = [
@@ -41,10 +52,16 @@ export function FiltrosTarefas({
   executores,
   plantas,
   tags,
+  medicoes = [],
 }: FiltrosTarefasProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [busca, setBusca] = useState(searchParams.get("busca") ?? "");
+
+  const obraIdSelecionada = searchParams.get("obra");
+  const medicoesFiltradas = obraIdSelecionada
+    ? medicoes.filter((m) => m.obra_id === obraIdSelecionada)
+    : medicoes;
 
   const aplicar = useCallback(
     (mudancas: Record<string, string>) => {
@@ -62,6 +79,7 @@ export function FiltrosTarefas({
         "pagina",
         "tag",
         "localizacao",
+        "medicao",
         "ordenar",
       ];
       for (const chave of chaves) {
@@ -232,6 +250,30 @@ export function FiltrosTarefas({
             ))}
           </Selecao>
           <Selecao
+            rotulo="Medição"
+            name="medicao"
+            value={searchParams.get("medicao") ?? ""}
+            onChange={(e) => aplicar({ medicao: e.target.value })}
+          >
+            <option value="">Todas as medições</option>
+            {OPCOES_MEDIACAO.map((opcao) => (
+              <option key={opcao.valor} value={opcao.valor}>
+                {opcao.rotulo}
+              </option>
+            ))}
+            {medicoesFiltradas.length > 0 && (
+              <optgroup label="Por medição específica">
+                {medicoesFiltradas.map((medicao) => (
+                  <option key={medicao.id} value={medicao.id}>
+                    {obraIdSelecionada
+                      ? medicao.titulo
+                      : `${medicao.titulo} (${medicao.obras?.nome ?? "Obra"})`}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </Selecao>
+          <Selecao
             rotulo="Ordenar por"
             name="ordenar"
             value={searchParams.get("ordenar") ?? ""}
@@ -288,5 +330,6 @@ const chaves = [
   "pagina",
   "tag",
   "localizacao",
+  "medicao",
   "ordenar",
 ];
