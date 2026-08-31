@@ -113,6 +113,10 @@ export function MiniVisualizadorPlanta({
   const contentRef = useRef<HTMLDivElement>(null);
 
   const [escala, setEscala] = useState(1);
+  const [renderEscala, setRenderEscala] = useState(1);
+  const [dpr] = useState(() =>
+    typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio) : 1,
+  );
   const [dimensoes, setDimensoes] = useState<DimensoesPagina | null>(null);
   const [erroDocumento, setErroDocumento] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState(false);
@@ -371,6 +375,11 @@ export function MiniVisualizadorPlanta({
     return () => el.removeEventListener("wheel", aoRolar);
   });
 
+  useEffect(() => {
+    const timer = setTimeout(() => setRenderEscala(escala), 150);
+    return () => clearTimeout(timer);
+  }, [escala]);
+
   return (
     <div className="mt-3 overflow-hidden rounded-xl border border-borda bg-white shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borda bg-superficie-50/90 px-3 py-2 text-xs">
@@ -442,7 +451,25 @@ export function MiniVisualizadorPlanta({
         style={{ touchAction: "none", cursor: arrastando ? "grabbing" : "grab" }}
       >
         <div className="flex min-h-full min-w-full p-4">
-          <div ref={contentRef} className="relative m-auto w-fit shadow-md">
+          <div
+            ref={contentRef}
+            className={cn("relative m-auto shadow-md", !dimensoes && "w-fit")}
+            style={{
+              width: dimensoes ? dimensoes.largura * escala : undefined,
+              height: dimensoes ? dimensoes.altura * escala : undefined,
+            }}
+          >
+            <div
+              className="relative"
+              style={{
+                transform:
+                  renderEscala !== escala
+                    ? `scale(${escala / renderEscala})`
+                    : undefined,
+                transformOrigin: "top left",
+                willChange: "transform",
+              }}
+            >
             <Document
               file={urlPdf}
               onLoadError={() =>
@@ -462,7 +489,8 @@ export function MiniVisualizadorPlanta({
             >
               <Page
                 pageNumber={pagina}
-                scale={escala}
+                scale={renderEscala}
+                devicePixelRatio={dpr}
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
                 onLoadSuccess={aoCarregarPaginaSucesso}
@@ -623,6 +651,7 @@ export function MiniVisualizadorPlanta({
                   })}
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

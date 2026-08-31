@@ -363,6 +363,17 @@ export function VisualizadorPlanta({
   const pinchRef = useRef<{ distancia: number; escala: number } | null>(null);
   const animacaoZoomRef = useRef<{ fx: number; fy: number; cx: number; cy: number } | null>(null);
 
+  // Cap devicePixelRatio em 2 para evitar canvas gigante no Safari iOS
+  // (DPR 3 no iPhone 13 Pro Max + zoom alto estoura o limite de canvas do Safari).
+  const [dpr] = useState(() =>
+    typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio) : 1,
+  );
+
+  // renderEscala e a escala efetivamente passada ao <Page>. Ela e debounced
+  // (150ms) em relacao a `escala` para evitar re-renders do pdf.js durante
+  // zoom rapido (roda/pinca). A diferenca visual e coberta por CSS transform.
+  const [renderEscala, setRenderEscala] = useState(1);
+
   const calibracaoLinha = calibracoesPorPagina.get(paginaAtual) ?? null;
   const calibracao: Calibracao | null = calibracaoLinha
     ? {
@@ -785,6 +796,11 @@ export function VisualizadorPlanta({
     return () => el.removeEventListener("wheel", aoRolar);
   });
 
+  useEffect(() => {
+    const timer = setTimeout(() => setRenderEscala(escala), 150);
+    return () => clearTimeout(timer);
+  }, [escala]);
+
   // Mantém o ponto da planta sob o cursor fixo durante o zoom pela roda.
   useEffect(() => {
     const alvo = animacaoZoomRef.current;
@@ -1148,7 +1164,25 @@ export function VisualizadorPlanta({
           style={{ touchAction: "none" }}
         >
           <div className="flex min-h-full min-w-full p-4">
-            <div ref={contentRef} className="relative m-auto w-fit shadow-lg">
+            <div
+              ref={contentRef}
+              className={cn("relative m-auto shadow-lg", !dimensoes && "w-fit")}
+              style={{
+                width: dimensoes ? dimensoes.largura * escala : undefined,
+                height: dimensoes ? dimensoes.altura * escala : undefined,
+              }}
+            >
+              <div
+                className="relative"
+                style={{
+                  transform:
+                    renderEscala !== escala
+                      ? `scale(${escala / renderEscala})`
+                      : undefined,
+                  transformOrigin: "top left",
+                  willChange: "transform",
+                }}
+              >
               {urlAtual ? (
                 <Document
                   file={urlAtual}
@@ -1169,7 +1203,8 @@ export function VisualizadorPlanta({
                 >
                   <Page
                     pageNumber={paginaAtual}
-                    scale={escala}
+                    scale={renderEscala}
+                    devicePixelRatio={dpr}
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
                     onLoadSuccess={(pagina) => {
@@ -1520,6 +1555,7 @@ export function VisualizadorPlanta({
                   )}
                 </div>
               )}
+              </div>
             </div>
           </div>
         </div>
