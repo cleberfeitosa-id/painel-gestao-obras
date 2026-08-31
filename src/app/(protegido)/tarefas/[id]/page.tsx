@@ -15,7 +15,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_TAREFA, PRIORIDADE_TAREFA, APROVACAO_TAREFA } from "@/lib/domain/rotulos";
 import { situacaoPrazo, formatarData, formatarDataHora } from "@/lib/datas";
-import { urlsAssinadas, BUCKET_ANEXOS } from "@/lib/armazenamento";
+import { urlsAssinadas, urlAssinada, BUCKET_ANEXOS, BUCKET_PLANTAS } from "@/lib/armazenamento";
 import {
   Cartao,
   CartaoCabecalho,
@@ -31,6 +31,8 @@ import { Anexos } from "@/components/tarefas/anexos";
 import { AprovacaoTarefa } from "@/components/tarefas/aprovacao-tarefa";
 import { BotaoExcluirTarefa } from "@/components/tarefas/botao-excluir-tarefa";
 import { BotaoDuplicarTarefa } from "@/components/tarefas/botao-duplicar-tarefa";
+import { MiniVisualizadorPlantaDinamico } from "@/components/tarefas/mini-visualizador-planta-dinamico";
+import type { TarefaPlanta } from "@/components/plantas/tipos";
 import type {
   TarefaRow,
   PerfilRow,
@@ -38,6 +40,7 @@ import type {
   ExecutorRow,
   TarefaComentarioRow,
   TarefaAnexoRow,
+  RegiaoPdf,
 } from "@/lib/supabase/database.types";
 
 interface TarefaComDados extends Omit<TarefaRow, "avaliado_por"> {
@@ -104,6 +107,53 @@ async function buscarComplementos(id: string) {
   };
 }
 
+async function buscarDadosPlantaTarefa(plantaId: string, pagina: number) {
+  const supabase = await createClient();
+  const [{ data: planta }, { data: tarefasPlanta }] = await Promise.all([
+    supabase
+      .from("plantas")
+      .select("id, nome, arquivo_path")
+      .eq("id", plantaId)
+      .single(),
+    supabase
+      .from("tarefas")
+      .select(
+        "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
+      )
+      .eq("planta_id", plantaId)
+      .eq("pagina", pagina),
+  ]);
+
+  if (!planta) return null;
+
+  const urlPdf = await urlAssinada(BUCKET_PLANTAS, planta.arquivo_path);
+  if (!urlPdf) return null;
+
+  const tarefasFormatadas: TarefaPlanta[] = (tarefasPlanta ?? []).map((t) => ({
+    id: t.id,
+    titulo: t.titulo,
+    status: t.status,
+    prioridade: t.prioridade,
+    aprovacao: t.aprovacao,
+    prazo: t.prazo,
+    pagina: t.pagina,
+    localizacao_tipo: t.localizacao_tipo,
+    ponto_x: t.ponto_x,
+    ponto_y: t.ponto_y,
+    regiao: t.regiao as RegiaoPdf | null,
+    responsavel: t.responsavel,
+    executor: t.executor,
+    tags_tarefa: t.tags_tarefa,
+  }));
+
+  return {
+    plantaId: planta.id,
+    plantaNome: planta.nome,
+    urlPdf,
+    tarefas: tarefasFormatadas,
+  };
+}
+
 async function buscarUsuario() {
   const supabase = await createClient();
   const {
@@ -137,6 +187,11 @@ export default async function DetalheTarefaPage({
   ]);
 
   if (!tarefa) notFound();
+
+  const dadosPlanta =
+    tarefa.localizacao_tipo !== "nenhuma" && tarefa.planta_id && tarefa.pagina
+      ? await buscarDadosPlantaTarefa(tarefa.planta_id, tarefa.pagina)
+      : null;
 
   const prazoInfo = situacaoPrazo(tarefa.prazo, tarefa.status === "concluido");
   const podeEscrever = usuario.eGestor || tarefa.responsavel_id === usuario.id;
@@ -334,6 +389,19 @@ export default async function DetalheTarefaPage({
                       {tarefa.pagina ? ` - pagina ${tarefa.pagina}` : ""}
                     </Link>
                   </dd>
+
+                  {dadosPlanta && (
+                    <MiniVisualizadorPlantaDinamico
+                      obraId={tarefa.obra_id}
+                      plantaId={dadosPlanta.plantaId}
+                      plantaNome={dadosPlanta.plantaNome}
+                      urlPdf={dadosPlanta.urlPdf}
+                      pagina={tarefa.pagina ?? 1}
+                      tarefaAtualId={tarefa.id}
+                      tarefas={dadosPlanta.tarefas}
+                      podeEditar={podeEscrever}
+                    />
+                  )}
                 </div>
               )}
             </CartaoConteudo>
