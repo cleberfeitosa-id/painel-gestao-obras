@@ -40,6 +40,40 @@ async function verificarGestor(): Promise<{ erro: string } | null> {
   return null;
 }
 
+const esquemaAtualizarPlanta = z.object({
+  plantaId: z.string().uuid(),
+  nome: z.string().trim().min(1, "Informe o nome da planta.").max(200),
+});
+
+export async function atualizarPlanta(dados: { plantaId: string; nome: string }): Promise<{ erro?: string }> {
+  const negado = await verificarGestor();
+  if (negado) return negado;
+
+  const resultado = esquemaAtualizarPlanta.safeParse(dados);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("plantas")
+    .update({ nome: resultado.data.nome })
+    .eq("id", resultado.data.plantaId);
+
+  if (error) {
+    return { erro: "Nao foi possivel atualizar a planta. Tente novamente." };
+  }
+
+  const { data: planta } = await supabase.from("plantas").select("obra_id").eq("id", resultado.data.plantaId).single();
+  
+  if (planta) {
+    revalidatePath(`/obras/${planta.obra_id}/plantas/${resultado.data.plantaId}`);
+    revalidatePath(`/obras/${planta.obra_id}`);
+  }
+  revalidatePath("/plantas");
+  return {};
+}
+
 const esquemaAssinar = z.object({
   obraId: z.string().uuid(),
   nomeArquivo: z.string().trim().min(1, "Informe o nome do arquivo.").max(255),

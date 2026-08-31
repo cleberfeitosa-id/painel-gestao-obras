@@ -6,6 +6,7 @@ import { BUCKET_PLANTAS, urlAssinada } from "@/lib/armazenamento";
 import { Botao } from "@/components/ui";
 import { AreaPlanta } from "@/components/plantas/area-planta";
 import { BotaoExcluirPlanta } from "@/components/plantas/botao-excluir-planta";
+import { EditarPlantaModal } from "@/components/plantas/editar-planta-modal";
 import type {
   ExecutorFiltro,
   TarefaObraAssociacao,
@@ -116,9 +117,14 @@ export default async function DetalhePlantaPage({
         </Link>
         <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-superficie-900">
-              {planta.nome}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-superficie-900">
+                {planta.nome}
+              </h1>
+              {podeEditar && (
+                <EditarPlantaModal plantaId={planta.id} nomeAtual={planta.nome} />
+              )}
+            </div>
             <p className="mt-1 text-sm text-superficie-500">
               {planta.obras?.nome ?? "Obra"} · {planta.total_paginas}{" "}
               {planta.total_paginas === 1 ? "pagina" : "paginas"}

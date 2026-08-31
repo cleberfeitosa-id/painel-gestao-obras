@@ -43,12 +43,13 @@ function parsearNumero(valor: string): number | null {
 
 export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoProps) {
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
-  const [precos, setPrecos] = useState<Record<string, { valorUnitario: string; unidade: string }>>(
+  const [precos, setPrecos] = useState<Record<string, { nome: string; valorUnitario: string; unidade: string }>>(
     () =>
       Object.fromEntries(
         itens.map((item) => [
           item.catalogoId,
           {
+            nome: item.nome,
             valorUnitario: String(item.valorUnitario),
             unidade: item.unidade === "—" ? "" : item.unidade,
           },
@@ -82,6 +83,10 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
   function salvarPreco(item: ItemMedicao) {
     const bruto = precos[item.catalogoId];
     const valorUnitario = parsearNumero(bruto.valorUnitario);
+    if (!bruto.nome.trim()) {
+      setErro("Informe o nome do item.");
+      return;
+    }
     if (valorUnitario == null) {
       setErro("Informe um valor unitario valido.");
       return;
@@ -89,8 +94,9 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
     setErro(null);
     iniciarTransicao(async () => {
       const resultado = await atualizarPrecoCatalogo({
+        catalogoId: item.catalogoId,
         medicaoId,
-        nome: item.nome,
+        nome: bruto.nome.trim(),
         valorUnitario,
         unidade: bruto.unidade.trim() || "m",
       });
@@ -229,8 +235,18 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                       )}
                     </button>
                   </Celula>
-                  <Celula className="font-medium text-superficie-900">
-                    {item.nome}
+                  <Celula>
+                    <input
+                      value={preco.nome}
+                      onChange={(e) =>
+                        setPrecos((atual) => ({
+                          ...atual,
+                          [item.catalogoId]: { ...atual[item.catalogoId], nome: e.target.value },
+                        }))
+                      }
+                      placeholder="Nome do item"
+                      className="w-full min-w-[150px] rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-superficie-900 focus:border-azul-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-azul-500 hover:border-borda"
+                    />
                   </Celula>
                   <Celula>
                     <input

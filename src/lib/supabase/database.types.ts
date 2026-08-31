@@ -249,6 +249,54 @@ export type Database = {
           },
         ]
       }
+      medicao_pagamentos: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          criado_por: string | null
+          data_pagamento: string
+          descricao: string
+          id: string
+          medicao_id: string
+          valor: number
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          data_pagamento: string
+          descricao: string
+          id?: string
+          medicao_id: string
+          valor: number
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          data_pagamento?: string
+          descricao?: string
+          id?: string
+          medicao_id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medicao_pagamentos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medicao_pagamentos_medicao_id_fkey"
+            columns: ["medicao_id"]
+            isOneToOne: false
+            referencedRelation: "medicoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacoes: {
         Row: {
           assunto: string
@@ -889,6 +937,10 @@ export type Database = {
         Args: { p_medicao_id: string }
         Returns: number
       }
+      valor_pago_medicao: {
+        Args: { p_medicao_id: string }
+        Returns: number
+      }
       valor_pendente_medicao: {
         Args: { p_medicao_id: string }
         Returns: number
@@ -1077,6 +1129,7 @@ export type TarefaAnexoRow = Tabelas<"tarefa_anexos">;
 export type NotificacaoRow = Tabelas<"notificacoes">;
 export type TagsTarefaRow = Tabelas<"tags_tarefa">;
 export type TarefaDependenciaRow = Tabelas<"tarefa_dependencias">;
+export type MedicaoPagamentoRow = Tabelas<"medicao_pagamentos">;
 
 // As colunas jsonb chegam como `Json`. Reafirmamos a forma concreta na camada
 // de dominio para que a matematica de coordenadas continue tipada.

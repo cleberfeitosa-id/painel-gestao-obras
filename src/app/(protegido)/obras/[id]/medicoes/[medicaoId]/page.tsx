@@ -2,12 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { formatarMoeda } from "@/lib/utils";
+import { cn, formatarMoeda } from "@/lib/utils";
 import { Cartao, CartaoCabecalho, CartaoTitulo, CartaoConteudo } from "@/components/ui";
 import { FiltrosMedicao } from "@/components/medicao/filtros-medicao";
 import { TabelaMedicao } from "@/components/medicao/tabela-medicao";
 import { ValorContrato } from "@/components/medicao/valor-contrato";
 import { EditarMedicaoModal } from "@/components/medicao/editar-medicao-modal";
+import { ListaPagamentos, type ItemPagamento } from "@/components/medicao/lista-pagamentos";
 import type {
   CatalogoPrecoRow,
   MedicaoRow,
@@ -73,7 +74,7 @@ async function buscarDados(
   if (filtros.de) consulta = consulta.gte("prazo", filtros.de);
   if (filtros.ate) consulta = consulta.lte("prazo", filtros.ate);
 
-  const [{ data: medicao }, { data: catalogo }, { data: tarefas }, { data: plantas }, { data: perfis }] =
+  const [{ data: medicao }, { data: catalogo }, { data: tarefas }, { data: plantas }, { data: perfis }, { data: pagamentos }] =
     await Promise.all([
       supabase
         .from("medicoes")
@@ -88,6 +89,11 @@ async function buscarDados(
       consulta.order("titulo"),
       supabase.from("plantas").select("id, nome").eq("obra_id", obraId).order("nome"),
       supabase.from("perfis").select("id, nome").order("nome"),
+      supabase
+        .from("medicao_pagamentos")
+        .select("id, valor, data_pagamento, descricao")
+        .eq("medicao_id", medicaoId)
+        .order("data_pagamento", { ascending: false }),
     ]);
 
   return {
@@ -96,6 +102,7 @@ async function buscarDados(
     tarefas: (tarefas ?? []) as TarefaComRelacoes[],
     plantas: (plantas ?? []) as Pick<PlantaRow, "id" | "nome">[],
     perfis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
+    pagamentos: (pagamentos ?? []) as ItemPagamento[],
   };
 }
 
@@ -124,7 +131,7 @@ export default async function MedicaoDetalhePage({
     redirect(`/obras/${id}`);
   }
 
-  const { medicao, catalogo, tarefas, plantas, perfis } = await buscarDados(
+  const { medicao, catalogo, tarefas, plantas, perfis, pagamentos } = await buscarDados(
     id,
     medicaoId,
     filtros,
@@ -196,6 +203,10 @@ export default async function MedicaoDetalhePage({
     filtros.planta || filtros.responsavel || filtros.de || filtros.ate,
   );
 
+  const valorPago = pagamentos.reduce((acc, p) => acc + Number(p.valor), 0);
+  const saldoRestante =
+    medicao.valor_contrato != null ? medicao.valor_contrato - valorPago : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -217,8 +228,45 @@ export default async function MedicaoDetalhePage({
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <ValorContrato medicaoId={medicao.id} valorContrato={medicao.valor_contrato} />
+        <Cartao>
+          <CartaoCabecalho>
+            <CartaoTitulo>Valor pago</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className="text-2xl font-bold text-emerald-600">
+              {formatarMoeda(valorPago)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Soma dos pagamentos realizados
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        <Cartao>
+          <CartaoCabecalho>
+            <CartaoTitulo>Saldo do contrato</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p
+              className={cn(
+                "text-2xl font-bold",
+                saldoRestante == null
+                  ? "text-superficie-900"
+                  : saldoRestante < 0
+                    ? "text-perigo"
+                    : "text-azul-600",
+              )}
+            >
+              {formatarMoeda(saldoRestante)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              {medicao.valor_contrato != null
+                ? "Valor do contrato deduzido o valor pago"
+                : "Defina o valor do contrato para calcular o saldo"}
+            </p>
+          </CartaoConteudo>
+        </Cartao>
         <Cartao>
           <CartaoCabecalho>
             <CartaoTitulo>Valor executado</CartaoTitulo>
@@ -259,6 +307,24 @@ export default async function MedicaoDetalhePage({
           </CartaoConteudo>
         </Cartao>
       </div>
+
+      <Cartao>
+        <CartaoCabecalho>
+          <div className="flex items-center justify-between">
+            <CartaoTitulo>Pagamentos</CartaoTitulo>
+            <span className="text-xs text-superficie-500">
+              {pagamentos.length}{" "}
+              {pagamentos.length === 1 ? "pagamento registrado" : "pagamentos registrados"}
+            </span>
+          </div>
+        </CartaoCabecalho>
+        <CartaoConteudo className="p-0">
+          <ListaPagamentos
+            medicaoId={medicao.id}
+            pagamentos={pagamentos}
+          />
+        </CartaoConteudo>
+      </Cartao>
 
       <Cartao>
         <CartaoCabecalho>

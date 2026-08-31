@@ -1,4 +1,3 @@
-
 Implemente as seguintes melhorias no projeto:
 
 1. Módulo de medição:

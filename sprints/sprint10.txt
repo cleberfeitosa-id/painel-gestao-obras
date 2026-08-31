@@ -1,0 +1,12 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Navegação entre tarefas:
+    - Na tela de edição de tarefas, em informações, logo abaixo de localização na planta, deve ser possível visualizar uma versão do pdf como está na página de plantas, com zoom aplicado de forma a mostrar os pinos e regiões próximos ao da tarefa respectiva daquela página, de forma a navegar de forma facilitada entre tarefas adjacentes para registros e edição.
+    - A visualização deve ser interativa, permitindo zoom e pan, além de ser possível clicar em tarefas adjacentes para visualizar suas informações e editar (se tiver permissão), indo até sua página de tarefa.
+    - O pino ou região atual deve ser destaco para se sabe em qual tarefa se está.
+
+2. Gestão de imagens:
+    - Deve ser possível excluir uma imagem anexada a uma tarefa.
+
+3. Clique em tarefas sobrepostas:
+    - No caso de pinos sobre regiões ou regiões sobre pinos, pinos sobre pinos, ou regiões sobre regiões, deve ser possível clicar e selecionar qual região ou pinos dos sobrepostos se deseja selecionar.

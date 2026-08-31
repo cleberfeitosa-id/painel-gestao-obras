@@ -10,6 +10,7 @@ import type { MedicaoRow } from "@/lib/supabase/database.types";
 interface MedicaoComValores extends MedicaoRow {
   valor_executado: number;
   valor_pendente: number;
+  valor_pago: number;
 }
 
 export default async function MedicoesObraPage({
@@ -47,14 +48,16 @@ export default async function MedicoesObraPage({
 
   const lista: MedicaoComValores[] = [];
   for (const medicao of medicoes ?? []) {
-    const [executado, pendente] = await Promise.all([
+    const [executado, pendente, pago] = await Promise.all([
       supabase.rpc("valor_executado_medicao", { p_medicao_id: medicao.id }),
       supabase.rpc("valor_pendente_medicao", { p_medicao_id: medicao.id }),
+      supabase.rpc("valor_pago_medicao", { p_medicao_id: medicao.id }),
     ]);
     lista.push({
       ...medicao,
       valor_executado: (executado.data as number) ?? 0,
       valor_pendente: (pendente.data as number) ?? 0,
+      valor_pago: (pago.data as number) ?? 0,
     });
   }
 
@@ -93,35 +96,55 @@ export default async function MedicoesObraPage({
         </Cartao>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {lista.map((medicao) => (
-            <Link key={medicao.id} href={`/obras/${obra.id}/medicoes/${medicao.id}`}>
-              <Cartao className="h-full transition-shadow hover:shadow-md">
-                <CartaoCabecalho>
-                  <CartaoTitulo>{medicao.titulo}</CartaoTitulo>
-                </CartaoCabecalho>
-                <CartaoConteudo className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-superficie-500">Valor do contrato</span>
-                    <span className="text-sm font-semibold text-superficie-900">
-                      {formatarMoeda(medicao.valor_contrato)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-superficie-500">Valor executado</span>
-                    <span className="text-sm font-semibold text-emerald-600">
-                      {formatarMoeda(medicao.valor_executado)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-superficie-500">Valor pendente</span>
-                    <span className="text-sm font-semibold text-amber-600">
-                      {formatarMoeda(medicao.valor_pendente)}
-                    </span>
-                  </div>
-                </CartaoConteudo>
-              </Cartao>
-            </Link>
-          ))}
+          {lista.map((medicao) => {
+            const saldo =
+              medicao.valor_contrato != null
+                ? medicao.valor_contrato - medicao.valor_pago
+                : null;
+            return (
+              <Link key={medicao.id} href={`/obras/${obra.id}/medicoes/${medicao.id}`}>
+                <Cartao className="h-full transition-shadow hover:shadow-md">
+                  <CartaoCabecalho>
+                    <CartaoTitulo>{medicao.titulo}</CartaoTitulo>
+                  </CartaoCabecalho>
+                  <CartaoConteudo className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-superficie-500">Valor do contrato</span>
+                      <span className="text-sm font-semibold text-superficie-900">
+                        {formatarMoeda(medicao.valor_contrato)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-superficie-500">Valor pago</span>
+                      <span className="text-sm font-semibold text-emerald-600">
+                        {formatarMoeda(medicao.valor_pago)}
+                      </span>
+                    </div>
+                    {medicao.valor_contrato != null && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-superficie-500">Saldo do contrato</span>
+                        <span className="text-sm font-semibold text-azul-600">
+                          {formatarMoeda(saldo)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-superficie-500">Valor executado</span>
+                      <span className="text-sm font-semibold text-emerald-600">
+                        {formatarMoeda(medicao.valor_executado)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-superficie-500">Valor pendente</span>
+                      <span className="text-sm font-semibold text-amber-600">
+                        {formatarMoeda(medicao.valor_pendente)}
+                      </span>
+                    </div>
+                  </CartaoConteudo>
+                </Cartao>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

@@ -47,10 +47,28 @@ const esquemaPrecoCatalogo = z.object({
     .max(20, "A unidade deve ter no maximo 20 caracteres."),
 });
 
-// Atualiza (ou cria) a entrada do catalogo de precos da medicao. Como a tabela
-// tem UNIQUE (medicao_id, nome), o upsert garante que itens com o mesmo nome
-// compartilham o mesmo valor unitario e unidade.
+const esquemaPrecoCatalogoUpdate = z.object({
+  catalogoId: z.string().uuid("Item do catalogo invalido."),
+  medicaoId: z.string().uuid("Medicao invalida."),
+  nome: z
+    .string()
+    .trim()
+    .min(1, "Informe o nome do item do catalogo.")
+    .max(200, "O nome deve ter no maximo 200 caracteres."),
+  valorUnitario: z
+    .number("Informe o valor unitario.")
+    .min(0, "O valor unitario nao pode ser negativo.")
+    .max(1_000_000_000, "Valor unitario acima do limite."),
+  unidade: z
+    .string()
+    .trim()
+    .min(1, "Informe a unidade.")
+    .max(20, "A unidade deve ter no maximo 20 caracteres."),
+});
+
+// Atualiza a entrada do catalogo de precos da medicao.
 export async function atualizarPrecoCatalogo(dados: {
+  catalogoId: string;
   medicaoId: string;
   nome: string;
   valorUnitario: number;
@@ -59,29 +77,24 @@ export async function atualizarPrecoCatalogo(dados: {
   const negado = await verificarGestor();
   if (negado) return negado;
 
-  const resultado = esquemaPrecoCatalogo.safeParse(dados);
+  const resultado = esquemaPrecoCatalogoUpdate.safeParse(dados);
   if (!resultado.success) {
     return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const { error } = await supabase.from("catalogo_precos").upsert(
-    {
-      medicao_id: resultado.data.medicaoId,
-      nome: resultado.data.nome,
-      valor_unitario: resultado.data.valorUnitario,
-      unidade: resultado.data.unidade,
-      criado_por: user?.id ?? null,
-    },
-    { onConflict: "medicao_id,nome" },
-  );
+  const { error } = await supabase.from("catalogo_precos").update({
+    nome: resultado.data.nome,
+    valor_unitario: resultado.data.valorUnitario,
+    unidade: resultado.data.unidade,
+  }).eq("id", resultado.data.catalogoId);
 
   if (error) {
-    return { erro: "Nao foi possivel salvar o preco do catalogo. Tente novamente." };
+    if (error.code === "23505") {
+      return { erro: "Ja existe um item com esse nome nesta medicao." };
+    }
+    return { erro: "Nao foi possivel atualizar o preco do catalogo. Tente novamente." };
   }
 
   revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
@@ -346,3 +359,92 @@ export async function criarMedicao(dados: {
   revalidatePath(`/obras/${resultado.data.obraId}`);
   return { medicaoId: data.id };
 }
+
+const esquemaRegistrarPagamento = z.object({
+  medicaoId: z.string().uuid("Medicao invalida."),
+  valor: z
+    .number("Informe o valor pago.")
+    .positive("O valor pago deve ser maior que zero.")
+    .max(1_000_000_000_000, "Valor acima do limite."),
+  dataPagamento: z
+    .string()
+    .trim()
+    .min(1, "Informe a data do pagamento.")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data em formato invalido."),
+  descricao: z
+    .string()
+    .trim()
+    .min(1, "Informe a descricao do pagamento.")
+    .max(500, "A descricao deve ter no maximo 500 caracteres."),
+});
+
+export async function registrarPagamento(dados: {
+  medicaoId: string;
+  valor: number;
+  dataPagamento: string;
+  descricao: string;
+}): Promise<Resultado> {
+  const negado = await verificarGestor();
+  if (negado) return negado;
+
+  const resultado = esquemaRegistrarPagamento.safeParse(dados);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("medicao_pagamentos").insert({
+    medicao_id: resultado.data.medicaoId,
+    valor: resultado.data.valor,
+    data_pagamento: resultado.data.dataPagamento,
+    descricao: resultado.data.descricao,
+    criado_por: user?.id ?? null,
+  });
+
+  if (error) {
+    return { erro: "Nao foi possivel registrar o pagamento. Tente novamente." };
+  }
+
+  revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
+  revalidatePath(`/obras/[id]/medicoes`);
+  return {};
+}
+
+const esquemaExcluirPagamento = z.object({
+  pagamentoId: z.string().uuid("Pagamento invalido."),
+  medicaoId: z.string().uuid("Medicao invalida."),
+});
+
+export async function excluirPagamento(dados: {
+  pagamentoId: string;
+  medicaoId: string;
+}): Promise<Resultado> {
+  const negado = await verificarGestor();
+  if (negado) return negado;
+
+  const resultado = esquemaExcluirPagamento.safeParse(dados);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("medicao_pagamentos")
+    .delete()
+    .eq("id", resultado.data.pagamentoId)
+    .eq("medicao_id", resultado.data.medicaoId);
+
+  if (error) {
+    return { erro: "Nao foi possivel excluir o pagamento. Tente novamente." };
+  }
+
+  revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
+  revalidatePath(`/obras/[id]/medicoes`);
+  return {};
+}
+
