@@ -31,3 +31,13 @@ export function sanitizarNomeArquivo(nome: string) {
     .replace(/_{2,}/g, "_")
     .slice(0, 120);
 }
+
+const formatadorMoeda = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+export function formatarMoeda(valor: number | null | undefined) {
+  if (valor == null || Number.isNaN(valor)) return "—";
+  return formatadorMoeda.format(valor);
+}

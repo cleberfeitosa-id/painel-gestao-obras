@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useLayoutEffect, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +32,11 @@ export function Modal({
 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  useEffect(() => {
+  // useLayoutEffect + cleanup simetrico: com React 19 o <dialog> e reconciliado
+  // pelo atributo `open`; sem prop `open`, um re-render pode fechar o dialogo.
+  // Sincronizar no mesmo render e limpar no desmonte evita o reset e e seguro
+  // em StrictMode (efeito montado/desmontado duas vezes).
+  useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
@@ -41,6 +45,10 @@ export function Modal({
     } else if (!aberto && dialog.open) {
       dialog.close();
     }
+
+    return () => {
+      if (dialog.open) dialog.close();
+    };
   }, [aberto]);
 
   const fechar = useCallback(() => {

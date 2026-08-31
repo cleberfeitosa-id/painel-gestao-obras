@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { MapPin } from "lucide-react";
+import { MapPin, Plus, Trash2 } from "lucide-react";
 import { Botao, Campo, AreaTexto, Selecao } from "@/components/ui";
 import { criarTag } from "@/app/(protegido)/tarefas/acoes";
 import { OPCOES_STATUS_TAREFA, OPCOES_PRIORIDADE } from "@/lib/domain/rotulos";
@@ -13,6 +13,15 @@ import type {
   PerfilRow,
   TarefaRow,
 } from "@/lib/supabase/database.types";
+
+export type CatalogoComMedicao = {
+  id: string;
+  nome: string;
+  unidade: string;
+  medicoes: { id: string; titulo: string; obra_id: string };
+};
+
+type MedicaoItem = { catalogo_id: string; quantidade: number };
 
 type ResultadoFormulario = { erro?: string };
 
@@ -50,6 +59,8 @@ interface FormularioTarefaProps {
   localizacoesLote?: LocalizacaoLote[];
   obraIdInicial?: string;
   loteId?: string;
+  catalogoPrecos?: CatalogoComMedicao[];
+  medicoes?: MedicaoItem[];
 }
 
 function BotaoEnviar({ rotulo }: { rotulo: string }) {
@@ -97,6 +108,8 @@ export function FormularioTarefa({
   localizacoesLote,
   obraIdInicial,
   loteId,
+  catalogoPrecos,
+  medicoes,
 }: FormularioTarefaProps) {
   const [estado, acaoFormulario] = useActionState(acao, {});
   const [prazo, setPrazo] = useState(tarefa?.prazo ?? (tarefa ? "" : hojeChave()));
@@ -121,6 +134,8 @@ export function FormularioTarefa({
   const [listaTags, setListaTags] = useState(tags ?? []);
   const [tagSelecionada, setTagSelecionada] = useState(tarefa?.tag_id ?? "");
   const [criandoTag, setCriandoTag] = useState(false);
+
+  const [medicoesLista, setMedicoesLista] = useState<MedicaoItem[]>(medicoes ?? []);
 
   const isNovaTarefa = !tarefa;
   const hoje = hojeChave();
@@ -202,6 +217,31 @@ export function FormularioTarefa({
     setListaTags((atual) => [...atual, { id: resultado.id, nome: resultado.nome }].sort((a, b) => a.nome.localeCompare(b.nome)));
     setTagSelecionada(resultado.id);
   };
+
+  const catalogoDaObra = catalogoPrecos?.filter((item) => item.medicoes.obra_id === obraId) ?? [];
+
+  const catalogoPorMedicao = catalogoDaObra.reduce<Record<string, CatalogoComMedicao[]>>((acc, item) => {
+    const chave = item.medicoes.titulo ?? "Sem medicao";
+    if (!acc[chave]) acc[chave] = [];
+    acc[chave].push(item);
+    return acc;
+  }, {});
+
+  function adicionarMedicao() {
+    setMedicoesLista((atual) => [...atual, { catalogo_id: "", quantidade: 0 }]);
+  }
+
+  function removerMedicao(indice: number) {
+    setMedicoesLista((atual) => atual.filter((_, i) => i !== indice));
+  }
+
+  function atualizarMedicao(indice: number, campo: keyof MedicaoItem, valor: string | number) {
+    setMedicoesLista((atual) =>
+      atual.map((item, i) =>
+        i === indice ? { ...item, [campo]: valor } : item,
+      ),
+    );
+  }
 
   return (
     <form action={acaoFormulario} className="space-y-6">
@@ -500,6 +540,77 @@ export function FormularioTarefa({
           </label>
         </div>
       </fieldset>
+
+      {catalogoDaObra.length > 0 && (
+        <fieldset>
+          <legend className="text-sm font-medium text-superficie-700">
+            Medicoes
+          </legend>
+          <p className="mt-0.5 text-xs text-superficie-500">
+            Registre os itens do catalogo e suas quantidades para esta tarefa.
+          </p>
+          <div className="mt-3 space-y-3">
+            {medicoesLista.map((medicao, indice) => (
+              <div
+                key={indice}
+                className="flex items-end gap-2 rounded-lg border border-borda px-3 py-2"
+              >
+                <Selecao
+                  rotulo="Item"
+                  obrigatorio
+                  value={medicao.catalogo_id}
+                  onChange={(e) => atualizarMedicao(indice, "catalogo_id", e.target.value)}
+                  className="flex-1"
+                >
+                  <option value="">Selecione o item</option>
+                  {Object.entries(catalogoPorMedicao).map(([medicaoTitulo, itens]) => (
+                    <optgroup key={medicaoTitulo} label={medicaoTitulo}>
+                      {itens.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.nome}{item.unidade ? ` (${item.unidade})` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </Selecao>
+                <Campo
+                  rotulo="Quantidade"
+                  obrigatorio
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={medicao.quantidade || ""}
+                  onChange={(e) => atualizarMedicao(indice, "quantidade", e.target.value === "" ? 0 : Number(e.target.value))}
+                  className="w-28"
+                />
+                <Botao
+                  type="button"
+                  variante="fantasma"
+                  tamanho="sm"
+                  onClick={() => removerMedicao(indice)}
+                  className="mb-0.5 text-perigo hover:text-perigo"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Botao>
+              </div>
+            ))}
+            <Botao
+              type="button"
+              variante="contorno"
+              tamanho="sm"
+              onClick={adicionarMedicao}
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar medicao
+            </Botao>
+          </div>
+          <input
+            type="hidden"
+            name="medicoes"
+            value={JSON.stringify(medicoesLista.filter((m) => m.catalogo_id))}
+          />
+        </fieldset>
+      )}
 
       <div className="flex items-center justify-end gap-3 pt-2">
         <BotaoEnviar

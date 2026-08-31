@@ -34,7 +34,7 @@ const esquemaParams = z.object({
 
 async function buscarOpcoes() {
   const supabase = await createClient();
-  const [{ data: obras }, { data: perfis }, { data: executores }, { data: tags }, { data: titulos }] =
+  const [{ data: obras }, { data: perfis }, { data: executores }, { data: tags }, { data: titulos }, { data: catalogo }] =
     await Promise.all([
       supabase.from("obras").select("id, nome").order("nome"),
       supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
@@ -44,6 +44,7 @@ async function buscarOpcoes() {
         .order("nome"),
       supabase.from("tags_tarefa").select("id, nome").order("nome"),
       supabase.from("tarefas").select("titulo").order("titulo"),
+      supabase.from("catalogo_precos").select("id, nome, unidade, medicoes!inner(id, titulo, obra_id)").order("nome"),
     ]);
   return {
     obras: (obras ?? []) as Pick<ObraRow, "id" | "nome">[],
@@ -57,6 +58,12 @@ async function buscarOpcoes() {
     titulosExistentes: Array.from(
       new Set((titulos ?? []).map((t) => t.titulo)),
     ).sort((a, b) => a.localeCompare(b)),
+    catalogoPrecos: (catalogo ?? []) as {
+      id: string;
+      nome: string;
+      unidade: string;
+      medicoes: { id: string; titulo: string; obra_id: string };
+    }[],
   };
 }
 
@@ -149,6 +156,7 @@ export default async function NovaEmLotePage({
             localizacoesLote={localizacoes}
               obraIdInicial={obraParaVoltar.id}
               loteId={loteId ?? undefined}
+              catalogoPrecos={opcoes.catalogoPrecos}
             />
           </CartaoConteudo>
         </Cartao>

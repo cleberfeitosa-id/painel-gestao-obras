@@ -699,8 +699,9 @@ export function VisualizadorPlanta({
     setEscala(1);
   }
 
-  function aoRolar(e: React.WheelEvent<HTMLDivElement>) {
+  function aoRolar(e: WheelEvent) {
     e.preventDefault();
+    e.stopPropagation();
     const el = contentRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -710,10 +711,19 @@ export function VisualizadorPlanta({
       cx: e.clientX,
       cy: e.clientY,
     };
-    const fator = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const fator = Math.pow(0.9985, e.deltaY);
     setAjusteLargura(false);
-    setEscala((atual) => Math.min(5, Math.max(0.1, Number((atual * fator).toFixed(3)))));
+    setEscala((atual) => Math.min(5, Math.max(0.1, Number((atual * fator).toFixed(4)))));
   }
+
+  // Listener nativo com passive:false para garantir preventDefault().
+  // React 17+ registra onWheel como passive por padrao, ignorando preventDefault.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener("wheel", aoRolar, { passive: false });
+    return () => el.removeEventListener("wheel", aoRolar);
+  });
 
   // Mantém o ponto da planta sob o cursor fixo durante o zoom pela roda.
   useEffect(() => {
@@ -1074,8 +1084,8 @@ export function VisualizadorPlanta({
 
         <div
           ref={containerRef}
-          onWheel={aoRolar}
           className="relative h-[70vh] overflow-auto rounded-xl border border-borda bg-superficie-100/60"
+          style={{ touchAction: "none" }}
         >
           <div className="flex min-h-full min-w-full p-4">
             <div ref={contentRef} className="relative m-auto w-fit shadow-lg">
@@ -1224,7 +1234,7 @@ export function VisualizadorPlanta({
                           >
                             <span
                               className={cn(
-                                "block h-4 w-4 rounded-full shadow ring-2 ring-white",
+                                "block h-4 w-4 rounded-full opacity-[0.45] shadow ring-2 ring-white",
                                 SITUACAO_TAREFA[sit].pino,
                               )}
                             />
@@ -1260,7 +1270,7 @@ export function VisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute cursor-pointer rounded-sm border-2",
+                            "absolute cursor-pointer rounded-sm border-2 opacity-[0.45]",
                             SITUACAO_TAREFA[sit].regiao,
                             tarefaDestaque === tarefa.id &&
                               "!border-dashed !border-azul-600 bg-azul-500/30",

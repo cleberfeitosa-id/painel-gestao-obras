@@ -122,6 +122,7 @@ async function buscarOpcoes() {
     { data: executores },
     { data: plantas },
     { data: tags },
+    { data: catalogo },
     {
       data: { user },
     },
@@ -131,6 +132,7 @@ async function buscarOpcoes() {
     supabase.from("executores").select("id, nome").order("nome"),
     supabase.from("plantas").select("id, nome").order("nome"),
     supabase.from("tags_tarefa").select("id, nome").order("nome"),
+    supabase.from("catalogo_precos").select("id, nome, unidade, medicoes!inner(id, titulo, obra_id)").order("nome"),
     supabase.auth.getUser(),
   ]);
 
@@ -151,6 +153,12 @@ async function buscarOpcoes() {
     executores: (executores ?? []) as Pick<ExecutorRow, "id" | "nome">[],
     plantas: (plantas ?? []) as Pick<PlantaRow, "id" | "nome">[],
     tags: (tags ?? []) as { id: string; nome: string }[],
+    catalogoPrecos: (catalogo ?? []) as {
+      id: string;
+      nome: string;
+      unidade: string;
+      medicoes: { id: string; titulo: string; obra_id: string };
+    }[],
     podeExcluir: papel === "admin" || papel === "gestor",
   };
 }
@@ -195,7 +203,7 @@ export default async function TarefasPage({
     buscarTarefas(filtros),
     buscarOpcoes(),
   ]);
-  const { obras, responsaveis, supervisores, executores, plantas, tags, podeExcluir } = opcoes;
+  const { obras, responsaveis, supervisores, executores, plantas, tags, catalogoPrecos, podeExcluir } = opcoes;
 
   const temFiltros = Object.values(filtros).some(Boolean);
 
@@ -246,6 +254,7 @@ export default async function TarefasPage({
         supervisores={supervisores}
         executores={executores}
         tags={tags}
+        catalogoPrecos={catalogoPrecos}
       />
     </div>
   );

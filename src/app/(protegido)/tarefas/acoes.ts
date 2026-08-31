@@ -9,15 +9,22 @@ import { notificarResponsavel } from "@/lib/email";
 import { assinarUpload, removerArquivo, BUCKET_ANEXOS } from "@/lib/armazenamento";
 import type {
   AprovacaoTarefa,
+  CatalogoPrecoRow,
   MomentoAnexo,
   PrioridadeTarefa,
   StatusTarefa,
+  TarefaMedicaoRow,
   TarefaRow,
   TipoAnexo,
   TipoLocalizacao,
 } from "@/lib/supabase/database.types";
 
 type Resultado = { erro?: string };
+
+const esquemaMedicao = z.object({
+  catalogo_id: z.string().uuid("Selecione um item do catalogo valido."),
+  quantidade: z.coerce.number().min(0, "A quantidade nao pode ser negativa."),
+});
 
 const esquemaLocalizacao = z
   .object({
@@ -114,6 +121,7 @@ const esquemaTarefa = z.object({
   exige_foto: z.boolean().optional(),
   exige_video: z.boolean().optional(),
   exige_arquivo: z.boolean().optional(),
+  medicoes: z.array(esquemaMedicao).optional(),
   ...esquemaLocalizacao.shape,
 }).superRefine((dados, ctx) => {
   if (dados.prazo && dados.data_planejada) {
@@ -273,6 +281,16 @@ export async function criarTarefa(
     return { erro: "Voce nao tem permissao para criar tarefas." };
   }
 
+  const medicoesRaw = formData.get("medicoes");
+  let medicoes: { catalogo_id: string; quantidade: number }[] = [];
+  if (medicoesRaw) {
+    try {
+      medicoes = JSON.parse(String(medicoesRaw));
+    } catch {
+      medicoes = [];
+    }
+  }
+
   const bruto = {
     titulo: formData.get("titulo"),
     descricao: formData.get("descricao"),
@@ -296,6 +314,7 @@ export async function criarTarefa(
     ponto_x: formData.get("ponto_x"),
     ponto_y: formData.get("ponto_y"),
     regiao: formData.get("regiao"),
+    medicoes,
   };
 
   const resultado = esquemaTarefa.safeParse(bruto);
@@ -318,6 +337,25 @@ export async function criarTarefa(
 
   if (error || !data) {
     return { erro: "Nao foi possivel criar a tarefa. Tente novamente." };
+  }
+
+  // Inserir medicoes se houver
+  if (resultado.data.medicoes && resultado.data.medicoes.length > 0) {
+    const medicoesInsert = resultado.data.medicoes.map((m) => ({
+      tarefa_id: data.id,
+      catalogo_id: m.catalogo_id,
+      quantidade: m.quantidade,
+      criado_por: user.id,
+    }));
+
+    const { error: erroMedicoes } = await supabase
+      .from("tarefa_medicoes")
+      .insert(medicoesInsert);
+
+    if (erroMedicoes) {
+      console.error("[tarefas] falha ao inserir medicoes:", erroMedicoes);
+      // Nao derruba a criacao da tarefa, apenas loga o erro
+    }
   }
 
   if (resultado.data.responsavel_id) {
@@ -405,6 +443,7 @@ const esquemaCriarLote = z
         .array(esquemaLocalizacaoLote)
         .min(1, "Adicione pelo menos uma localizacao na planta.")
     ),
+    medicoes: z.array(esquemaMedicao).optional(),
   })
   .superRefine((dados, ctx) => {
     if (dados.prazo && dados.data_planejada) {
@@ -437,6 +476,16 @@ export async function criarTarefasEmLote(
     return { erro: "Voce nao tem permissao para criar tarefas." };
   }
 
+  const medicoesRaw = formData.get("medicoes");
+  let medicoes: { catalogo_id: string; quantidade: number }[] = [];
+  if (medicoesRaw) {
+    try {
+      medicoes = JSON.parse(String(medicoesRaw));
+    } catch {
+      medicoes = [];
+    }
+  }
+
   const bruto = {
     titulo: formData.get("titulo"),
     descricao: formData.get("descricao"),
@@ -456,6 +505,7 @@ export async function criarTarefasEmLote(
     exige_arquivo: formData.get("exige_arquivo") === "on",
     lote_id: formData.get("lote_id"),
     localizacoes: formData.get("localizacoes"),
+    medicoes,
   };
 
   const resultado = esquemaCriarLote.safeParse(bruto);
@@ -513,6 +563,27 @@ export async function criarTarefasEmLote(
     return {
       erro: "Nao foi possivel criar as tarefas. Tente novamente.",
     };
+  }
+
+  // Inserir medicoes em lote para todas as tarefas criadas.
+  if (resultado.data.medicoes && resultado.data.medicoes.length > 0) {
+    const medicoesInsert = data.flatMap((tarefa) =>
+      resultado.data.medicoes!.map((m) => ({
+        tarefa_id: tarefa.id,
+        catalogo_id: m.catalogo_id,
+        quantidade: m.quantidade,
+        criado_por: user.id,
+      }))
+    );
+
+    const { error: erroMedicoes } = await supabase
+      .from("tarefa_medicoes")
+      .insert(medicoesInsert);
+
+    if (erroMedicoes) {
+      console.error("[tarefas] falha ao inserir medicoes em lote:", erroMedicoes);
+      // Nao derruba a criacao das tarefas, apenas loga o erro
+    }
   }
 
   const primeiros = new Map<string, string>();
@@ -674,6 +745,9 @@ export async function atualizarTarefasEmLote(
 
   const updates: any = {};
   
+  const titulo = formData.get("titulo");
+  if (titulo && String(titulo).trim()) updates.titulo = String(titulo).trim();
+  
   const status = formData.get("status");
   if (status) updates.status = status;
   
@@ -704,7 +778,17 @@ export async function atualizarTarefasEmLote(
   const data_fim = formData.get("data_fim");
   if (data_fim) updates.data_fim = data_fim;
 
-  if (Object.keys(updates).length === 0) {
+  const medicoesRaw = formData.get("medicoes");
+  let medicoes: { catalogo_id: string; quantidade: number }[] = [];
+  if (medicoesRaw) {
+    try {
+      medicoes = JSON.parse(String(medicoesRaw));
+    } catch {
+      medicoes = [];
+    }
+  }
+
+  if (Object.keys(updates).length === 0 && medicoes.length === 0) {
     return { erro: "Nenhuma alteracao informada." };
   }
 
@@ -721,6 +805,36 @@ export async function atualizarTarefasEmLote(
     }
   }
 
+  if (medicoesRaw !== null) {
+    const { error: erroDeleteMedicoes } = await supabaseAdmin
+      .from("tarefa_medicoes")
+      .delete()
+      .in("tarefa_id", idsPermitidos);
+
+    if (erroDeleteMedicoes) {
+      console.error("[tarefas] falha ao deletar medições antigas:", erroDeleteMedicoes);
+    }
+
+    if (medicoes.length > 0) {
+      const medicoesInsert = idsPermitidos.flatMap((tarefaId) =>
+        medicoes.map((m) => ({
+          tarefa_id: tarefaId,
+          catalogo_id: m.catalogo_id,
+          quantidade: m.quantidade,
+          criado_por: user.id,
+        }))
+      );
+
+      const { error: erroMedicoes } = await supabaseAdmin
+        .from("tarefa_medicoes")
+        .insert(medicoesInsert);
+
+      if (erroMedicoes) {
+        console.error("[tarefas] falha ao inserir medições em lote:", erroMedicoes);
+      }
+    }
+  }
+
   revalidatePath("/tarefas");
   revalidatePath("/painel");
   return {};
@@ -733,10 +847,23 @@ export async function atualizarTarefa(
   const id = String(formData.get("id") ?? "");
   if (!id) return { erro: "Tarefa invalida." };
 
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
   const { tarefa, podeEscrever } = await carregarTarefaComPermissao(id);
   if (!tarefa) return { erro: "Tarefa nao encontrada." };
   if (!podeEscrever) {
     return { erro: "Voce nao tem permissao para editar esta tarefa." };
+  }
+
+  const medicoesRaw = formData.get("medicoes");
+  let medicoes: { catalogo_id: string; quantidade: number }[] = [];
+  if (medicoesRaw) {
+    try {
+      medicoes = JSON.parse(String(medicoesRaw));
+    } catch {
+      medicoes = [];
+    }
   }
 
   const bruto = {
@@ -762,6 +889,7 @@ export async function atualizarTarefa(
     ponto_x: formData.get("ponto_x"),
     ponto_y: formData.get("ponto_y"),
     regiao: formData.get("regiao"),
+    medicoes,
   };
 
   const resultado = esquemaTarefa.safeParse(bruto);
@@ -783,6 +911,33 @@ export async function atualizarTarefa(
 
   if (error) {
     return { erro: "Nao foi possivel salvar a tarefa. Tente novamente." };
+  }
+
+  // Atualizar medicoes: deletar existentes e inserir novas
+  const { error: erroDeleteMedicoes } = await supabase
+    .from("tarefa_medicoes")
+    .delete()
+    .eq("tarefa_id", id);
+
+  if (erroDeleteMedicoes) {
+    console.error("[tarefas] falha ao deletar medicoes antigas:", erroDeleteMedicoes);
+  }
+
+  if (resultado.data.medicoes && resultado.data.medicoes.length > 0) {
+    const medicoesInsert = resultado.data.medicoes.map((m) => ({
+      tarefa_id: id,
+      catalogo_id: m.catalogo_id,
+      quantidade: m.quantidade,
+      criado_por: user.id,
+    }));
+
+    const { error: erroMedicoes } = await supabase
+      .from("tarefa_medicoes")
+      .insert(medicoesInsert);
+
+    if (erroMedicoes) {
+      console.error("[tarefas] falha ao inserir medicoes:", erroMedicoes);
+    }
   }
 
   const novoResponsavel = resultado.data.responsavel_id;

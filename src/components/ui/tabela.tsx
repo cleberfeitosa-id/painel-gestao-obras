@@ -1,12 +1,14 @@
 import { type HTMLAttributes, type TableHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-interface TabelaWrapperProps extends HTMLAttributes<HTMLDivElement> {}
+interface TabelaWrapperProps extends TableHTMLAttributes<HTMLTableElement> {}
 
 export function Tabela({ className, children, ...resto }: TabelaWrapperProps) {
   return (
-    <div className={cn("w-full overflow-x-auto", className)} {...resto}>
-      {children}
+    <div className="w-full overflow-x-auto">
+      <table className={cn("w-full text-left text-sm", className)} {...resto}>
+        {children}
+      </table>
     </div>
   );
 }
@@ -87,11 +89,11 @@ export function Linha({
   );
 }
 
-export function Celula({
-  className,
-  children,
-  ...resto
-}: TableHTMLAttributes<HTMLTableCellElement>) {
+interface CelulaProps extends TableHTMLAttributes<HTMLTableCellElement> {
+  colSpan?: number;
+}
+
+export function Celula({ className, children, ...resto }: CelulaProps) {
   return (
     <td
       className={cn("px-4 py-3 text-sm text-superficie-700", className)}

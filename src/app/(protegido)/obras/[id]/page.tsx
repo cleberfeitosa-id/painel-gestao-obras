@@ -11,6 +11,7 @@ import {
   Clock,
   Hammer,
   Users,
+  Ruler,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_OBRA, STATUS_TAREFA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
@@ -30,6 +31,7 @@ import type {
   PerfilRow,
   PlantaRow,
   TarefaRow,
+  PapelUsuario,
 } from "@/lib/supabase/database.types";
 
 interface ObraComResponsavel extends ObraRow {
@@ -48,6 +50,21 @@ async function buscarObra(id: string) {
     .eq("id", id)
     .single();
   return data as ObraComResponsavel | null;
+}
+
+async function buscarPapel(): Promise<PapelUsuario | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: perfil } = await supabase
+    .from("perfis")
+    .select("papel")
+    .eq("id", user.id)
+    .single();
+  return perfil?.papel ?? null;
 }
 
 async function buscarDados(id: string) {
@@ -83,7 +100,12 @@ export default async function DetalheObraPage({
 
   if (!obra) notFound();
 
-  const { plantas, tarefas } = await buscarDados(id);
+  const [papel, { plantas, tarefas }] = await Promise.all([
+    buscarPapel(),
+    buscarDados(id),
+  ]);
+
+  const podeMedir = papel === "admin" || papel === "gestor";
 
   const porStatus = {
     pendente: 0,
@@ -141,6 +163,14 @@ export default async function DetalheObraPage({
                 Nova tarefa
               </Botao>
             </Link>
+            {podeMedir && (
+              <Link href={`/obras/${obra.id}/medicoes`}>
+                <Botao variante="contorno">
+                  <Ruler className="h-4 w-4" />
+                  Medição
+                </Botao>
+              </Link>
+            )}
             <Link href={`/obras/${obra.id}/executores`}>
               <Botao variante="contorno">
                 <Users className="h-4 w-4" />

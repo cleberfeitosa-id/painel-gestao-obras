@@ -35,6 +35,12 @@ interface ListaTarefasProps {
   supervisores: Pick<PerfilRow, "id" | "nome">[];
   executores: Pick<ExecutorRow, "id" | "nome">[];
   tags: { id: string; nome: string }[];
+  catalogoPrecos: {
+    id: string;
+    nome: string;
+    unidade: string;
+    medicoes: { id: string; titulo: string; obra_id: string };
+  }[];
 }
 
 const COR_PRAZO: Record<string, string> = {
@@ -53,6 +59,7 @@ export function ListaTarefas({
   supervisores,
   executores,
   tags,
+  catalogoPrecos,
 }: ListaTarefasProps) {
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [recolhidos, setRecolhidos] = useState<Set<string>>(new Set());
@@ -329,11 +336,12 @@ export function ListaTarefas({
           </div>
           <div className="flex items-center gap-2">
             <BotaoEdicaoEmLote
-              tarefaIds={Array.from(selecionadas)}
+              tarefasSelecionadas={tarefas.filter(t => selecionadas.has(t.id))}
               responsaveis={responsaveis}
               supervisores={supervisores}
               executores={executores}
               tags={tags}
+              catalogoPrecos={catalogoPrecos}
               aoConcluir={limparSelecao}
             />
           </div>
@@ -342,8 +350,7 @@ export function ListaTarefas({
 
       <Cartao className="hidden lg:block">
         <Tabela>
-          <table className="w-full">
-            <Cabecalho>
+          <Cabecalho>
               <LinhaCabecalho>
                 <CelulaCabecalho className="w-12 text-center">
                   <input
@@ -407,7 +414,6 @@ export function ListaTarefas({
                 );
               })}
             </Corpo>
-          </table>
         </Tabela>
       </Cartao>
 

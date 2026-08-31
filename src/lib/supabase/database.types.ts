@@ -62,6 +62,54 @@ export type Database = {
           },
         ]
       }
+      catalogo_precos: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          criado_por: string | null
+          id: string
+          medicao_id: string
+          nome: string
+          unidade: string
+          valor_unitario: number
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          medicao_id: string
+          nome: string
+          unidade?: string
+          valor_unitario: number
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          medicao_id?: string
+          nome?: string
+          unidade?: string
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalogo_precos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalogo_precos_medicao_id_fkey"
+            columns: ["medicao_id"]
+            isOneToOne: false
+            referencedRelation: "medicoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tarefa_aprovacoes: {
         Row: {
           criado_em: string
@@ -152,6 +200,51 @@ export type Database = {
             columns: ["planta_id"]
             isOneToOne: false
             referencedRelation: "plantas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medicoes: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          criado_por: string | null
+          id: string
+          obra_id: string
+          titulo: string
+          valor_contrato: number | null
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          obra_id: string
+          titulo: string
+          valor_contrato?: number | null
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          obra_id?: string
+          titulo?: string
+          valor_contrato?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medicoes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medicoes_obra_id_fkey"
+            columns: ["obra_id"]
+            isOneToOne: false
+            referencedRelation: "obras"
             referencedColumns: ["id"]
           },
         ]
@@ -540,6 +633,55 @@ export type Database = {
           },
         ]
       }
+      tarefa_medicoes: {
+        Row: {
+          catalogo_id: string
+          criado_em: string
+          criado_por: string | null
+          id: string
+          quantidade: number
+          tarefa_id: string
+        }
+        Insert: {
+          catalogo_id: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          quantidade: number
+          tarefa_id: string
+        }
+        Update: {
+          catalogo_id?: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          quantidade?: number
+          tarefa_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_medicoes_catalogo_id_fkey"
+            columns: ["catalogo_id"]
+            isOneToOne: false
+            referencedRelation: "catalogo_precos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_medicoes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_medicoes_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tarefas: {
         Row: {
           aprovacao: Database["public"]["Enums"]["aprovacao_tarefa"]
@@ -743,6 +885,14 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["papel_usuario"]
       }
+      valor_executado_medicao: {
+        Args: { p_medicao_id: string }
+        Returns: number
+      }
+      valor_pendente_medicao: {
+        Args: { p_medicao_id: string }
+        Returns: number
+      }
     }
     Enums: {
       aprovacao_tarefa: "pendente" | "aprovado" | "reprovado"
@@ -915,10 +1065,13 @@ export type RegiaoPdf = { vertices: PontoPdf[] };
 
 export type PerfilRow = Tabelas<"perfis">;
 export type ObraRow = Tabelas<"obras">;
+export type MedicaoRow = Tabelas<"medicoes">;
 export type PlantaRow = Tabelas<"plantas">;
+export type CatalogoPrecoRow = Tabelas<"catalogo_precos">;
 export type ExecutorRow = Tabelas<"executores">;
 export type LoteRascunhoRow = Tabelas<"lote_rascunhos">;
 export type TarefaAprovacaoRow = Tabelas<"tarefa_aprovacoes">;
+export type TarefaMedicaoRow = Tabelas<"tarefa_medicoes">;
 export type TarefaComentarioRow = Tabelas<"tarefa_comentarios">;
 export type TarefaAnexoRow = Tabelas<"tarefa_anexos">;
 export type NotificacaoRow = Tabelas<"notificacoes">;

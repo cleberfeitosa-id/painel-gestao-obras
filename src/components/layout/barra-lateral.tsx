@@ -11,6 +11,7 @@ import {
   FileText,
   Users,
   Building2,
+  Ruler,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,18 +21,32 @@ interface BarraLateralProps {
   papel: PapelUsuario;
 }
 
-const itensNavegacao = [
-  { href: "/painel", rotulo: "Painel", icone: LayoutDashboard },
-  { href: "/obras", rotulo: "Obras", icone: HardHat },
-  { href: "/plantas", rotulo: "Plantas", icone: FileText },
-  { href: "/tarefas", rotulo: "Tarefas", icone: CheckSquare },
-  { href: "/calendario", rotulo: "Calendario", icone: Calendar },
-  { href: "/relatorios", rotulo: "Relatorios", icone: FileText },
-];
-
 export function BarraLateral({ papel }: BarraLateralProps) {
   const pathname = usePathname();
   const [aberto, setAberto] = useState(false);
+
+  const obraMatch = pathname.match(/^\/obras\/([^/]+)/);
+  const obraId = obraMatch?.[1] ?? null;
+
+  const itensNavegacao = [
+    { href: "/painel", rotulo: "Painel", icone: LayoutDashboard },
+    { href: "/obras", rotulo: "Obras", icone: HardHat },
+    {
+      href: obraId ? `/obras/${obraId}/medicoes` : "/obras",
+      chave: "medicoes",
+      rotulo: "Medicoes",
+      icone: Ruler,
+    },
+    { href: "/plantas", rotulo: "Plantas", icone: FileText },
+    { href: "/tarefas", rotulo: "Tarefas", icone: CheckSquare },
+    { href: "/calendario", rotulo: "Calendario", icone: Calendar },
+    { href: "/relatorios", rotulo: "Relatorios", icone: FileText },
+  ];
+
+  function estaAtivo(href: string) {
+    if (href === "/obras" && pathname.includes("/medicoes")) return false;
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
 
   const itens = [
     ...itensNavegacao,
@@ -39,10 +54,6 @@ export function BarraLateral({ papel }: BarraLateralProps) {
       ? [{ href: "/usuarios", rotulo: "Usuarios", icone: Users }]
       : []),
   ];
-
-  function estaAtivo(href: string) {
-    return pathname === href || pathname.startsWith(`${href}/`);
-  }
 
   const conteudoNavegacao = (
     <nav className="flex flex-1 flex-col px-2 py-3">
@@ -62,9 +73,10 @@ export function BarraLateral({ papel }: BarraLateralProps) {
         {itens.map((item) => {
           const Icone = item.icone;
           const ativo = estaAtivo(item.href);
+          const key = "chave" in item ? item.chave : item.href;
 
           return (
-            <li key={item.href}>
+            <li key={key}>
               <Link
                 href={item.href}
                 onClick={() => setAberto(false)}

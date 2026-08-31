@@ -9,6 +9,7 @@ import type {
   ExecutorRow,
   ObraRow,
   PerfilRow,
+  TarefaMedicaoRow,
   TarefaRow,
 } from "@/lib/supabase/database.types";
 
@@ -26,6 +27,15 @@ async function buscarDados(id: string) {
       supabase.from("tags_tarefa").select("id, nome").order("nome"),
       supabase.from("tarefas").select("titulo").neq("id", id).order("titulo"),
     ]);
+
+  const obraId = tarefa?.obra_id;
+  const [{ data: catalogo }, { data: medicoesDb }] = await Promise.all([
+    obraId
+      ? supabase.from("catalogo_precos").select("id, nome, unidade, medicoes!inner(id, titulo, obra_id)").eq("medicoes.obra_id", obraId).order("nome")
+      : Promise.resolve({ data: [] as { id: string; nome: string; unidade: string; medicoes: { id: string; titulo: string; obra_id: string } }[] }),
+    supabase.from("tarefa_medicoes").select("catalogo_id, quantidade").eq("tarefa_id", id),
+  ]);
+
   return {
     tarefa: (tarefa ?? null) as TarefaRow | null,
     obras: (obras ?? []) as Pick<ObraRow, "id" | "nome">[],
@@ -39,6 +49,13 @@ async function buscarDados(id: string) {
     titulosExistentes: Array.from(
       new Set((titulos ?? []).map((t) => t.titulo)),
     ).sort((a, b) => a.localeCompare(b)),
+    catalogoPrecos: (catalogo ?? []) as {
+      id: string;
+      nome: string;
+      unidade: string;
+      medicoes: { id: string; titulo: string; obra_id: string };
+    }[],
+    medicoes: (medicoesDb ?? []) as Pick<TarefaMedicaoRow, "catalogo_id" | "quantidade">[],
   };
 }
 
@@ -56,6 +73,8 @@ export default async function EditarTarefaPage({
     supervisores,
     tags,
     titulosExistentes,
+    catalogoPrecos,
+    medicoes,
   } = await buscarDados(id);
 
   if (!tarefa) notFound();
@@ -92,6 +111,8 @@ export default async function EditarTarefaPage({
             tags={tags}
             titulosExistentes={titulosExistentes}
             tarefa={tarefa}
+            catalogoPrecos={catalogoPrecos}
+            medicoes={medicoes}
           />
         </CartaoConteudo>
       </Cartao>
