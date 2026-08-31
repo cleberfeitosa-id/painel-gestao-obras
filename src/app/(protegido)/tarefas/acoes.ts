@@ -1352,18 +1352,25 @@ export async function excluirAnexo(
   const user = await usuarioAtual();
   if (!user) return { erro: "Sessao expirada. Entre novamente." };
 
-  const papel = await papelDoUsuario(user.id);
-  const podeExcluir = eGestor(papel);
+  const { tarefa, podeEscrever } = await carregarTarefaComPermissao(tarefaId);
+  if (!tarefa) return { erro: "Tarefa nao encontrada." };
 
+  const papel = await papelDoUsuario(user.id);
   const supabase = await createClient();
-  let query = supabase.from("tarefa_anexos").select("*").eq("id", anexoId);
-  if (!podeExcluir) {
-    query = query.eq("enviado_por", user.id);
-  }
-  const { data: anexo } = await query.single();
+  const { data: anexo } = await supabase
+    .from("tarefa_anexos")
+    .select("*")
+    .eq("id", anexoId)
+    .eq("tarefa_id", tarefaId)
+    .maybeSingle();
 
   if (!anexo) {
-    return { erro: "Anexo nao encontrado ou sem permissao." };
+    return { erro: "Anexo nao encontrado." };
+  }
+
+  const autorizado = eGestor(papel) || podeEscrever || anexo.enviado_por === user.id;
+  if (!autorizado) {
+    return { erro: "Voce nao tem permissao para excluir este anexo." };
   }
 
   // Remove o objeto do Storage e depois a linha do banco.
@@ -1373,12 +1380,14 @@ export async function excluirAnexo(
     console.error("[tarefas] falha ao remover arquivo do storage:", erro);
   }
 
-  const { error } = await supabase.from("tarefa_anexos").delete().eq("id", anexoId);
+  const admin = createAdminClient();
+  const { error } = await admin.from("tarefa_anexos").delete().eq("id", anexoId);
   if (error) {
     return { erro: "Nao foi possivel excluir o anexo. Tente novamente." };
   }
 
   revalidatePath(`/tarefas/${tarefaId}`);
+  revalidatePath("/tarefas");
   return {};
 }
 

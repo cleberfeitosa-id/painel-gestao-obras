@@ -7,7 +7,6 @@ import {
   Video,
   FileText,
   Trash2,
-  X,
 } from "lucide-react";
 import { Botao, Modal, EstadoVazio } from "@/components/ui";
 import { formatarTamanho } from "@/lib/utils";
@@ -57,7 +56,7 @@ export function Anexos({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploads, setUploads] = useState<ArquivoEmUpload[]>([]);
   const [momento, setMomento] = useState<MomentoAnexo>("andamento");
-  const [imagemAberta, setImagemAberta] = useState<string | null>(null);
+  const [imagemAberta, setImagemAberta] = useState<{ url: string; anexo: AnexoComAutor } | null>(null);
   const [excluirId, setExcluirId] = useState<string | null>(null);
   const [pendente, iniciarTransicao] = useTransition();
 
@@ -237,14 +236,14 @@ export function Anexos({
                       {url ? (
                         <button
                           type="button"
-                          onClick={() => setImagemAberta(url)}
-                          className="block aspect-square w-full overflow-hidden rounded-lg border border-borda"
+                          onClick={() => setImagemAberta({ url, anexo })}
+                          className="block aspect-square w-full overflow-hidden rounded-lg border border-borda focus:outline-none focus:ring-2 focus:ring-azul-500"
                           aria-label={`Ampliar ${anexo.nome_arquivo}`}
                         >
                           <img
                             src={url}
                             alt={anexo.nome_arquivo}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
                           />
                         </button>
                       ) : (
@@ -256,7 +255,7 @@ export function Anexos({
                         <button
                           type="button"
                           onClick={() => setExcluirId(anexo.id)}
-                          className="absolute right-1 top-1 rounded-lg bg-superficie-900/70 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          className="absolute right-1 top-1 rounded-lg bg-superficie-900/80 p-1.5 text-white shadow transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-perigo focus:opacity-100"
                           aria-label="Excluir imagem"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -365,15 +364,43 @@ export function Anexos({
       <Modal
         aberto={imagemAberta !== null}
         aoFechar={() => setImagemAberta(null)}
-        titulo="Imagem"
+        titulo={imagemAberta?.anexo.nome_arquivo ?? "Imagem"}
         tamanho="xl"
       >
         {imagemAberta && (
-          <img
-            src={imagemAberta}
-            alt="Imagem ampliada"
-            className="w-full rounded-lg"
-          />
+          <div className="space-y-4">
+            <div className="flex max-h-[70vh] items-center justify-center overflow-hidden rounded-lg bg-superficie-900/5">
+              <img
+                src={imagemAberta.url}
+                alt={imagemAberta.anexo.nome_arquivo}
+                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-borda pt-3 text-xs text-superficie-500">
+              <div>
+                <span>{formatarTamanho(imagemAberta.anexo.tamanho_bytes)}</span>
+                <span> · </span>
+                <span>{MOMENTO_ANEXO[imagemAberta.anexo.momento].rotulo}</span>
+                <span> · </span>
+                <span>{imagemAberta.anexo.enviado_por_nome ?? "Usuario"}</span>
+              </div>
+              {podeExcluirAnexo(imagemAberta.anexo) && (
+                <Botao
+                  type="button"
+                  variante="perigo"
+                  tamanho="sm"
+                  onClick={() => {
+                    const id = imagemAberta.anexo.id;
+                    setImagemAberta(null);
+                    setExcluirId(id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Excluir imagem
+                </Botao>
+              )}
+            </div>
+          </div>
         )}
       </Modal>
 
@@ -391,7 +418,7 @@ export function Anexos({
           >
             Cancelar
           </Botao>
-          <Botao type="button" variante="perigo" onClick={confirmarExclusao}>
+          <Botao type="button" variante="perigo" onClick={confirmarExclusao} carregando={pendente}>
             Excluir
           </Botao>
         </div>
