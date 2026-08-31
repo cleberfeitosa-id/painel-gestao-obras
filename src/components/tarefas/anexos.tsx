@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import {
   Upload,
+  Camera,
   Image as ImageIcon,
   Video,
   FileText,
@@ -13,6 +14,7 @@ import { Botao, Modal, EstadoVazio } from "@/components/ui";
 import { formatarTamanho } from "@/lib/utils";
 import { MOMENTO_ANEXO } from "@/lib/domain/rotulos";
 import { comprimirImagem, eImagemComprimivel } from "@/lib/compressao-imagem";
+import { CameraModal } from "@/components/tarefas/camera-modal";
 import {
   assinarUploadAnexo,
   registrarAnexo,
@@ -61,7 +63,9 @@ export function Anexos({
   usuarioId,
   podeEscrever,
 }: AnexosProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputFileRef = useRef<HTMLInputElement>(null);
+  const inputCameraRef = useRef<HTMLInputElement>(null);
+  const [cameraAberta, setCameraAberta] = useState(false);
   const [uploads, setUploads] = useState<ArquivoEmUpload[]>([]);
   const [momento, setMomento] = useState<MomentoAnexo>("andamento");
   const [imagemAberta, setImagemAberta] = useState<{ url: string; anexo: AnexoComAutor } | null>(null);
@@ -176,6 +180,26 @@ export function Anexos({
     }
   }
 
+  async function aoCapturarFotoDireta(arquivo: File) {
+    const item = {
+      id: gerarId(),
+      arquivo,
+      nome: arquivo.name,
+    };
+
+    setUploads((atual) => [
+      ...atual,
+      {
+        id: item.id,
+        nome: item.nome,
+        progresso: 0,
+        statusTexto: "Aguardando...",
+      },
+    ]);
+
+    await enviarArquivo(item);
+  }
+
   function confirmarExclusao() {
     if (!excluirId) return;
     const id = excluirId;
@@ -209,23 +233,45 @@ export function Anexos({
                 ))}
               </select>
             </div>
-            <Botao
-              type="button"
-              variante="primario"
-              onClick={() => inputRef.current?.click()}
-            >
-              <Upload className="h-4 w-4" />
-              Enviar arquivos
-            </Botao>
+            <div className="flex flex-wrap items-center gap-2">
+              <Botao
+                type="button"
+                variante="primario"
+                onClick={() => setCameraAberta(true)}
+              >
+                <Camera className="h-4 w-4" />
+                Tirar foto
+              </Botao>
+              <Botao
+                type="button"
+                variante="contorno"
+                onClick={() => inputFileRef.current?.click()}
+              >
+                <Upload className="h-4 w-4" />
+                Galeria / Arquivos
+              </Botao>
+            </div>
           </div>
+          <p className="text-[11px] text-superficie-500">
+            Tire fotos diretamente na tela ou selecione fotos e arquivos da galeria. Imagens são otimizadas automaticamente antes do envio.
+          </p>
           <input
-            ref={inputRef}
+            ref={inputFileRef}
             type="file"
             multiple
             accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
             onChange={aoSelecionar}
             className="hidden"
             aria-label="Selecionar arquivos para enviar"
+          />
+          <input
+            ref={inputCameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={aoSelecionar}
+            className="hidden"
+            aria-label="Tirar foto com a câmera"
           />
 
           {uploads.length > 0 && (
@@ -483,6 +529,13 @@ export function Anexos({
           </Botao>
         </div>
       </Modal>
+
+      <CameraModal
+        aberto={cameraAberta}
+        aoFechar={() => setCameraAberta(false)}
+        aoCapturar={aoCapturarFotoDireta}
+        aoUsarArquivoAlternativo={() => inputFileRef.current?.click()}
+      />
     </div>
   );
 }
