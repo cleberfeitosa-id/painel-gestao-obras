@@ -172,7 +172,9 @@ export function MiniVisualizadorPlanta({
   const [escala, setEscala] = useState(1.5);
   const [renderEscala, setRenderEscala] = useState(1.5);
   const [dpr] = useState(() =>
-    typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio) : 1,
+    typeof window !== "undefined"
+      ? Math.min(1.2, window.devicePixelRatio || 1)
+      : 1,
   );
   const [dimensoes, setDimensoes] = useState<DimensoesPagina | null>(null);
   const [erroDocumento, setErroDocumento] = useState<string | null>(null);
