@@ -12,6 +12,7 @@ import {
 import { Botao, Modal, EstadoVazio } from "@/components/ui";
 import { formatarTamanho } from "@/lib/utils";
 import { MOMENTO_ANEXO } from "@/lib/domain/rotulos";
+import { comprimirImagem, eImagemComprimivel } from "@/lib/compressao-imagem";
 import {
   assinarUploadAnexo,
   registrarAnexo,
@@ -36,8 +37,10 @@ interface AnexosProps {
 }
 
 type ArquivoEmUpload = {
+  id: string;
   nome: string;
   progresso: number;
+  statusTexto?: string;
   erro?: string;
 };
 
@@ -45,6 +48,10 @@ function classificarTipo(mime: string): TipoAnexo {
   if (mime.startsWith("image/")) return "imagem";
   if (mime.startsWith("video/")) return "video";
   return "arquivo";
+}
+
+function gerarId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 export function Anexos({
@@ -65,32 +72,50 @@ export function Anexos({
   const videos = anexos.filter((a) => a.tipo === "video");
   const arquivos = anexos.filter((a) => a.tipo === "arquivo");
 
-  function atualizarUpload(nome: string, mudancas: Partial<ArquivoEmUpload>) {
+  function atualizarUpload(id: string, mudancas: Partial<ArquivoEmUpload>) {
     setUploads((atual) =>
-      atual.map((u) => (u.nome === nome ? { ...u, ...mudancas } : u)),
+      atual.map((u) => (u.id === id ? { ...u, ...mudancas } : u)),
     );
   }
 
-  async function enviarArquivo(arquivo: File) {
-    const nome = arquivo.name;
-    setUploads((atual) => [...atual, { nome, progresso: 0 }]);
+  async function enviarArquivo(itemUpload: { id: string; arquivo: File }) {
+    const { id, arquivo: arquivoOriginal } = itemUpload;
+    let arquivo = arquivoOriginal;
 
     try {
+      if (eImagemComprimivel(arquivoOriginal)) {
+        atualizarUpload(id, {
+          statusTexto: "Otimizando imagem...",
+          progresso: 0,
+        });
+        arquivo = await comprimirImagem(arquivoOriginal, {
+          maxDimensao: 1920,
+          qualidade: 0.82,
+        });
+        atualizarUpload(id, { nome: arquivo.name });
+      }
+
+      atualizarUpload(id, {
+        statusTexto: "Iniciando envio...",
+        progresso: 0,
+      });
+
       const assinatura = await assinarUploadAnexo(tarefaId, arquivo.name);
       if (!assinatura.url || !assinatura.caminho) {
-        atualizarUpload(nome, { erro: assinatura.erro ?? "Falha no upload." });
+        atualizarUpload(id, { erro: assinatura.erro ?? "Falha no upload." });
         return;
       }
 
-      // Upload direto do navegador para o Storage via URL assinada (PUT).
-      // Nunca passa pela funcao serverless, que corta corpos acima de 4,5 MB.
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", assinatura.url!);
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
             const pct = Math.round((e.loaded / e.total) * 100);
-            atualizarUpload(nome, { progresso: pct });
+            atualizarUpload(id, {
+              progresso: pct,
+              statusTexto: pct < 100 ? `Enviando... ${pct}%` : "Processando...",
+            });
           }
         };
         xhr.onload = () => {
@@ -100,6 +125,8 @@ export function Anexos({
         xhr.onerror = () => reject(new Error("Falha de rede"));
         xhr.send(arquivo);
       });
+
+      atualizarUpload(id, { statusTexto: "Registrando anexo..." });
 
       const resultado = await registrarAnexo({
         tarefaId,
@@ -112,22 +139,41 @@ export function Anexos({
       });
 
       if (resultado.erro) {
-        atualizarUpload(nome, { erro: resultado.erro });
+        atualizarUpload(id, { erro: resultado.erro });
         return;
       }
 
-      setUploads((atual) => atual.filter((u) => u.nome !== nome));
+      setUploads((atual) => atual.filter((u) => u.id !== id));
     } catch {
-      atualizarUpload(nome, { erro: "Falha no upload. Tente novamente." });
+      atualizarUpload(id, { erro: "Falha no upload. Tente novamente." });
     }
   }
 
-  function aoSelecionar(e: React.ChangeEvent<HTMLInputElement>) {
+  async function aoSelecionar(e: React.ChangeEvent<HTMLInputElement>) {
     const arquivos = Array.from(e.target.files ?? []);
-    for (const arquivo of arquivos) {
-      void enviarArquivo(arquivo);
-    }
+    if (arquivos.length === 0) return;
+
+    const itensParaUpload = arquivos.map((arquivo) => ({
+      id: gerarId(),
+      arquivo,
+      nome: arquivo.name,
+    }));
+
+    setUploads((atual) => [
+      ...atual,
+      ...itensParaUpload.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        progresso: 0,
+        statusTexto: "Aguardando...",
+      })),
+    ]);
+
     e.target.value = "";
+
+    for (const item of itensParaUpload) {
+      await enviarArquivo(item);
+    }
   }
 
   function confirmarExclusao() {
@@ -186,7 +232,7 @@ export function Anexos({
             <ul className="space-y-2">
               {uploads.map((upload) => (
                 <li
-                  key={upload.nome}
+                  key={upload.id}
                   className="rounded-lg border border-borda px-3 py-2"
                 >
                   <div className="flex items-center justify-between gap-2 text-sm">
@@ -197,7 +243,7 @@ export function Anexos({
                       <span className="text-xs text-perigo">{upload.erro}</span>
                     ) : (
                       <span className="text-xs text-superficie-500">
-                        {upload.progresso}%
+                        {upload.statusTexto ?? `${upload.progresso}%`}
                       </span>
                     )}
                   </div>
