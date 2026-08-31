@@ -113,6 +113,11 @@ export function BotaoEdicaoEmLote({
             <Campo rotulo="Data planejada" name="data_planejada" type="date" defaultValue="" />
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo rotulo="Data de inicio" name="data_inicio" type="date" defaultValue="" />
+            <Campo rotulo="Data de fim" name="data_fim" type="date" defaultValue="" />
+          </div>
+
           <div className="flex justify-end gap-2 pt-4">
             <Botao type="button" variante="fantasma" onClick={() => setAberto(false)} disabled={pending}>
               Cancelar

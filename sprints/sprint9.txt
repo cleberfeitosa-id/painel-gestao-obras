@@ -1,0 +1,19 @@
+
+Implemente as seguintes melhorias no projeto:
+
+1. Módulo de medição:
+    O módulo de medição é um módulo que será utilizado para registrar as medições de tarefas que foram realizadas por equipes.
+    - Acesso a este módulo deve ser restrito a usuarios do tipo "gestor" e admin;
+    - Deve ser possível registrar valores de medição para tarefas.
+    - Deve ser possível identificar uma quantidade e unidade que cada tarefa estará vinculada, por exemplo, pode se tratar de uma tarefa de foxação de eletrocalha, onde a quantidade será x metros e a unidade metros, mas pode ser também que seja fixação de caixinha 4x2, onde a quantidade pode ser uma e a unidade UN.
+    - Tarefas de mesmo nome pode ser agrupadas de forma que um valor para uma tarefa se reflita em todas as tarefas com o mesmo nome.
+    - À medida que as tarefas forem sendo aprovadas, o valor a ela respectivo deve ir sendo somado para que se tenha uma visão de progressão de completude e valor a remunerar.
+    - Deve ser possível registrar o valor total do contrato e o valor pendente baseado na quantidade e valor de tarefas já realizadas.
+    - Também deve ser possível visualizar o valor total ja cadastrado para as tarefas existentes caso elas sejam completadas.
+    - Tudo deve ser filtrável por planta, obra, indivíduo associado, tag, período de tempo.
+
+2. Navegação na tela de plantas:
+    - Deixe a navegação de zoom mais suave na visualização de plantas e sem transições abruptas;
+    - Os pinos que indicam localização de tarefas devem possuir 70% de transparencia para ser possivel visualizar o que está por trás deles no pdf.
+    - Ao rolar com o mouse sobre o pdf para aplicar zoom, a pagina nao deve rolar junto e vice versa.
+    

@@ -1,0 +1,8 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Visualização de calendário.
+    - Na tela de calendário, deve ser possível visualizar as tarefas em uma visulaização alternativa em gráfico gantt.
+    - As tarefas devem possuir campos que as permitam identificar como requisitos para outras tarefas ou como dependentes de outras tarefas.
+    - Deve ser possível realizar essa definicão de dependencia ou edição em bulk.
+    - Tarefas de mesmo nome podem aparecer agrupadas na visualização, por exemplo, se existem uma grande quantidade de tarefas de chumbamento de caixinhas 4x2 e eletrodutos, na visualização em gantt deve aparecer apenas uma barra com essa identificação e a medida que tarefas com esse nome forem se dando como concluidas e aprovadas, a barra deve ir sendo preenchida percentualmente proporcioal a quantidade de tarefas concluidas e aprovadas em relação ao total de tarefas com esse nome. 
+    - A barra acima citada deve ter o seu tamanho definido pelo prazo total que a tarefa levará para ser concluida, com base na data de inicio e fim informada na tarefa.

@@ -1,0 +1,10 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Navegação de tarefas:
+    - Faça com que ao retornar de uma tarefa criada, a página de destino seja a pagina da planta a qual aquela tarefa está associada, ou crie um botao de cadastrar nova tarefa.
+
+2. Organização de layout:
+    - Reduza para um pouco mais da metade o tamanho da barra de menus lateral para termos mais espaço útil de visualização das plantas.
+    - Durante a fase de confirmação de criação de tarefas (pinos e regiões), deixe o menu de confirmação na barra lateral direita antes ou após a caixa de tarefas da página, de forma a facilitar a identificação das opções e evitar necessidade de rolagem da página.
+    - Reduza a participação visual dos elementos acima da planta, de forma a dar mais destaque e visibilidade para trabalhar com a planta.
+    

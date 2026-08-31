@@ -1,0 +1,10 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Inclusão de novas tarefas:
+    - Durante a criação de uma tarefa através de pino ou região, deve ser possível ajustar a posição do pino na planta ou a dimensão da região, antes de partir para criação da tarefa.
+    - A opção de um popup informando as dimensões da região deve ser removida, e em seu lugar um label deve aparecer próximo do mouse informando as dimensões da região enquanto esta está sendo criada. Ao concluir a criação, o label deve desaparecer.
+    - Deve prosseguir para a página de criação da tarefa apenas após confirmar a posicao do pino ou as dimensões da região.
+    
+2. Gestão de tarefas:
+    - Deve ser possível excluir tarefas na página de tarefas e na página de cada tarefa individual.
+    - Após criada uma tarefa, deve ser possível associa-la a um pino ou regiao na planta.

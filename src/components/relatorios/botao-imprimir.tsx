@@ -5,8 +5,6 @@ import { useReactToPrint } from "react-to-print";
 import { Printer } from "lucide-react";
 import { Botao } from "@/components/ui";
 
-// A impressao so abre o dialogo depois que todas as fotos terminam de
-// carregar; caso contrario o PDF sai com as imagens em branco.
 function aguardarImagens(container: HTMLElement | null): Promise<void> {
   if (!container) return Promise.resolve();
   const imagens = Array.from(container.querySelectorAll("img"));
@@ -28,7 +26,7 @@ export function BotaoImprimir({ children }: { children: ReactNode }) {
 
   const handlePrint = useReactToPrint({
     contentRef: ref,
-    documentTitle: "RDO - Relatório Diário de Obra",
+    documentTitle: "RDO - Relatório de Obra",
     onBeforePrint: () => aguardarImagens(ref.current),
   });
 

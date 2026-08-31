@@ -14,7 +14,7 @@ import type {
 
 async function buscarDados(id: string) {
   const supabase = await createClient();
-  const [{ data: tarefa }, { data: obras }, { data: perfis }, { data: executores }, { data: tags }] =
+  const [{ data: tarefa }, { data: obras }, { data: perfis }, { data: executores }, { data: tags }, { data: titulos }] =
     await Promise.all([
       supabase.from("tarefas").select("*").eq("id", id).single(),
       supabase.from("obras").select("id, nome").order("nome"),
@@ -24,6 +24,7 @@ async function buscarDados(id: string) {
         .select("id, nome, obra_id, ativo")
         .order("nome"),
       supabase.from("tags_tarefa").select("id, nome").order("nome"),
+      supabase.from("tarefas").select("titulo").neq("id", id).order("titulo"),
     ]);
   return {
     tarefa: (tarefa ?? null) as TarefaRow | null,
@@ -35,6 +36,9 @@ async function buscarDados(id: string) {
       "id" | "nome" | "obra_id" | "ativo"
     >[],
     tags: (tags ?? []) as { id: string; nome: string }[],
+    titulosExistentes: Array.from(
+      new Set((titulos ?? []).map((t) => t.titulo)),
+    ).sort((a, b) => a.localeCompare(b)),
   };
 }
 
@@ -44,8 +48,15 @@ export default async function EditarTarefaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { tarefa, obras, responsaveis, executores, supervisores, tags } =
-    await buscarDados(id);
+  const {
+    tarefa,
+    obras,
+    responsaveis,
+    executores,
+    supervisores,
+    tags,
+    titulosExistentes,
+  } = await buscarDados(id);
 
   if (!tarefa) notFound();
 
@@ -79,6 +90,7 @@ export default async function EditarTarefaPage({
             executores={executores}
             supervisores={supervisores}
             tags={tags}
+            titulosExistentes={titulosExistentes}
             tarefa={tarefa}
           />
         </CartaoConteudo>

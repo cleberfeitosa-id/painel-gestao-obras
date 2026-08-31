@@ -1,0 +1,15 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Cadastro de novas tarefas:
+    - Deve ser possível durante o cadastro de uma nova tarefa na página de plantas, que pinos sejam posicionados sobre regioes sem que o clique abra a pagena da tarefa associada àquela regiao, e da mesma forma regioes possam ser posicionadas sobre pinos ou regioes, preservando ao final a possibilidade de clicar nos pinos e regioes e abrir a pagina da tarefa. Com isso deve ser possivel que pinos fiquem sobre regioes e vice-versa.
+
+2. Seleção de taferas:
+    - Na tela de tarefas, deve ser possível selecionar várias tarefas ao mesmo tempo e executar ações sobre elas, inclusive edição em bulk.
+    - Tarefas com mesmo nome devem ser agrupadas por nome na lista de tarefas, de forma que ao selecionar uma tarefa, todas as tarefas com o mesmo nome sejam selecionadas.
+    - Deve ser possível filtrar tarefas por planta a qual estão associadas.
+
+
+3. Composição de tarefas e campos de tarefas
+    - Tarefas devem ter um campo de tag que deve ser filtrável na tela de tarefas e na tela de plantas. Campo esse que poderá ser usado para filtro.
+    - As tags serão do tipo dropdown com opção de inclusão de novas tags pelo usuário responsável pela tarefa. Opcionalmente o usuário supervisor poderá adicionar ou remover tags de usuários responsáveis. As tags devem ser únicas.
+    

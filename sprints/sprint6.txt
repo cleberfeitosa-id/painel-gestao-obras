@@ -1,0 +1,11 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Acesso a tarefas na página de plantas:
+    - Deve ser possível clicar no indicador de tarefa na planta (seja pino ou região) e editar a tarefa associada ao indicador.
+    - Tambem ao fazer hover do mouse sobre a lista de tarefas ou sobre o indicador na planta deve ser possivel ver um retangulo tracejado contornando o indicador na planta ou um destaque na lista de tarefas.
+
+2. Gestão de tarefas:
+    - Deve ser possível filtrar na tela de tarefas por supervisor e por executor, além de por responsável.
+    - A tabela de tarefas deve exibir o supervisor e o executor de cada tarefa.
+    - Uma vez aprovada uma tarefa, deve ser possível que o responsável pela tarefa mude seu status.
+    - Apenas o responsável pela tarefa pode aprovar uma tarefa.

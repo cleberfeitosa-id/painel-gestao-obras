@@ -1,0 +1,13 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Navegação na planta:
+   - O visualizado de plantas deve reconhecer gestos de movimentação e zoom para facilitar a visualização das plantas.
+   - Ao criar uma tarefa do tipo pino ou região, deve ser possível confirmar a localização e as dimensões da região no caso de região, antes de partir para criação da tarefa.
+   - As regiões devem possuir apenas borda visivel com preenchimento transparente, de modo que não atrapalhe a visualização do conteúdo da planta. 
+   - A cor das bordas, junto com as informações da dica de ferramenta ao passar o mouse por cima, devem sempre indicar o status da tarefa:
+     - Não iniciado: cinza
+     - Em execução: azul
+     - Concluído: verde
+     - Aprovado: verde escuro
+     - Reprovado: vermelho
+   

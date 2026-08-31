@@ -125,13 +125,44 @@ body {
     display: none !important;
   }
 
+  /* Reduz o consumo de tinta no layout geral, mas preserva as cores dos
+     marcadores de atividades sobre a planta (necessarias p/ identificar
+     pinos/regioes no relatorio impresso/PDF). */
   *,
   *::before,
   *::after {
-    background: transparent !important;
     box-shadow: none !important;
     text-shadow: none !important;
     color: #000 !important;
+  }
+
+  *:not(.marcador-planta-badge),
+  *:not(.marcador-planta-badge)::before,
+  *:not(.marcador-planta-badge)::after {
+    background: transparent !important;
+  }
+
+  /* Reaplica as cores dos numeros das atividades sobre a planta (contorno
+     preto escuro + fundo colorido por situacao + texto branco) para bom
+     contraste no PDF. */
+  .marcador-planta-badge {
+    color: #fff !important;
+    border: 1.5px solid #000 !important;
+  }
+  .marcador-planta-badge.bg-emerald-500 {
+    background: #059669 !important;
+  }
+  .marcador-planta-badge.bg-sky-500 {
+    background: #0284c7 !important;
+  }
+  .marcador-planta-badge.bg-amber-500 {
+    background: #d97706 !important;
+  }
+  .marcador-planta-badge.bg-red-500 {
+    background: #dc2626 !important;
+  }
+  .marcador-planta-badge.bg-slate-400 {
+    background: #64748b !important;
   }
 
   @page {
@@ -141,6 +172,47 @@ body {
 
   .quebra-evitar {
     break-inside: avoid;
+  }
+
+  /* Tarefas em duas colunas: compactas, cabendo pelo menos 3 linhas
+     (pares) por pagina A4. */
+  .lista-tarefas {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 4mm !important;
+    padding: 4mm !important;
+  }
+  .lista-tarefas > * {
+    break-inside: avoid;
+    padding: 3mm !important;
+    font-size: 8pt;
+    line-height: 1.35;
+  }
+  .lista-tarefas img {
+    max-height: 45mm;
+  }
+
+  /* Grade de imagens: fotos das tarefas em proporcoes padronizadas (quadrado)
+     e maiores na impressao. Como cada tarefa ja ocupa meia pagina (2
+     colunas), usa-se 3 colunas de fotos por tarefa, de modo que varias caibam
+     em cada pagina A4 do relatorio. */
+  .imprensa-grid-imagens {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 3mm !important;
+  }
+
+  .imprensa-grid-imagens > * {
+    break-inside: avoid;
+  }
+
+  .imprensa-grid-imagens img {
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+  }
+
+  .imprensa-grid-imagens figcaption {
+    font-size: 7pt;
+    line-height: 1.2;
   }
 }
 

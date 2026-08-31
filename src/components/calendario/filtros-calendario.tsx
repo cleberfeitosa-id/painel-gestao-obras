@@ -10,6 +10,7 @@ type Props = {
   obraAtual: string;
   responsavelAtual: string;
   mes: string;
+  vista: string;
 };
 
 export function FiltrosCalendario({
@@ -18,12 +19,14 @@ export function FiltrosCalendario({
   obraAtual,
   responsavelAtual,
   mes,
+  vista,
 }: Props) {
   const router = useRouter();
 
   const aplicar = (chave: "obra" | "responsavel", valor: string) => {
     const params = new URLSearchParams();
     if (mes) params.set("mes", mes);
+    if (vista) params.set("vista", vista);
     if (chave === "obra" && valor) params.set("obra", valor);
     if (chave === "responsavel" && valor) params.set("responsavel", valor);
     const qs = params.toString();

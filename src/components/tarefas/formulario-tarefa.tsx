@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { MapPin } from "lucide-react";
 import { Botao, Campo, AreaTexto, Selecao } from "@/components/ui";
@@ -44,6 +44,7 @@ interface FormularioTarefaProps {
   executores: Pick<ExecutorRow, "id" | "nome" | "obra_id" | "ativo">[];
   supervisores: Pick<PerfilRow, "id" | "nome">[];
   tags?: { id: string; nome: string }[];
+  titulosExistentes?: string[];
   tarefa?: TarefaRow;
   localizacaoInicial?: LocalizacaoInicial;
   localizacoesLote?: LocalizacaoLote[];
@@ -90,6 +91,7 @@ export function FormularioTarefa({
   executores,
   supervisores,
   tags,
+  titulosExistentes,
   tarefa,
   localizacaoInicial,
   localizacoesLote,
@@ -101,6 +103,18 @@ export function FormularioTarefa({
   const [dataPlanejada, setDataPlanejada] = useState(
     tarefa?.data_planejada ?? (tarefa ? "" : hojeChave())
   );
+  // Data de inicio/fim do gantt: preenchidas automaticamente a partir de
+  // dataPlanejada/prazo nas versoes iniciais, mas sobrescritas pelo usuario
+  // se ele editar manualmente (ganttManual impede o auto-sync posterior).
+  const ganttManual = useRef(
+    Boolean(tarefa?.data_inicio || tarefa?.data_fim),
+  );
+  const [dataInicio, setDataInicio] = useState(
+    tarefa?.data_inicio ?? tarefa?.data_planejada ?? ""
+  );
+  const [dataFim, setDataFim] = useState(
+    tarefa?.data_fim ?? tarefa?.prazo ?? ""
+  );
   const [obraId, setObraId] = useState(tarefa?.obra_id ?? obraIdInicial ?? "");
   const [executorId, setExecutorId] = useState(tarefa?.executor_id ?? "");
   
@@ -110,6 +124,10 @@ export function FormularioTarefa({
 
   const isNovaTarefa = !tarefa;
   const hoje = hojeChave();
+
+  const titulosUnicos = titulosExistentes
+    ? Array.from(new Set(titulosExistentes)).sort((a, b) => a.localeCompare(b))
+    : [];
 
   const executoresDaObra = executores.filter(
     (executor) =>
@@ -143,6 +161,7 @@ export function FormularioTarefa({
 
   const handlePrazoChange = (valor: string) => {
     setPrazo(valor);
+    if (!ganttManual.current) setDataFim(valor);
     if (dataPlanejada && valor && dataPlanejada > valor) {
       setDataPlanejada(valor);
     }
@@ -150,9 +169,21 @@ export function FormularioTarefa({
 
   const handleDataPlanejadaChange = (valor: string) => {
     setDataPlanejada(valor);
+    if (!ganttManual.current) setDataInicio(valor);
     if (prazo && valor && valor > prazo) {
       setPrazo(valor);
     }
+  };
+
+  const handleDataInicioChange = (valor: string) => {
+    ganttManual.current = true;
+    setDataInicio(valor);
+    if (dataFim && valor && valor > dataFim) setDataFim(valor);
+  };
+
+  const handleDataFimChange = (valor: string) => {
+    ganttManual.current = true;
+    setDataFim(valor);
   };
 
   const handleCriarTag = async () => {
@@ -237,7 +268,21 @@ export function FormularioTarefa({
         name="titulo"
         defaultValue={tarefa?.titulo ?? ""}
         placeholder="Ex.: Instalar rede hidraulica"
+        list="titulos-existentes"
+        autoComplete="off"
+        dica={
+          titulosUnicos.length > 0
+            ? "Sugestoes de titulos ja cadastrados aparecem ao digitar."
+            : undefined
+        }
       />
+      {titulosUnicos.length > 0 && (
+        <datalist id="titulos-existentes">
+          {titulosUnicos.map((titulo) => (
+            <option key={titulo} value={titulo} />
+          ))}
+        </datalist>
+      )}
 
       <AreaTexto
         rotulo="Descricao"
@@ -395,6 +440,26 @@ export function FormularioTarefa({
           min={isNovaTarefa ? hoje : undefined}
           max={prazo || undefined}
           dica="Data prevista para inicio."
+        />
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Campo
+          rotulo="Data de inicio"
+          name="data_inicio"
+          type="date"
+          value={dataInicio}
+          onChange={(e) => handleDataInicioChange(e.target.value)}
+          dica="Inicio do intervalo no gantt."
+        />
+        <Campo
+          rotulo="Data de fim"
+          name="data_fim"
+          type="date"
+          value={dataFim}
+          onChange={(e) => handleDataFimChange(e.target.value)}
+          min={dataInicio || undefined}
+          dica="Fim do intervalo no gantt."
         />
       </div>
 

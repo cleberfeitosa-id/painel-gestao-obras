@@ -19,8 +19,6 @@ import {
 } from "@/components/relatorios/documento-relatorio";
 import { montarSnapshotsDePlantas } from "@/app/(protegido)/relatorios/snapshots";
 
-// A validacao de calendario usa chaveDia(paraData(valor)) === valor: datas
-// como 2026-02-30 sao normalizadas pelo parseISO e nao passam no retorno.
 const esquemaData = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.")
@@ -32,7 +30,7 @@ const esquemaData = z
 const SELECAO_TAREFA =
   "*, obras!inner(*), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), planta:plantas!tarefas_planta_id_fkey(id, nome), anexos:tarefa_anexos(*), comentarios:tarefa_comentarios(*)";
 
-const SELECAO_ATIVIDADE_DIA =
+const SELECAO_ATIVIDADE =
   "tarefa_id, tarefas!inner(obra_id, responsavel_id, supervisor_id, executor_id, planta_id)";
 
 interface FiltrosRelatorio {
@@ -68,42 +66,20 @@ function aplicarFiltrosAtividade(query: Query, filtros: FiltrosRelatorio) {
   return query;
 }
 
-function EstadoDataInvalida({ descricao }: { descricao: string }) {
-  return (
-    <div className="space-y-6">
-      <Link
-        href="/relatorios"
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-azul-600 hover:text-azul-700"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Voltar aos relatórios
-      </Link>
-      <Cartao>
-        <EstadoVazio
-          icone={<Calendar className="h-8 w-8" />}
-          titulo="Data inválida"
-          descricao={descricao}
-          acao={
-            <Link href="/relatorios">
-              <span className="inline-flex items-center justify-center rounded-lg bg-azul-600 px-4 py-2 text-sm font-medium text-white">
-                Ir para os relatórios
-              </span>
-            </Link>
-          }
-        />
-      </Cartao>
-    </div>
-  );
+function validatePeriodo(inicio: string | undefined, fim: string | undefined) {
+  if (!inicio || !fim) return null;
+  const inicioOk = esquemaData.safeParse(inicio);
+  const fimOk = esquemaData.safeParse(fim);
+  if (!inicioOk.success || !fimOk.success) return null;
+  if (fim < inicio) return null;
+  return { inicio: inicioOk.data, fim: fimOk.data };
 }
 
-export default async function RelatorioDiarioPage({
-  params,
+export default async function RelatorioPeriodoPage({
   searchParams,
 }: {
-  params: Promise<{ data: string }>;
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { data: dataParam } = await params;
   const sp = await searchParams;
   const filtros: FiltrosRelatorio = {
     obra: sp.obra,
@@ -113,17 +89,38 @@ export default async function RelatorioDiarioPage({
     planta: sp.planta,
   };
 
-  const resultado = esquemaData.safeParse(dataParam);
-  if (!resultado.success) {
+  const periodo = validatePeriodo(sp.inicio, sp.fim);
+  if (!periodo) {
     return (
-      <EstadoDataInvalida descricao="O endereço informado não corresponde a uma data válida no formato AAAA-MM-DD." />
+      <div className="space-y-6">
+        <Link
+          href="/relatorios"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-azul-600 hover:text-azul-700"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Voltar aos relatórios
+        </Link>
+        <Cartao>
+          <EstadoVazio
+            icone={<Calendar className="h-8 w-8" />}
+            titulo="Período inválido"
+            descricao="Informe uma data de início e de fim válidas para gerar o relatório de período."
+            acao={
+              <Link href="/relatorios">
+                <span className="inline-flex items-center justify-center rounded-lg bg-azul-600 px-4 py-2 text-sm font-medium text-white">
+                  Ir para os relatórios
+                </span>
+              </Link>
+            }
+          />
+        </Cartao>
+      </div>
     );
   }
 
-  const dataChave = resultado.data;
-  const data = paraData(dataChave);
-  const dataInicio = `${dataChave}T00:00:00`;
-  const dataFim = `${chaveDia(addDays(data, 1))}T00:00:00`;
+  const { inicio, fim } = periodo;
+  const dataInicio = `${inicio}T00:00:00`;
+  const dataFim = `${chaveDia(addDays(paraData(fim), 1))}T00:00:00`;
 
   const supabase = await createClient();
 
@@ -134,15 +131,15 @@ export default async function RelatorioDiarioPage({
     .gte("concluida_em", dataInicio)
     .lt("concluida_em", dataFim);
 
-  let queryAnexosDia = supabase
+  let queryAnexosPeriodo = supabase
     .from("tarefa_anexos")
-    .select(SELECAO_ATIVIDADE_DIA)
+    .select(SELECAO_ATIVIDADE)
     .gte("criado_em", dataInicio)
     .lt("criado_em", dataFim);
 
-  let queryComentariosDia = supabase
+  let queryComentariosPeriodo = supabase
     .from("tarefa_comentarios")
-    .select(SELECAO_ATIVIDADE_DIA)
+    .select(SELECAO_ATIVIDADE)
     .gte("criado_em", dataInicio)
     .lt("criado_em", dataFim);
 
@@ -152,19 +149,22 @@ export default async function RelatorioDiarioPage({
     .neq("status", "concluido");
 
   queryConcluidas = aplicarFiltrosTarefas(queryConcluidas, filtros);
-  queryAnexosDia = aplicarFiltrosAtividade(queryAnexosDia, filtros);
-  queryComentariosDia = aplicarFiltrosAtividade(queryComentariosDia, filtros);
+  queryAnexosPeriodo = aplicarFiltrosAtividade(queryAnexosPeriodo, filtros);
+  queryComentariosPeriodo = aplicarFiltrosAtividade(
+    queryComentariosPeriodo,
+    filtros,
+  );
   queryAbertas = aplicarFiltrosTarefas(queryAbertas, filtros);
 
   const [
     { data: concluidasBrutas },
-    { data: anexosDia },
-    { data: comentariosDia },
+    { data: anexosPeriodo },
+    { data: comentariosPeriodo },
     { count: totalAbertas },
   ] = await Promise.all([
     queryConcluidas,
-    queryAnexosDia,
-    queryComentariosDia,
+    queryAnexosPeriodo,
+    queryComentariosPeriodo,
     queryAbertas,
   ]);
 
@@ -191,8 +191,8 @@ export default async function RelatorioDiarioPage({
   const concluidas = (concluidasBrutas ?? []) as TarefaRelatorio[];
 
   const idsComAtividade = new Set<string>();
-  for (const anexo of anexosDia ?? []) idsComAtividade.add(anexo.tarefa_id);
-  for (const comentario of comentariosDia ?? [])
+  for (const anexo of anexosPeriodo ?? []) idsComAtividade.add(anexo.tarefa_id);
+  for (const comentario of comentariosPeriodo ?? [])
     idsComAtividade.add(comentario.tarefa_id);
   for (const tarefa of concluidas) idsComAtividade.delete(tarefa.id);
 
@@ -223,7 +223,10 @@ export default async function RelatorioDiarioPage({
   const plantas = await montarSnapshotsDePlantas(supabase, todasTarefas);
 
   const filtrosDescricao = [
-    { rotulo: "Data", valor: formatarDataExtensa(data) },
+    {
+      rotulo: "Período",
+      valor: `De ${formatarDataExtensa(paraData(inicio))} até ${formatarDataExtensa(paraData(fim))}`,
+    },
     { rotulo: "Obra", valor: obraFiltro },
   ];
   if (filtros.responsavel) {
@@ -264,8 +267,8 @@ export default async function RelatorioDiarioPage({
       </div>
 
       <DocumentoRelatorio
-        titulo="Relatório Diário de Obra (RDO)"
-        subtitulo="dia"
+        titulo="Relatório de Período de Obra (RDO)"
+        subtitulo="período"
         filtros={filtrosDescricao}
         geradoEm={new Date()}
         concluidas={concluidas}
@@ -274,7 +277,6 @@ export default async function RelatorioDiarioPage({
         totalFotos={totalFotos}
         urlsMap={urlsMap}
         plantas={plantas}
-        diaChave={dataChave}
         agruparPorObra={!filtroRaiz}
       />
     </BotaoImprimir>

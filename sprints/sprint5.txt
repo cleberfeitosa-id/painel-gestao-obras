@@ -1,0 +1,6 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Gestão de tarefas:
+    - Permita que tarefas sejam duplicadas, de forma que uma tarefa de mesmo tipo possa ser criada a partir de uma já existente com apenas um clique.
+    - No dropdown de seleção de tarefas para a função de associar a tarefa a um ponto na planta, a lista deve informar se a tarefa já está ou não associada a um pino ou região.
+    - A partir da página de plantas deve ser possível criar diversos pinos ou diversas regiões que de forma isolada representem diferentes tarefas.

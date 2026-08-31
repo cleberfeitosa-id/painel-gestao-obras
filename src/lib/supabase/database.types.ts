@@ -549,6 +549,8 @@ export type Database = {
           concluida_em: string | null
           criado_em: string
           criado_por: string | null
+          data_fim: string | null
+          data_inicio: string | null
           data_planejada: string | null
           descricao: string | null
           executor_id: string | null
@@ -580,6 +582,8 @@ export type Database = {
           concluida_em?: string | null
           criado_em?: string
           criado_por?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
           data_planejada?: string | null
           descricao?: string | null
           executor_id?: string | null
@@ -611,6 +615,8 @@ export type Database = {
           concluida_em?: string | null
           criado_em?: string
           criado_por?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
           data_planejada?: string | null
           descricao?: string | null
           executor_id?: string | null
@@ -689,6 +695,39 @@ export type Database = {
             columns: ["tag_id"]
             isOneToOne: false
             referencedRelation: "tags_tarefa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tarefa_dependencias: {
+        Row: {
+          criado_em: string
+          depende_de: string
+          tarefa_id: string
+        }
+        Insert: {
+          criado_em?: string
+          depende_de: string
+          tarefa_id: string
+        }
+        Update: {
+          criado_em?: string
+          depende_de?: string
+          tarefa_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_dependencias_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_dependencias_depende_de_fkey"
+            columns: ["depende_de"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
             referencedColumns: ["id"]
           },
         ]
@@ -884,6 +923,7 @@ export type TarefaComentarioRow = Tabelas<"tarefa_comentarios">;
 export type TarefaAnexoRow = Tabelas<"tarefa_anexos">;
 export type NotificacaoRow = Tabelas<"notificacoes">;
 export type TagsTarefaRow = Tabelas<"tags_tarefa">;
+export type TarefaDependenciaRow = Tabelas<"tarefa_dependencias">;
 
 // As colunas jsonb chegam como `Json`. Reafirmamos a forma concreta na camada
 // de dominio para que a matematica de coordenadas continue tipada.

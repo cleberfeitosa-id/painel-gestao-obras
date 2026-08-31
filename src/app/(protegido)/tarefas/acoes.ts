@@ -109,6 +109,8 @@ const esquemaTarefa = z.object({
   ),
   prazo: z.string().optional().or(z.literal("")),
   data_planejada: z.string().optional().or(z.literal("")),
+  data_inicio: z.string().optional().or(z.literal("")),
+  data_fim: z.string().optional().or(z.literal("")),
   exige_foto: z.boolean().optional(),
   exige_video: z.boolean().optional(),
   exige_arquivo: z.boolean().optional(),
@@ -122,6 +124,13 @@ const esquemaTarefa = z.object({
         path: ["data_planejada"],
       });
     }
+  }
+  if (dados.data_inicio && dados.data_fim && dados.data_inicio > dados.data_fim) {
+    ctx.addIssue({
+      code: "custom",
+      message: "A data de inicio nao pode ser posterior a data de fim.",
+      path: ["data_inicio"],
+    });
   }
 });
 
@@ -182,6 +191,8 @@ function normalizar(dados: DadosTarefa) {
     tag_id: dados.tag_id || null,
     prazo: dados.prazo || null,
     data_planejada: dados.data_planejada || null,
+    data_inicio: dados.data_inicio || null,
+    data_fim: dados.data_fim || null,
     exige_foto: dados.exige_foto ?? false,
     exige_video: dados.exige_video ?? false,
     exige_arquivo: dados.exige_arquivo ?? false,
@@ -274,6 +285,8 @@ export async function criarTarefa(
     tag_id: formData.get("tag_id"),
     prazo: formData.get("prazo"),
     data_planejada: formData.get("data_planejada"),
+    data_inicio: formData.get("data_inicio"),
+    data_fim: formData.get("data_fim"),
     exige_foto: formData.get("exige_foto") === "on",
     exige_video: formData.get("exige_video") === "on",
     exige_arquivo: formData.get("exige_arquivo") === "on",
@@ -371,6 +384,8 @@ const esquemaCriarLote = z
     ),
     prazo: z.string().optional().or(z.literal("")),
     data_planejada: z.string().optional().or(z.literal("")),
+    data_inicio: z.string().optional().or(z.literal("")),
+    data_fim: z.string().optional().or(z.literal("")),
     exige_foto: z.boolean().optional(),
     exige_video: z.boolean().optional(),
     exige_arquivo: z.boolean().optional(),
@@ -401,6 +416,13 @@ const esquemaCriarLote = z
         });
       }
     }
+    if (dados.data_inicio && dados.data_fim && dados.data_inicio > dados.data_fim) {
+      ctx.addIssue({
+        code: "custom",
+        message: "A data de inicio nao pode ser posterior a data de fim.",
+        path: ["data_inicio"],
+      });
+    }
   });
 
 export async function criarTarefasEmLote(
@@ -427,6 +449,8 @@ export async function criarTarefasEmLote(
     tag_id: formData.get("tag_id"),
     prazo: formData.get("prazo"),
     data_planejada: formData.get("data_planejada"),
+    data_inicio: formData.get("data_inicio"),
+    data_fim: formData.get("data_fim"),
     exige_foto: formData.get("exige_foto") === "on",
     exige_video: formData.get("exige_video") === "on",
     exige_arquivo: formData.get("exige_arquivo") === "on",
@@ -459,6 +483,8 @@ export async function criarTarefasEmLote(
     tag_id: dados.tag_id || null,
     prazo: dados.prazo || null,
     data_planejada: dados.data_planejada || null,
+    data_inicio: dados.data_inicio || null,
+    data_fim: dados.data_fim || null,
     exige_foto: dados.exige_foto ?? false,
     exige_video: dados.exige_video ?? false,
     exige_arquivo: dados.exige_arquivo ?? false,
@@ -672,19 +698,27 @@ export async function atualizarTarefasEmLote(
   const data_planejada = formData.get("data_planejada");
   if (data_planejada) updates.data_planejada = data_planejada;
 
+  const data_inicio = formData.get("data_inicio");
+  if (data_inicio) updates.data_inicio = data_inicio;
+
+  const data_fim = formData.get("data_fim");
+  if (data_fim) updates.data_fim = data_fim;
+
   if (Object.keys(updates).length === 0) {
     return { erro: "Nenhuma alteracao informada." };
   }
 
   const supabaseAdmin = await createAdminClient();
-  const { error } = await supabaseAdmin
-    .from("tarefas")
-    .update(updates)
-    .in("id", idsPermitidos);
+  if (Object.keys(updates).length > 0) {
+    const { error } = await supabaseAdmin
+      .from("tarefas")
+      .update(updates)
+      .in("id", idsPermitidos);
 
-  if (error) {
-    console.error("[tarefas] erro ao atualizar em lote:", error);
-    return { erro: "Falha ao atualizar as tarefas." };
+    if (error) {
+      console.error("[tarefas] erro ao atualizar em lote:", error);
+      return { erro: "Falha ao atualizar as tarefas." };
+    }
   }
 
   revalidatePath("/tarefas");
@@ -717,6 +751,8 @@ export async function atualizarTarefa(
     tag_id: formData.get("tag_id"),
     prazo: formData.get("prazo"),
     data_planejada: formData.get("data_planejada"),
+    data_inicio: formData.get("data_inicio"),
+    data_fim: formData.get("data_fim"),
     exige_foto: formData.get("exige_foto") === "on",
     exige_video: formData.get("exige_video") === "on",
     exige_arquivo: formData.get("exige_arquivo") === "on",

@@ -13,7 +13,12 @@ import {
   EstadoVazio,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import type { ObraRow } from "@/lib/supabase/database.types";
+import type {
+  ExecutorRow,
+  ObraRow,
+  PerfilRow,
+  PlantaRow,
+} from "@/lib/supabase/database.types";
 
 interface AtividadeDia {
   dataChave: string;
@@ -28,25 +33,40 @@ export default async function RelatoriosIndexPage() {
   const inicioChave = chaveDia(addDays(hoje, -13));
   const fimChave = chaveDia(addDays(hoje, 1));
 
-  const [{ data: obras }, { data: tarefasConcluidas }, { data: anexosFotos }] =
-    await Promise.all([
-      supabase.from("obras").select("id, nome").order("nome"),
-      supabase
-        .from("tarefas")
-        .select("concluida_em")
-        .eq("status", "concluido")
-        .not("concluida_em", "is", null)
-        .gte("concluida_em", `${inicioChave}T00:00:00`)
-        .lt("concluida_em", `${fimChave}T00:00:00`),
-      supabase
-        .from("tarefa_anexos")
-        .select("criado_em")
-        .eq("tipo", "imagem")
-        .gte("criado_em", `${inicioChave}T00:00:00`)
-        .lt("criado_em", `${fimChave}T00:00:00`),
-    ]);
+  const [
+    { data: obras },
+    { data: tarefasConcluidas },
+    { data: anexosFotos },
+    { data: perfis },
+    { data: executores },
+    { data: plantas },
+  ] = await Promise.all([
+    supabase.from("obras").select("id, nome").order("nome"),
+    supabase
+      .from("tarefas")
+      .select("concluida_em")
+      .eq("status", "concluido")
+      .not("concluida_em", "is", null)
+      .gte("concluida_em", `${inicioChave}T00:00:00`)
+      .lt("concluida_em", `${fimChave}T00:00:00`),
+    supabase
+      .from("tarefa_anexos")
+      .select("criado_em")
+      .eq("tipo", "imagem")
+      .gte("criado_em", `${inicioChave}T00:00:00`)
+      .lt("criado_em", `${fimChave}T00:00:00`),
+    supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
+    supabase.from("executores").select("id, nome").order("nome"),
+    supabase.from("plantas").select("id, nome, obra_id, obras!inner(nome)").order("nome"),
+  ]);
 
   const listaObras = (obras ?? []) as Pick<ObraRow, "id" | "nome">[];
+  const listaResponsaveis = (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[];
+  const listaSupervisores = (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[];
+  const listaExecutores = (executores ?? []) as Pick<ExecutorRow, "id" | "nome">[];
+  const listaPlantas = (plantas ?? []) as (Pick<PlantaRow, "id" | "nome" | "obra_id"> & {
+    obras: { nome: string } | null;
+  })[];
 
   const atividadesPorDia = new Map<string, AtividadeDia>();
   for (let i = 13; i >= 0; i--) {
@@ -94,7 +114,13 @@ export default async function RelatoriosIndexPage() {
           <CartaoTitulo>Gerar novo relatório</CartaoTitulo>
         </CartaoCabecalho>
         <CartaoConteudo>
-          <FormularioRelatorio obras={listaObras} />
+          <FormularioRelatorio
+            obras={listaObras}
+            responsaveis={listaResponsaveis}
+            supervisores={listaSupervisores}
+            executores={listaExecutores}
+            plantas={listaPlantas}
+          />
         </CartaoConteudo>
       </Cartao>
 

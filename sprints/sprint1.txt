@@ -1,0 +1,19 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Sistema de gerenciamento de usuários:
+   - Possibilidade de adicão de usuários através de convite por email;
+   - Possibilidade de Atribuir uma tarefa a um indivíduo, sem necessidade de cadastro, para identificar o executor da tarefa, e atribuir um supervisor que devera validar e aprovar a execução da tarefa, esse ultimo deverá ser um usuário cadastrado.
+   
+2. Envio de plantas para cada obra:
+   - Envio das plantas para cada obra, no formato pdf, podendo ser enviado múltiplas plantas para cada obra;
+   - As plantas deverão ser visualizada em um visualizador de pdf dentro da aplicação;
+   - Deve ser possível criar uma tarefa associada a um ponto ou regiao das plantas, e ao clicar no ponto ou regiao seja possível visualizar as tarefas associadas a ele.
+   - Deve haver uma representação visual que indica se o ponto ou regiao já possui uma tarefa associada.
+   - Essa representação visual deve ser indicada com cores e/ou textos que informe o status da tarefa associada ao ponto ou regiao (não iniciado, em execução, concluído, aprovado, reprovado, etc...)
+   - Deve ser possível filtrar a visualização das tarefas por status, e por executor.
+   
+3. Correção de Bugs: 
+  - Durante o cadastro de uma nova tarefa, ao clicar em "Criar tarefa", um erro surge em vermelho no topo do formulário informando "Invalid UUID". Corrija esse comportamento de forma que a tarefa seja corretamente criada.
+  - O prazo e a data prevista para inicio, ainda no formulário de cadastro de nova tarefa estão como placeholder do dia anterior ao atual, faça com que seja sempre o dia atual e nunca permita que a data prevista para inicio seja anterior ao prazo estabelecido.
+  - Caso se entre na tela de cadastrar nova tarefa vindo da tela de uma obra específica, o id dessa obra deve ser enviado para a tela de cadastro de nova tarefa e deve estar preenchido no formulário automaticamente, de forma que o usuário não precise selecionar a obra.
+  

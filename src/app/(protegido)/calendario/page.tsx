@@ -9,8 +9,13 @@ import {
   formatarData,
 } from "@/lib/datas";
 import { Cartao, CartaoConteudo, EstadoVazio, Botao } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { FiltrosCalendario } from "@/components/calendario/filtros-calendario";
 import { CalendarioInterativo } from "@/components/calendario/calendario-interativo";
+import {
+  GraficoGantt,
+  type ItemGantt,
+} from "@/components/calendario/grafico-gantt";
 import type { ItemCalendario } from "@/components/calendario/calendario-interativo";
 import type {
   ObraRow,
@@ -28,11 +33,12 @@ function chaveMes(data: Date) {
   return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function navegar(mes: string, obra: string, responsavel: string) {
+function navegar(mes: string, obra: string, responsavel: string, vista?: string) {
   const params = new URLSearchParams();
   if (mes) params.set("mes", mes);
   if (obra) params.set("obra", obra);
   if (responsavel) params.set("responsavel", responsavel);
+  if (vista) params.set("vista", vista);
   const qs = params.toString();
   return qs ? `/calendario?${qs}` : "/calendario";
 }
@@ -60,6 +66,7 @@ export default async function CalendarioPage({
 
   const obra = params.obra ?? "";
   const responsavel = params.responsavel ?? "";
+  const vista = params.vista === "gantt" ? "gantt" : "mes";
 
   const supabase = await createClient();
   const {
@@ -86,14 +93,25 @@ export default async function CalendarioPage({
       "*, obras!inner(nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome)",
     )
     .or(
-      `and(data_planejada.gte.${primeiraChave},data_planejada.lte.${ultimaChave}),and(concluida_em.gte.${primeiraChave}T00:00:00,concluida_em.lte.${ultimaChave}T23:59:59)`,
+      `and(data_planejada.gte.${primeiraChave},data_planejada.lte.${ultimaChave}),and(concluida_em.gte.${primeiraChave}T00:00:00,concluida_em.lte.${ultimaChave}T23:59:59),and(data_inicio.gte.${primeiraChave},data_inicio.lte.${ultimaChave}),and(data_fim.gte.${primeiraChave},data_fim.lte.${ultimaChave})`,
     );
 
   if (obra) query = query.eq("obra_id", obra);
   if (responsavel) query = query.eq("responsavel_id", responsavel);
 
-  const { data: tarefasBrutas } = await query;
+  const [{ data: tarefasBrutas }, { data: dependenciasBrutas }] =
+    await Promise.all([query, supabase.from("tarefa_dependencias").select("tarefa_id, depende_de")]);
   const tarefas = (tarefasBrutas ?? []) as TarefaComRelacao[];
+
+  const dependencias: Record<string, string[]> = {};
+  for (const d of dependenciasBrutas ?? []) {
+    (dependencias[d.tarefa_id] ??= []).push(d.depende_de);
+  }
+
+  const itensGantt: ItemGantt[] = tarefas.map((tarefa) => ({
+    tarefa,
+    obraNome: tarefa.obras.nome,
+  }));
 
   const itensPorChave = new Map<string, ItemCalendario[]>();
   for (const tarefa of tarefas) {
@@ -168,6 +186,7 @@ export default async function CalendarioPage({
             obraAtual={obra}
             responsavelAtual={responsavel}
             mes={mesAtual}
+            vista={vista}
           />
         </CartaoConteudo>
       </Cartao>
@@ -177,14 +196,14 @@ export default async function CalendarioPage({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Link
-                href={navegar(chaveMes(mesAnterior), obra, responsavel)}
+                href={navegar(chaveMes(mesAnterior), obra, responsavel, vista)}
                 aria-label="Mês anterior"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-borda bg-white text-superficie-600 hover:bg-superficie-50"
               >
                 <ChevronLeft className="h-5 w-5" />
               </Link>
               <Link
-                href={navegar(chaveMes(mesProximo), obra, responsavel)}
+                href={navegar(chaveMes(mesProximo), obra, responsavel, vista)}
                 aria-label="Próximo mês"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-borda bg-white text-superficie-600 hover:bg-superficie-50"
               >
@@ -195,11 +214,35 @@ export default async function CalendarioPage({
               </h2>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-superficie-500">
+              <div className="flex overflow-hidden rounded-lg border border-borda bg-white">
+                <Link
+                  href={navegar(chaveMes(referencia), obra, responsavel, "mes")}
+                  className={cn(
+                    "px-3 py-2 text-sm font-medium",
+                    vista === "mes"
+                      ? "bg-azul-600 text-white"
+                      : "text-superficie-700 hover:bg-superficie-50",
+                  )}
+                >
+                  Mês
+                </Link>
+                <Link
+                  href={navegar(chaveMes(referencia), obra, responsavel, "gantt")}
+                  className={cn(
+                    "px-3 py-2 text-sm font-medium",
+                    vista === "gantt"
+                      ? "bg-azul-600 text-white"
+                      : "text-superficie-700 hover:bg-superficie-50",
+                  )}
+                >
+                  Gantt
+                </Link>
+              </div>
+              <span className="hidden text-sm text-superficie-500 md:inline">
                 Hoje é {formatarData(hojeChave())}
               </span>
               <Link
-                href={navegar(hojeMes, "", "")}
+                href={navegar(hojeMes, "", "", vista)}
                 className="rounded-lg border border-borda bg-white px-3 py-2 text-sm font-medium text-superficie-700 hover:bg-superficie-50"
               >
                 Voltar a hoje
@@ -207,32 +250,38 @@ export default async function CalendarioPage({
             </div>
           </div>
 
-          <CalendarioInterativo
-            semana={semana}
-            itensPorDia={itensPorChave}
-            podeReagendar={podeReagendar}
-          />
+          {vista === "gantt" ? (
+            <GraficoGantt itens={itensGantt} dependencias={dependencias} />
+          ) : (
+            <>
+              <CalendarioInterativo
+                semana={semana}
+                itensPorDia={itensPorChave}
+                podeReagendar={podeReagendar}
+              />
 
-          {totalItens === 0 && (
-            <EstadoVazio
-              icone={<Calendar className="h-8 w-8" />}
-              titulo="Nenhuma atividade neste período"
-              descricao={
-                obra || responsavel
-                  ? "Ajuste os filtros para visualizar as tarefas planejadas ou concluídas."
-                  : "Planeje tarefas para dias futuros para organizar o trabalho no canteiro."
-              }
-              acao={
-                !obra && !responsavel ? (
-                  <Link href="/tarefas/nova">
-                    <Botao variante="primario">
-                      <Plus className="h-4 w-4" />
-                      Nova tarefa
-                    </Botao>
-                  </Link>
-                ) : undefined
-              }
-            />
+              {totalItens === 0 && (
+                <EstadoVazio
+                  icone={<Calendar className="h-8 w-8" />}
+                  titulo="Nenhuma atividade neste período"
+                  descricao={
+                    obra || responsavel
+                      ? "Ajuste os filtros para visualizar as tarefas planejadas ou concluídas."
+                      : "Planeje tarefas para dias futuros para organizar o trabalho no canteiro."
+                  }
+                  acao={
+                    !obra && !responsavel ? (
+                      <Link href="/tarefas/nova">
+                        <Botao variante="primario">
+                          <Plus className="h-4 w-4" />
+                          Nova tarefa
+                        </Botao>
+                      </Link>
+                    ) : undefined
+                  }
+                />
+              )}
+            </>
           )}
         </CartaoConteudo>
       </Cartao>
