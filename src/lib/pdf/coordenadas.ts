@@ -128,6 +128,21 @@ export function retanguloParaRegiao(
   };
 }
 
+export function pontoEmRegiao(
+  ponto: PontoPdf,
+  regiao: RegiaoPdf,
+  margem = 0,
+): boolean {
+  const limites = limitesDaRegiao(regiao);
+  if (!limites) return false;
+  return (
+    ponto.x >= limites.x - margem &&
+    ponto.x <= limites.x + limites.largura + margem &&
+    ponto.y >= limites.y - margem &&
+    ponto.y <= limites.y + limites.altura + margem
+  );
+}
+
 export function formatarMedida(valor: number, unidade: string, casas = 2) {
   return `${valor.toLocaleString("pt-BR", {
     minimumFractionDigits: casas,

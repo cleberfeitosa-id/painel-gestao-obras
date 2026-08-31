@@ -32,6 +32,7 @@ import {
   medirDistancia,
   medirPerimetro,
   pdfParaPercentual,
+  pontoEmRegiao,
   retanguloParaRegiao,
   telaParaPdf,
   type Calibracao,
@@ -47,6 +48,7 @@ import { situacaoPrazo } from "@/lib/datas";
 import { cn } from "@/lib/utils";
 import { Calibragem } from "./calibragem";
 import { ListaTarefasPlanta } from "./lista-tarefas-planta";
+import { MenuTarefasSobrepostas } from "./menu-tarefas-sobrepostas";
 import {
   renovarUrlPlanta,
   salvarCalibracao as salvarCalibracaoAcao,
@@ -322,6 +324,10 @@ export function VisualizadorPlanta({
   const [erroLote, setErroLote] = useState<string | null>(null);
   const [modoLote, setModoLote] = useState(false);
   const [loteMarcadores, setLoteMarcadores] = useState<LoteMarcador[]>([]);
+  const [menuSobreposicao, setMenuSobreposicao] = useState<{
+    posicao: { x: number; y: number };
+    tarefas: TarefaPlanta[];
+  } | null>(null);
 
   const [filtroSituacao, setFiltroSituacao] = useState<"todas" | SituacaoTarefa>("todas");
   const [filtroPrioridade, setFiltroPrioridade] = useState<"todas" | PrioridadeTarefa>("todas");
@@ -420,6 +426,7 @@ export function VisualizadorPlanta({
     setPosicaoMouse(null);
     setConfirmacao(null);
     setLoteMarcadores([]);
+    setMenuSobreposicao(null);
     pinoDragRef.current = null;
     cantoDragRef.current = null;
     regiaoRef.current = null;
@@ -569,8 +576,47 @@ export function VisualizadorPlanta({
     }
   }
 
-  function aoClicar(e: React.MouseEvent<HTMLDivElement>) {
-    if (pointersRef.current.size > 0) return; // ignora clique originado de gesto
+  function identificarTarefasNoPonto(
+    clienteX: number,
+    clienteY: number,
+  ): TarefaPlanta[] {
+    if (!dimensoes) return [];
+    const rect = overlayRef.current?.getBoundingClientRect();
+    if (!rect) return [];
+
+    const pontoPdf = telaParaPdf(
+      clienteX,
+      clienteY,
+      rect,
+      dimensoes.largura,
+      dimensoes.altura,
+    );
+
+    return tarefasFiltradas.filter((t) => {
+      if (
+        t.localizacao_tipo === "ponto" &&
+        t.ponto_x != null &&
+        t.ponto_y != null
+      ) {
+        const pos = pdfParaPercentual(
+          { x: t.ponto_x, y: t.ponto_y },
+          dimensoes.largura,
+          dimensoes.altura,
+        );
+        const pinScreenX = rect.left + (pos.esquerda / 100) * rect.width;
+        const pinScreenY = rect.top + (pos.topo / 100) * rect.height;
+        const dist = Math.hypot(clienteX - pinScreenX, clienteY - pinScreenY);
+        return dist <= 24;
+      }
+      if (t.localizacao_tipo === "regiao" && t.regiao) {
+        return pontoEmRegiao(pontoPdf, t.regiao);
+      }
+      return false;
+    });
+  }
+
+  function aoClicar(e: React.MouseEvent<HTMLElement>) {
+    if (pointersRef.current.size > 0) return;
     if (ferramenta === "medir") {
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
@@ -590,6 +636,19 @@ export function VisualizadorPlanta({
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
       setPontosCalibracao((atual) => (atual.length >= 2 ? [ponto] : [...atual, ponto]));
+    } else if (ferramenta === "navegar") {
+      const tarefasNoLocal = identificarTarefasNoPonto(e.clientX, e.clientY);
+      if (tarefasNoLocal.length === 1) {
+        setMenuSobreposicao(null);
+        router.push(`/tarefas/${tarefasNoLocal[0].id}`);
+      } else if (tarefasNoLocal.length > 1) {
+        setMenuSobreposicao({
+          posicao: { x: e.clientX, y: e.clientY },
+          tarefas: tarefasNoLocal,
+        });
+      } else {
+        setMenuSobreposicao(null);
+      }
     }
   }
 
@@ -620,6 +679,7 @@ export function VisualizadorPlanta({
     setConfirmacao(null);
     setRegiaoAtual(null);
     setPosicaoMouse(null);
+    setMenuSobreposicao(null);
     pinoDragRef.current = null;
     cantoDragRef.current = null;
     regiaoRef.current = null;
@@ -1225,7 +1285,7 @@ export function VisualizadorPlanta({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              router.push(`/tarefas/${tarefa.id}`);
+                              aoClicar(e);
                             }}
                             onMouseEnter={() => aoEntrarPino(tarefa.id)}
                             onMouseLeave={aoSairPino}
@@ -1285,7 +1345,7 @@ export function VisualizadorPlanta({
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/tarefas/${tarefa.id}`);
+                            aoClicar(e);
                           }}
                           onMouseEnter={() => aoEntrarPino(tarefa.id)}
                           onMouseLeave={aoSairPino}
@@ -1565,6 +1625,19 @@ export function VisualizadorPlanta({
           aoDestaque={setTarefaDestaque}
         />
       </div>
+
+      {menuSobreposicao && (
+        <MenuTarefasSobrepostas
+          posicao={menuSobreposicao.posicao}
+          tarefas={menuSobreposicao.tarefas}
+          aoSelecionar={(t) => {
+            setMenuSobreposicao(null);
+            router.push(`/tarefas/${t.id}`);
+          }}
+          aoFechar={() => setMenuSobreposicao(null)}
+          aoDestaque={setTarefaDestaque}
+        />
+      )}
     </div>
   );
 }
