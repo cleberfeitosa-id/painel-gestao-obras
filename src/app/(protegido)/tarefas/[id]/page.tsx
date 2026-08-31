@@ -226,7 +226,7 @@ export default async function DetalheTarefaPage({
   ].filter((r) => r.exigido);
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6">
       <div>
         <Link
           href={
@@ -242,9 +242,9 @@ export default async function DetalheTarefaPage({
             : "Voltar para tarefas"}
         </Link>
         <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold text-superficie-900">
+              <h1 className="text-2xl font-bold text-superficie-900 break-words">
                 {tarefa.titulo}
               </h1>
               <Etiqueta className={STATUS_TAREFA[tarefa.status].classe}>
@@ -262,7 +262,7 @@ export default async function DetalheTarefaPage({
             </p>
           </div>
           {podeEscrever && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <Link href={`/tarefas/${tarefa.id}/editar`}>
                 <Botao variante="contorno">
                   <Pencil className="h-4 w-4" />
@@ -287,13 +287,13 @@ export default async function DetalheTarefaPage({
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <Cartao>
+      <div className="grid min-w-0 max-w-full gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
+          <Cartao className="min-w-0 overflow-hidden">
             <CartaoCabecalho>
               <CartaoTitulo>Informacoes</CartaoTitulo>
             </CartaoCabecalho>
-            <CartaoConteudo>
+            <CartaoConteudo className="min-w-0 max-w-full overflow-hidden">
               <dl className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
@@ -373,7 +373,7 @@ export default async function DetalheTarefaPage({
               )}
 
               {tarefa.localizacao_tipo !== "nenhuma" && tarefa.planta_id && (
-                <div className="mt-4 border-t border-borda pt-4">
+                <div className="mt-4 border-t border-borda pt-4 min-w-0 max-w-full">
                   <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
                     Localizacao na planta
                   </dt>
@@ -391,16 +391,18 @@ export default async function DetalheTarefaPage({
                   </dd>
 
                   {dadosPlanta && (
-                    <MiniVisualizadorPlantaDinamico
-                      obraId={tarefa.obra_id}
-                      plantaId={dadosPlanta.plantaId}
-                      plantaNome={dadosPlanta.plantaNome}
-                      urlPdf={dadosPlanta.urlPdf}
-                      pagina={tarefa.pagina ?? 1}
-                      tarefaAtualId={tarefa.id}
-                      tarefas={dadosPlanta.tarefas}
-                      podeEditar={podeEscrever}
-                    />
+                    <div className="mt-3 w-full min-w-0 max-w-full overflow-hidden">
+                      <MiniVisualizadorPlantaDinamico
+                        obraId={tarefa.obra_id}
+                        plantaId={dadosPlanta.plantaId}
+                        plantaNome={dadosPlanta.plantaNome}
+                        urlPdf={dadosPlanta.urlPdf}
+                        pagina={tarefa.pagina ?? 1}
+                        tarefaAtualId={tarefa.id}
+                        tarefas={dadosPlanta.tarefas}
+                        podeEditar={podeEscrever}
+                      />
+                    </div>
                   )}
                 </div>
               )}

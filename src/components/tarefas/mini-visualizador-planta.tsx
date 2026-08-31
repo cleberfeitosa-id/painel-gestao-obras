@@ -68,7 +68,7 @@ function DicaTarefa({
   const opcaoSituacao = SITUACAO_TAREFA[situacao];
 
   return (
-    <div className="w-60 rounded-xl border border-borda bg-white p-3 shadow-xl text-left">
+    <div className="w-56 max-w-[80vw] rounded-xl border border-borda bg-white p-2.5 shadow-xl text-left">
       <div className="flex items-center justify-between gap-1 mb-1">
         {eAtual ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-azul-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
@@ -84,7 +84,7 @@ function DicaTarefa({
       <p className="line-clamp-2 text-xs font-semibold text-superficie-900">
         {tarefa.titulo}
       </p>
-      <div className="mt-2 flex flex-wrap gap-1">
+      <div className="mt-1.5 flex flex-wrap gap-1">
         <Etiqueta className={cn("text-[10px]", opcaoSituacao.classe)}>
           {opcaoSituacao.rotulo}
         </Etiqueta>
@@ -92,7 +92,7 @@ function DicaTarefa({
           {PRIORIDADE_TAREFA[tarefa.prioridade].rotulo}
         </Etiqueta>
       </div>
-      <p className="mt-2 text-[11px] text-superficie-500">{prazoInfo.texto}</p>
+      <p className="mt-1.5 text-[11px] text-superficie-500">{prazoInfo.texto}</p>
     </div>
   );
 }
@@ -112,8 +112,8 @@ export function MiniVisualizadorPlanta({
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const [escala, setEscala] = useState(1);
-  const [renderEscala, setRenderEscala] = useState(1);
+  const [escala, setEscala] = useState(1.5);
+  const [renderEscala, setRenderEscala] = useState(1.5);
   const [dpr] = useState(() =>
     typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio) : 1,
   );
@@ -184,7 +184,7 @@ export function MiniVisualizadorPlanta({
       const larguraContainer = el ? el.clientWidth - 32 : 600;
 
       const escalaBase = larguraContainer / viewport.width;
-      const escalaCalculada = Math.min(3.5, Math.max(1.2, Number((escalaBase * 2).toFixed(2))));
+      const escalaCalculada = Math.min(3.5, Math.max(1.5, Number((escalaBase * 2).toFixed(2))));
 
       setEscala(escalaCalculada);
 
@@ -381,17 +381,17 @@ export function MiniVisualizadorPlanta({
   }, [escala]);
 
   return (
-    <div className="mt-3 overflow-hidden rounded-xl border border-borda bg-white shadow-xs">
+    <div className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-borda bg-white shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borda bg-superficie-50/90 px-3 py-2 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-superficie-800">
+        <div className="flex min-w-0 max-w-full items-center gap-2">
+          <span className="truncate font-semibold text-superficie-800" title={plantaNome}>
             {plantaNome}
           </span>
-          <span className="text-superficie-400">·</span>
-          <span className="text-superficie-600">Página {pagina}</span>
+          <span className="shrink-0 text-superficie-400">·</span>
+          <span className="shrink-0 whitespace-nowrap text-superficie-600">Página {pagina}</span>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1 shrink-0">
           <button
             type="button"
             onClick={() => centralizarNaTarefa()}
@@ -399,10 +399,10 @@ export function MiniVisualizadorPlanta({
             title="Centralizar na tarefa atual"
           >
             <LocateFixed className="h-3.5 w-3.5 text-azul-600" />
-            Centralizar
+            <span>Centralizar</span>
           </button>
 
-          <div className="mx-1 h-4 w-px bg-borda" />
+          <div className="mx-0.5 h-4 w-px bg-borda" />
 
           <button
             type="button"
@@ -412,7 +412,7 @@ export function MiniVisualizadorPlanta({
           >
             <ZoomOut className="h-3.5 w-3.5" />
           </button>
-          <span className="w-10 text-center text-[11px] tabular-nums font-medium text-superficie-700">
+          <span className="w-9 text-center text-[11px] tabular-nums font-medium text-superficie-700">
             {Math.round(escala * 100)}%
           </span>
           <button
@@ -425,14 +425,17 @@ export function MiniVisualizadorPlanta({
           </button>
           <button
             type="button"
-            onClick={() => setEscala(1)}
+            onClick={() => {
+              setEscala(1.5);
+              centralizarNaTarefa(1.5);
+            }}
             className="flex h-7 w-7 items-center justify-center rounded-md text-superficie-600 hover:bg-superficie-200"
-            title="Resetar zoom (100%)"
+            title="Resetar zoom (150%)"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
 
-          <div className="mx-1 h-4 w-px bg-borda" />
+          <div className="mx-0.5 h-4 w-px bg-borda" />
 
           <Link
             href={`/obras/${obraId}/plantas/${plantaId}`}
@@ -447,13 +450,17 @@ export function MiniVisualizadorPlanta({
 
       <div
         ref={containerRef}
-        className="relative h-80 sm:h-96 w-full overflow-auto bg-superficie-100/70"
-        style={{ touchAction: "none", cursor: arrastando ? "grabbing" : "grab" }}
+        className="relative h-80 sm:h-96 w-full max-w-full overflow-auto bg-superficie-100/70 select-none"
+        style={{
+          touchAction: "none",
+          cursor: arrastando ? "grabbing" : "grab",
+          WebkitOverflowScrolling: "touch",
+        }}
       >
         <div className="flex min-h-full min-w-full p-4">
           <div
             ref={contentRef}
-            className={cn("relative m-auto shadow-md", !dimensoes && "w-fit")}
+            className={cn("relative m-auto shadow-md shrink-0", !dimensoes && "w-fit")}
             style={{
               width: dimensoes ? dimensoes.largura * escala : undefined,
               height: dimensoes ? dimensoes.altura * escala : undefined,
@@ -476,13 +483,13 @@ export function MiniVisualizadorPlanta({
                 setErroDocumento("Não foi possível carregar a planta.")
               }
               loading={
-                <div className="flex h-72 w-96 max-w-full items-center justify-center gap-2 text-xs text-superficie-500">
+                <div className="flex h-64 w-full max-w-full items-center justify-center gap-2 text-xs text-superficie-500">
                   <Spinner tamanho="md" />
                   Carregando PDF da planta...
                 </div>
               }
               error={
-                <div className="flex h-72 w-96 max-w-full items-center justify-center text-xs text-perigo">
+                <div className="flex h-64 w-full max-w-full items-center justify-center text-xs text-perigo">
                   {erroDocumento ?? "Erro ao carregar a planta."}
                 </div>
               }
@@ -495,7 +502,7 @@ export function MiniVisualizadorPlanta({
                 renderAnnotationLayer={false}
                 onLoadSuccess={aoCarregarPaginaSucesso}
                 loading={
-                  <div className="flex h-72 w-96 max-w-full items-center justify-center">
+                  <div className="flex h-64 w-full max-w-full items-center justify-center">
                     <Spinner tamanho="md" />
                   </div>
                 }
@@ -658,16 +665,16 @@ export function MiniVisualizadorPlanta({
 
       {tarefaSelecionada && (
         <div className="border-t border-borda bg-superficie-50/90 p-3 animate-in fade-in slide-in-from-top-2 duration-150">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 {tarefaSelecionada.id === tarefaAtualId ? (
-                  <span className="inline-flex items-center gap-1 rounded bg-azul-100 px-1.5 py-0.5 text-[10px] font-bold text-azul-800">
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded bg-azul-100 px-1.5 py-0.5 text-[10px] font-bold text-azul-800">
                     <MapPin className="h-3 w-3" />
                     Tarefa atual
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 rounded bg-superficie-200 px-1.5 py-0.5 text-[10px] font-medium text-superficie-700">
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded bg-superficie-200 px-1.5 py-0.5 text-[10px] font-medium text-superficie-700">
                     Tarefa adjacente
                   </span>
                 )}
@@ -707,13 +714,13 @@ export function MiniVisualizadorPlanta({
                 </Etiqueta>
 
                 {tarefaSelecionada.responsavel?.nome && (
-                  <span className="inline-flex items-center gap-1">
-                    <User className="h-3 w-3 text-superficie-400" />
-                    {tarefaSelecionada.responsavel.nome}
+                  <span className="inline-flex items-center gap-1 truncate max-w-[150px]">
+                    <User className="h-3 w-3 shrink-0 text-superficie-400" />
+                    <span className="truncate">{tarefaSelecionada.responsavel.nome}</span>
                   </span>
                 )}
                 {tarefaSelecionada.prazo && (
-                  <span className="inline-flex items-center gap-1">
+                  <span className="inline-flex items-center gap-1 shrink-0">
                     <Calendar className="h-3 w-3 text-superficie-400" />
                     {formatarData(tarefaSelecionada.prazo)}
                   </span>
@@ -721,32 +728,34 @@ export function MiniVisualizadorPlanta({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {tarefaSelecionada.id !== tarefaAtualId ? (
-                <>
-                  <Link href={`/tarefas/${tarefaSelecionada.id}`}>
-                    <Botao tamanho="sm" variante="primario">
-                      Ver detalhes
-                    </Botao>
-                  </Link>
-                  {podeEditar && (
-                    <Link href={`/tarefas/${tarefaSelecionada.id}/editar`}>
-                      <Botao tamanho="sm" variante="contorno">
-                        <Pencil className="h-3.5 w-3.5" />
-                        Editar
+            <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+              <div className="flex items-center gap-2">
+                {tarefaSelecionada.id !== tarefaAtualId ? (
+                  <>
+                    <Link href={`/tarefas/${tarefaSelecionada.id}`}>
+                      <Botao tamanho="sm" variante="primario">
+                        Ver detalhes
                       </Botao>
                     </Link>
-                  )}
-                </>
-              ) : (
-                <span className="text-xs text-superficie-500">
-                  Esta é a tarefa aberta no momento.
-                </span>
-              )}
+                    {podeEditar && (
+                      <Link href={`/tarefas/${tarefaSelecionada.id}/editar`}>
+                        <Botao tamanho="sm" variante="contorno">
+                          <Pencil className="h-3.5 w-3.5" />
+                          Editar
+                        </Botao>
+                      </Link>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-xs text-superficie-500">
+                    Esta é a tarefa aberta no momento.
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setTarefaSelecionada(null)}
-                className="rounded-lg p-1 text-superficie-400 hover:bg-superficie-200 hover:text-superficie-700"
+                className="rounded-lg p-1 text-superficie-400 hover:bg-superficie-200 hover:text-superficie-700 ml-auto sm:ml-0"
                 aria-label="Fechar resumo da tarefa"
               >
                 <X className="h-4 w-4" />
