@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_OBRA, STATUS_TAREFA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
-import { formatarData, situacaoPrazo } from "@/lib/datas";
+import { formatarData, situacaoPrazo, hojeChave } from "@/lib/datas";
 import {
   Cartao,
   CartaoCabecalho,
@@ -113,7 +113,7 @@ export default async function DetalheObraPage({
     concluido: 0,
   };
   let atrasadas = 0;
-  const hoje = new Date().toISOString().split("T")[0];
+  const hoje = hojeChave();
   for (const tarefa of tarefas) {
     porStatus[tarefa.status] += 1;
     if (

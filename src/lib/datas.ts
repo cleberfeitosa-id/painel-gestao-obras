@@ -4,51 +4,125 @@ import {
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
-  format,
   isSameDay,
   isSameMonth,
   parseISO,
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 export const FUSO_HORARIO = "America/Fortaleza";
 
-// Campos `date` do Postgres chegam como "YYYY-MM-DD". `new Date("2026-08-27")`
-// interpreta como meia-noite UTC e, em UTC-3, retrocede um dia. parseISO trata
-// a string como data local, evitando o off-by-one.
 export function paraData(valor: string | Date): Date {
   return typeof valor === "string" ? parseISO(valor) : valor;
 }
 
 export function chaveDia(valor: string | Date): string {
-  return format(paraData(valor), "yyyy-MM-dd");
+  if (typeof valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    return valor;
+  }
+  const data = typeof valor === "string" ? new Date(valor) : valor;
+  if (Number.isNaN(data.getTime())) {
+    return "";
+  }
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: FUSO_HORARIO,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(data);
 }
 
 export function hojeChave(): string {
-  return format(new Date(), "yyyy-MM-dd");
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: FUSO_HORARIO,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
-export function formatarData(valor: string | Date | null | undefined) {
+export function formatarData(valor: string | Date | null | undefined): string {
   if (!valor) return "—";
-  return format(paraData(valor), "dd/MM/yyyy", { locale: ptBR });
+  if (typeof valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    const [ano, mes, dia] = valor.split("-");
+    return `${dia}/${mes}/${ano}`;
+  }
+  const data = typeof valor === "string" ? new Date(valor) : valor;
+  if (Number.isNaN(data.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: FUSO_HORARIO,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(data);
 }
 
-export function formatarDataExtensa(valor: string | Date | null | undefined) {
+export function formatarDataExtensa(
+  valor: string | Date | null | undefined,
+): string {
   if (!valor) return "—";
-  return format(paraData(valor), "EEEE, d 'de' MMMM 'de' yyyy", {
-    locale: ptBR,
+  let data: Date;
+  if (typeof valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    const [ano, mes, dia] = valor.split("-").map(Number);
+    data = new Date(Date.UTC(ano, mes - 1, dia, 12, 0, 0));
+  } else {
+    data = typeof valor === "string" ? new Date(valor) : valor;
+  }
+  if (Number.isNaN(data.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: FUSO_HORARIO,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(data);
+}
+
+export function formatarDataHora(
+  valor: string | Date | null | undefined,
+): string {
+  if (!valor) return "—";
+  const data = typeof valor === "string" ? new Date(valor) : valor;
+  if (Number.isNaN(data.getTime())) return "—";
+
+  const formatador = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: FUSO_HORARIO,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
+
+  const partes = formatador.formatToParts(data);
+  const get = (tipo: string) =>
+    partes.find((p) => p.type === tipo)?.value ?? "";
+
+  return `${get("day")}/${get("month")}/${get("year")} às ${get("hour")}:${get("minute")}`;
 }
 
-export function formatarDataHora(valor: string | Date | null | undefined) {
-  if (!valor) return "—";
-  return format(paraData(valor), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-}
+export function formatarMesAno(valor: string | Date): string {
+  let data: Date;
+  if (typeof valor === "string" && /^\d{4}-\d{2}$/.test(valor)) {
+    const [ano, mes] = valor.split("-").map(Number);
+    data = new Date(Date.UTC(ano, mes - 1, 15, 12, 0, 0));
+  } else if (typeof valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    const [ano, mes] = valor.split("-").map(Number);
+    data = new Date(Date.UTC(ano, mes - 1, 15, 12, 0, 0));
+  } else {
+    data = typeof valor === "string" ? new Date(valor) : valor;
+  }
+  if (Number.isNaN(data.getTime())) return "—";
 
-export function formatarMesAno(valor: string | Date) {
-  return format(paraData(valor), "MMMM 'de' yyyy", { locale: ptBR });
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: FUSO_HORARIO,
+    month: "long",
+    year: "numeric",
+  }).format(data);
 }
 
 export type SituacaoPrazo = "sem_prazo" | "atrasado" | "hoje" | "proximo" | "ok";
@@ -59,7 +133,8 @@ export function situacaoPrazo(
 ): { situacao: SituacaoPrazo; dias: number | null; texto: string } {
   if (!prazo) return { situacao: "sem_prazo", dias: null, texto: "Sem prazo" };
 
-  const dias = differenceInCalendarDays(paraData(prazo), new Date());
+  const hoje = paraData(hojeChave());
+  const dias = differenceInCalendarDays(paraData(prazo), hoje);
 
   if (concluido) return { situacao: "ok", dias, texto: formatarData(prazo) };
   if (dias < 0) {
@@ -84,13 +159,17 @@ export function situacaoPrazo(
 export function gradeDoMes(referencia: Date) {
   const inicio = startOfWeek(startOfMonth(referencia), { weekStartsOn: 0 });
   const fim = endOfWeek(endOfMonth(referencia), { weekStartsOn: 0 });
+  const hoje = hojeChave();
 
-  return eachDayOfInterval({ start: inicio, end: fim }).map((dia) => ({
-    data: dia,
-    chave: chaveDia(dia),
-    doMesAtual: isSameMonth(dia, referencia),
-    hoje: isSameDay(dia, new Date()),
-  }));
+  return eachDayOfInterval({ start: inicio, end: fim }).map((dia) => {
+    const chave = chaveDia(dia);
+    return {
+      data: dia,
+      chave,
+      doMesAtual: isSameMonth(dia, referencia),
+      hoje: chave === hoje,
+    };
+  });
 }
 
 export const NOMES_DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];

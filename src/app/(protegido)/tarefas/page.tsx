@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Plus, CheckSquare, MapPin, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_TAREFA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
-import { situacaoPrazo, hojeChave, chaveDia } from "@/lib/datas";
+import { situacaoPrazo, hojeChave, chaveDia, paraData } from "@/lib/datas";
 import { endOfWeek } from "date-fns";
 import {
   Cartao,
@@ -80,8 +80,8 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
       query = query.eq("prazo", hoje);
       break;
     case "semana": {
-      const inicio = hojeChave();
-      const fim = chaveDia(endOfWeek(new Date(), { weekStartsOn: 0 }));
+      const inicio = hoje;
+      const fim = chaveDia(endOfWeek(paraData(hoje), { weekStartsOn: 0 }));
       query = query.gte("prazo", inicio).lte("prazo", fim);
       break;
     }

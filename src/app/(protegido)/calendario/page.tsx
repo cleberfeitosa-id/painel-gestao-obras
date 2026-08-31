@@ -7,6 +7,7 @@ import {
   chaveDia,
   hojeChave,
   formatarData,
+  paraData,
 } from "@/lib/datas";
 import { Cartao, CartaoConteudo, EstadoVazio, Botao } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -49,7 +50,7 @@ export default async function CalendarioPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const hoje = new Date();
+  const hoje = paraData(hojeChave());
 
   const mesValido = /^\d{4}-\d{2}$/.test(params.mes ?? "");
   let referencia: Date;
@@ -93,7 +94,7 @@ export default async function CalendarioPage({
       "*, obras!inner(nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome)",
     )
     .or(
-      `and(data_planejada.gte.${primeiraChave},data_planejada.lte.${ultimaChave}),and(concluida_em.gte.${primeiraChave}T00:00:00,concluida_em.lte.${ultimaChave}T23:59:59),and(data_inicio.gte.${primeiraChave},data_inicio.lte.${ultimaChave}),and(data_fim.gte.${primeiraChave},data_fim.lte.${ultimaChave})`,
+      `and(data_planejada.gte.${primeiraChave},data_planejada.lte.${ultimaChave}),and(concluida_em.gte.${primeiraChave}T00:00:00-03:00,concluida_em.lte.${ultimaChave}T23:59:59-03:00),and(data_inicio.gte.${primeiraChave},data_inicio.lte.${ultimaChave}),and(data_fim.gte.${primeiraChave},data_fim.lte.${ultimaChave})`,
     );
 
   if (obra) query = query.eq("obra_id", obra);

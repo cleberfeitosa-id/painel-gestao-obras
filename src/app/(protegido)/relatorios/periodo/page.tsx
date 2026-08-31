@@ -119,8 +119,8 @@ export default async function RelatorioPeriodoPage({
   }
 
   const { inicio, fim } = periodo;
-  const dataInicio = `${inicio}T00:00:00`;
-  const dataFim = `${chaveDia(addDays(paraData(fim), 1))}T00:00:00`;
+  const dataInicio = `${inicio}T00:00:00-03:00`;
+  const dataFim = `${chaveDia(addDays(paraData(fim), 1))}T00:00:00-03:00`;
 
   const supabase = await createClient();
 

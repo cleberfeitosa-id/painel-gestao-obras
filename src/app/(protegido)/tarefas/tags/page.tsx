@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft, Tag } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Botao, Cartao, CartaoConteudo, EstadoVazio } from "@/components/ui";
+import { formatarData } from "@/lib/datas";
+import { Cartao, CartaoConteudo, EstadoVazio } from "@/components/ui";
 import { BotaoExcluirTag } from "@/components/tarefas/botao-excluir-tag";
 
 export default async function GerenciarTagsPage() {
@@ -60,7 +61,7 @@ export default async function GerenciarTagsPage() {
                   <div>
                     <p className="font-medium text-superficie-900">{tag.nome}</p>
                     <p className="text-xs text-superficie-500 mt-1">
-                      Criada por {(tag.criado_por as any)?.nome ?? "Sistema"} em {new Date(tag.criado_em).toLocaleDateString('pt-BR')}
+                      Criada por {(tag.criado_por as { nome: string } | null)?.nome ?? "Sistema"} em {formatarData(tag.criado_em)}
                     </p>
                   </div>
                   {podeExcluir && (

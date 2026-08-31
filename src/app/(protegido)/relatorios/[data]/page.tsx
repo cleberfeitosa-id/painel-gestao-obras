@@ -122,8 +122,8 @@ export default async function RelatorioDiarioPage({
 
   const dataChave = resultado.data;
   const data = paraData(dataChave);
-  const dataInicio = `${dataChave}T00:00:00`;
-  const dataFim = `${chaveDia(addDays(data, 1))}T00:00:00`;
+  const dataInicio = `${dataChave}T00:00:00-03:00`;
+  const dataFim = `${chaveDia(addDays(data, 1))}T00:00:00-03:00`;
 
   const supabase = await createClient();
 

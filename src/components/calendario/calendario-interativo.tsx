@@ -7,7 +7,7 @@ import { ptBR } from "date-fns/locale";
 import { CheckCircle2, CalendarClock, RotateCw } from "lucide-react";
 import { Botao, Campo, Modal } from "@/components/ui";
 import { reagendarTarefa } from "@/app/(protegido)/calendario/acoes";
-import { chaveDia, NOMES_DIAS_SEMANA } from "@/lib/datas";
+import { hojeChave, NOMES_DIAS_SEMANA } from "@/lib/datas";
 import { cn } from "@/lib/utils";
 import type { TarefaRow } from "@/lib/supabase/database.types";
 
@@ -31,8 +31,15 @@ type Props = {
 };
 
 const MAX_ITENS = 3;
-const ANO_CALENDARIO = 2026;
-const JANEIRO_2026_DOMINGO = 4;
+const DIAS_SEMANA_COMPLETO = [
+  "domingo",
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+  "sábado",
+];
 
 export function CalendarioInterativo({
   semana,
@@ -70,7 +77,7 @@ export function CalendarioInterativo({
 
   const abrirReagendar = (item: ItemCalendario) => {
     setTarefaReagendar(item);
-    setNovaData(item.tarefa.data_planejada ?? chaveDia(new Date()));
+    setNovaData(item.tarefa.data_planejada ?? hojeChave());
     setErroReagendar(undefined);
   };
 
@@ -151,10 +158,10 @@ export function CalendarioInterativo({
     );
   };
 
-  const nomesDia = NOMES_DIAS_SEMANA.map((nome, idx) => {
-    const data = new Date(ANO_CALENDARIO, 0, JANEIRO_2026_DOMINGO + idx);
-    return { nome, diaDaSemana: format(data, "EEEE", { locale: ptBR }) };
-  });
+  const nomesDia = NOMES_DIAS_SEMANA.map((nome, idx) => ({
+    nome,
+    diaDaSemana: DIAS_SEMANA_COMPLETO[idx] ?? nome,
+  }));
 
   return (
     <>

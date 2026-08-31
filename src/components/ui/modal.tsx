@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,47 +32,58 @@ export function Modal({
 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  // useLayoutEffect + cleanup simetrico: com React 19 o <dialog> e reconciliado
-  // pelo atributo `open`; sem prop `open`, um re-render pode fechar o dialogo.
-  // Sincronizar no mesmo render e limpar no desmonte evita o reset e e seguro
-  // em StrictMode (efeito montado/desmontado duas vezes).
-  useLayoutEffect(() => {
+  useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
-    if (aberto && !dialog.open) {
-      dialog.showModal();
-    } else if (!aberto && dialog.open) {
-      dialog.close();
+    if (aberto) {
+      if (!dialog.open) {
+        try {
+          dialog.showModal();
+        } catch {}
+      }
+    } else {
+      if (dialog.open) {
+        try {
+          dialog.close();
+        } catch {}
+      }
     }
-
-    return () => {
-      if (dialog.open) dialog.close();
-    };
   }, [aberto]);
-
-  const fechar = useCallback(() => {
-    aoFechar();
-  }, [aoFechar]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
-    const onClose = () => aoFechar();
-    dialog.addEventListener("close", onClose);
+    const aoCancelar = (e: Event) => {
+      e.preventDefault();
+      aoFechar();
+    };
+
+    dialog.addEventListener("cancel", aoCancelar);
 
     return () => {
-      dialog.removeEventListener("close", onClose);
+      dialog.removeEventListener("cancel", aoCancelar);
     };
   }, [aoFechar]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    return () => {
+      if (dialog?.open) {
+        try {
+          dialog.close();
+        } catch {}
+      }
+    };
+  }, []);
 
   return (
     <dialog
       ref={dialogRef}
       onClick={(e) => {
         if (e.target === dialogRef.current) {
-          dialogRef.current?.close();
+          aoFechar();
         }
       }}
       className={cn(
@@ -94,7 +105,7 @@ export function Modal({
           </div>
           <button
             type="button"
-            onClick={fechar}
+            onClick={aoFechar}
             className="flex-shrink-0 rounded-lg p-1.5 text-superficie-400 hover:text-superficie-600 hover:bg-superficie-100 transition-colors"
             aria-label="Fechar"
           >

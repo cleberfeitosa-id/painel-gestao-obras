@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar, CheckSquare, Camera } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { formatarData, chaveDia, addDays, paraData } from "@/lib/datas";
+import { formatarData, chaveDia, addDays, paraData, hojeChave } from "@/lib/datas";
 import { FormularioRelatorio } from "@/components/relatorios/formulario-relatorio";
 import {
   Cartao,
@@ -29,7 +29,7 @@ interface AtividadeDia {
 export default async function RelatoriosIndexPage() {
   const supabase = await createClient();
 
-  const hoje = new Date();
+  const hoje = paraData(hojeChave());
   const inicioChave = chaveDia(addDays(hoje, -13));
   const fimChave = chaveDia(addDays(hoje, 1));
 
@@ -47,14 +47,14 @@ export default async function RelatoriosIndexPage() {
       .select("concluida_em")
       .eq("status", "concluido")
       .not("concluida_em", "is", null)
-      .gte("concluida_em", `${inicioChave}T00:00:00`)
-      .lt("concluida_em", `${fimChave}T00:00:00`),
+      .gte("concluida_em", `${inicioChave}T00:00:00-03:00`)
+      .lt("concluida_em", `${fimChave}T00:00:00-03:00`),
     supabase
       .from("tarefa_anexos")
       .select("criado_em")
       .eq("tipo", "imagem")
-      .gte("criado_em", `${inicioChave}T00:00:00`)
-      .lt("criado_em", `${fimChave}T00:00:00`),
+      .gte("criado_em", `${inicioChave}T00:00:00-03:00`)
+      .lt("criado_em", `${fimChave}T00:00:00-03:00`),
     supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
     supabase.from("executores").select("id, nome").order("nome"),
     supabase.from("plantas").select("id, nome, obra_id, obras!inner(nome)").order("nome"),

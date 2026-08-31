@@ -9,8 +9,8 @@ import {
   Hammer,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { situacaoPrazo, formatarData } from "@/lib/datas";
-import { STATUS_TAREFA, STATUS_OBRA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
+import { situacaoPrazo, hojeChave } from "@/lib/datas";
+import { STATUS_OBRA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
 import {
   Cartao,
   CartaoCabecalho,
@@ -62,7 +62,7 @@ async function buscarDados() {
       .limit(5),
   ]);
 
-  const hoje = new Date().toISOString().split("T")[0];
+  const hoje = hojeChave();
   const { count: tarefasAtrasadas } = await supabase
     .from("tarefas")
     .select("*", { count: "exact", head: true })

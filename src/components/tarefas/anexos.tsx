@@ -7,6 +7,7 @@ import {
   Video,
   FileText,
   Trash2,
+  ExternalLink,
 } from "lucide-react";
 import { Botao, Modal, EstadoVazio } from "@/components/ui";
 import { formatarTamanho } from "@/lib/utils";
@@ -237,12 +238,14 @@ export function Anexos({
                         <button
                           type="button"
                           onClick={() => setImagemAberta({ url, anexo })}
-                          className="block aspect-square w-full overflow-hidden rounded-lg border border-borda focus:outline-none focus:ring-2 focus:ring-azul-500"
+                          className="block aspect-square w-full overflow-hidden rounded-lg border border-borda bg-superficie-100 focus:outline-none focus:ring-2 focus:ring-azul-500 cursor-pointer"
                           aria-label={`Ampliar ${anexo.nome_arquivo}`}
                         >
                           <img
                             src={url}
                             alt={anexo.nome_arquivo}
+                            loading="lazy"
+                            decoding="async"
                             className="h-full w-full object-cover transition-transform group-hover:scale-105"
                           />
                         </button>
@@ -377,28 +380,39 @@ export function Anexos({
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-borda pt-3 text-xs text-superficie-500">
-              <div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span>{formatarTamanho(imagemAberta.anexo.tamanho_bytes)}</span>
-                <span> · </span>
+                <span>·</span>
                 <span>{MOMENTO_ANEXO[imagemAberta.anexo.momento].rotulo}</span>
-                <span> · </span>
-                <span>{imagemAberta.anexo.enviado_por_nome ?? "Usuario"}</span>
+                <span>·</span>
+                <span>{imagemAberta.anexo.enviado_por_nome ?? "Usuário"}</span>
               </div>
-              {podeExcluirAnexo(imagemAberta.anexo) && (
-                <Botao
-                  type="button"
-                  variante="perigo"
-                  tamanho="sm"
-                  onClick={() => {
-                    const id = imagemAberta.anexo.id;
-                    setImagemAberta(null);
-                    setExcluirId(id);
-                  }}
+              <div className="flex items-center gap-2">
+                <a
+                  href={imagemAberta.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-borda bg-white px-3 py-1.5 text-xs font-medium text-superficie-700 hover:bg-superficie-50 hover:text-azul-600 transition-colors"
                 >
-                  <Trash2 className="h-4 w-4" />
-                  Excluir imagem
-                </Botao>
-              )}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Abrir original
+                </a>
+                {podeExcluirAnexo(imagemAberta.anexo) && (
+                  <Botao
+                    type="button"
+                    variante="perigo"
+                    tamanho="sm"
+                    onClick={() => {
+                      const id = imagemAberta.anexo.id;
+                      setImagemAberta(null);
+                      setExcluirId(id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Excluir imagem
+                  </Botao>
+                )}
+              </div>
             </div>
           </div>
         )}
