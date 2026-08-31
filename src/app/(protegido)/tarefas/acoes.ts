@@ -9,11 +9,10 @@ import { notificarResponsavel } from "@/lib/email";
 import { assinarUpload, removerArquivo, BUCKET_ANEXOS } from "@/lib/armazenamento";
 import type {
   AprovacaoTarefa,
-  CatalogoPrecoRow,
+  Atualizacao,
   MomentoAnexo,
   PrioridadeTarefa,
   StatusTarefa,
-  TarefaMedicaoRow,
   TarefaRow,
   TipoAnexo,
   TipoLocalizacao,
@@ -645,9 +644,10 @@ export async function associarLocalizacao(
   const user = await usuarioAtual();
   if (!user) return { erro: "Sessao expirada. Entre novamente." };
 
-  const papel = await papelDoUsuario(user.id);
-  if (!eGestor(papel)) {
-    return { erro: "Voce nao tem permissao para associar tarefas." };
+  const { tarefa, podeEscrever } = await carregarTarefaComPermissao(tarefaId);
+  if (!tarefa) return { erro: "Tarefa nao encontrada." };
+  if (!podeEscrever) {
+    return { erro: "Voce nao tem permissao para editar a localizacao desta tarefa." };
   }
 
   const resultado = esquemaAssociar.safeParse(dados);
@@ -659,15 +659,6 @@ export async function associarLocalizacao(
     resultado.data;
 
   const supabase = await createClient();
-
-  const { data: tarefa } = await supabase
-    .from("tarefas")
-    .select("obra_id")
-    .eq("id", tarefaId)
-    .maybeSingle();
-  if (!tarefa) {
-    return { erro: "Tarefa nao encontrada." };
-  }
 
   const { data: planta } = await supabase
     .from("plantas")
@@ -706,12 +697,16 @@ export async function associarLocalizacao(
   const { error } = await supabase.from("tarefas").update(atualizacao).eq("id", tarefaId);
 
   if (error) {
-    return { erro: "Nao foi possivel associar a localizacao. Tente novamente." };
+    return { erro: "Nao foi possivel salvar a localizacao. Tente novamente." };
   }
 
   revalidatePath("/tarefas");
   revalidatePath(`/tarefas/${tarefaId}`);
   revalidatePath("/painel");
+  if (tarefa.obra_id) {
+    revalidatePath(`/obras/${tarefa.obra_id}`);
+    revalidatePath(`/obras/${tarefa.obra_id}/plantas/${planta_id}`);
+  }
   return {};
 }
 
@@ -743,39 +738,49 @@ export async function atualizarTarefasEmLote(
     }
   }
 
-  const updates: any = {};
+  const updates: Atualizacao<"tarefas"> = {};
   
   const titulo = formData.get("titulo");
   if (titulo && String(titulo).trim()) updates.titulo = String(titulo).trim();
   
-  const status = formData.get("status");
-  if (status) updates.status = status;
+  const status = formData.get("status") ? (String(formData.get("status")) as StatusTarefa) : null;
+  if (status) {
+    updates.status = status;
+    if (status !== "concluido") {
+      updates.aprovacao = "pendente";
+      updates.avaliado_por = null;
+      updates.avaliado_em = null;
+      updates.motivo_reprovacao = null;
+    }
+  }
   
-  const prioridade = formData.get("prioridade");
+  const prioridade = formData.get("prioridade")
+    ? (String(formData.get("prioridade")) as PrioridadeTarefa)
+    : null;
   if (prioridade) updates.prioridade = prioridade;
   
-  const responsavel_id = formData.get("responsavel_id");
+  const responsavel_id = formData.get("responsavel_id") ? String(formData.get("responsavel_id")) : null;
   if (responsavel_id) updates.responsavel_id = responsavel_id === "remover" ? null : responsavel_id;
   
-  const executor_id = formData.get("executor_id");
+  const executor_id = formData.get("executor_id") ? String(formData.get("executor_id")) : null;
   if (executor_id) updates.executor_id = executor_id === "remover" ? null : executor_id;
   
-  const supervisor_id = formData.get("supervisor_id");
+  const supervisor_id = formData.get("supervisor_id") ? String(formData.get("supervisor_id")) : null;
   if (supervisor_id) updates.supervisor_id = supervisor_id === "remover" ? null : supervisor_id;
   
-  const tag_id = formData.get("tag_id");
+  const tag_id = formData.get("tag_id") ? String(formData.get("tag_id")) : null;
   if (tag_id) updates.tag_id = tag_id === "remover" ? null : tag_id;
   
-  const prazo = formData.get("prazo");
+  const prazo = formData.get("prazo") ? String(formData.get("prazo")) : null;
   if (prazo) updates.prazo = prazo;
   
-  const data_planejada = formData.get("data_planejada");
+  const data_planejada = formData.get("data_planejada") ? String(formData.get("data_planejada")) : null;
   if (data_planejada) updates.data_planejada = data_planejada;
 
-  const data_inicio = formData.get("data_inicio");
+  const data_inicio = formData.get("data_inicio") ? String(formData.get("data_inicio")) : null;
   if (data_inicio) updates.data_inicio = data_inicio;
 
-  const data_fim = formData.get("data_fim");
+  const data_fim = formData.get("data_fim") ? String(formData.get("data_fim")) : null;
   if (data_fim) updates.data_fim = data_fim;
 
   const medicoesRaw = formData.get("medicoes");
@@ -904,9 +909,18 @@ export async function atualizarTarefa(
   );
   if (erroExecutor) return { erro: erroExecutor };
 
+  const dadosNormalizados = normalizar(resultado.data);
+  const dadosAtualizacao: Atualizacao<"tarefas"> = { ...dadosNormalizados };
+  if (resultado.data.status !== "concluido" && tarefa.aprovacao !== "pendente") {
+    dadosAtualizacao.aprovacao = "pendente";
+    dadosAtualizacao.avaliado_por = null;
+    dadosAtualizacao.avaliado_em = null;
+    dadosAtualizacao.motivo_reprovacao = null;
+  }
+
   const { error } = await supabase
     .from("tarefas")
-    .update(normalizar(resultado.data))
+    .update(dadosAtualizacao)
     .eq("id", id);
 
   if (error) {
@@ -1000,9 +1014,24 @@ export async function alterarStatus(
   }
 
   const supabase = await createClient();
+  const dadosUpdate: {
+    status: StatusTarefa;
+    aprovacao?: AprovacaoTarefa;
+    avaliado_por?: string | null;
+    avaliado_em?: string | null;
+    motivo_reprovacao?: string | null;
+  } = { status: novoStatus };
+
+  if (novoStatus !== "concluido" && tarefa.aprovacao !== "pendente") {
+    dadosUpdate.aprovacao = "pendente";
+    dadosUpdate.avaliado_por = null;
+    dadosUpdate.avaliado_em = null;
+    dadosUpdate.motivo_reprovacao = null;
+  }
+
   const { error } = await supabase
     .from("tarefas")
-    .update({ status: novoStatus })
+    .update(dadosUpdate)
     .eq("id", tarefaId);
 
   if (error) {
@@ -1012,6 +1041,13 @@ export async function alterarStatus(
   revalidatePath("/tarefas");
   revalidatePath(`/tarefas/${tarefaId}`);
   revalidatePath("/painel");
+  revalidatePath("/calendario");
+  if (tarefa.obra_id) {
+    revalidatePath(`/obras/${tarefa.obra_id}`);
+    if (tarefa.planta_id) {
+      revalidatePath(`/obras/${tarefa.obra_id}/plantas/${tarefa.planta_id}`);
+    }
+  }
   return {};
 }
 
@@ -1097,6 +1133,69 @@ export async function avaliarTarefa(
     });
   if (erroHistorico) {
     return { erro: "Nao foi possivel registrar o historico da avaliacao." };
+  }
+
+  revalidatePath("/tarefas");
+  revalidatePath(`/tarefas/${tarefaId}`);
+  revalidatePath("/painel");
+  return {};
+}
+
+export async function reverterAprovacao(
+  tarefaId: string,
+  motivo?: string,
+): Promise<Resultado> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tarefas")
+    .select("*")
+    .eq("id", tarefaId)
+    .single();
+  const tarefa = data as TarefaRow | null;
+  if (!tarefa) return { erro: "Tarefa nao encontrada." };
+
+  const papel = await papelDoUsuario(user.id);
+  if (tarefa.supervisor_id !== user.id && !eGestor(papel)) {
+    return { erro: "Voce nao tem permissao para reverter esta aprovacao." };
+  }
+
+  if (tarefa.aprovacao !== "aprovado") {
+    return { erro: "Somente tarefas aprovadas podem ser revertidas." };
+  }
+
+  const motivoLimpo = motivo?.trim() ?? "";
+
+  // RLS em `tarefas` so permite escrita a gestores e ao responsavel. Um
+  // supervisor colaborador nao pode atualizar a linha pelo client normal;
+  // a permissao ja foi conferida acima, entao o UPDATE passa pelo client
+  // admin (bypassa RLS) de forma deliberada.
+  const admin = createAdminClient();
+  const { error: erroTarefa } = await admin
+    .from("tarefas")
+    .update({
+      aprovacao: "pendente",
+      avaliado_por: null,
+      avaliado_em: null,
+      motivo_reprovacao: null,
+    })
+    .eq("id", tarefaId);
+  if (erroTarefa) {
+    return { erro: "Nao foi possivel reverter a aprovacao. Tente novamente." };
+  }
+
+  const { error: erroHistorico } = await admin
+    .from("tarefa_aprovacoes")
+    .insert({
+      tarefa_id: tarefaId,
+      supervisor_id: user.id,
+      decisao: "pendente",
+      motivo: motivoLimpo || null,
+    });
+  if (erroHistorico) {
+    return { erro: "Nao foi possivel registrar a reversao da aprovacao." };
   }
 
   revalidatePath("/tarefas");
@@ -1384,6 +1483,40 @@ export async function excluirAnexo(
   const { error } = await admin.from("tarefa_anexos").delete().eq("id", anexoId);
   if (error) {
     return { erro: "Nao foi possivel excluir o anexo. Tente novamente." };
+  }
+
+  // Tarefa que exige foto e foi aprovada: se nao restar nenhuma imagem, a
+  // aprovacao e revertida para pendente (exige nova aprovacao) e o evento
+  // fica registrado no historico de aprovacoes.
+  if (
+    anexo.tipo === "imagem" &&
+    tarefa.exige_foto &&
+    tarefa.aprovacao === "aprovado"
+  ) {
+    const { data: restantes } = await admin
+      .from("tarefa_anexos")
+      .select("id")
+      .eq("tarefa_id", tarefaId)
+      .eq("tipo", "imagem");
+
+    if (!restantes || restantes.length === 0) {
+      const { error: erroTarefa } = await admin
+        .from("tarefas")
+        .update({
+          aprovacao: "pendente",
+          avaliado_por: null,
+          avaliado_em: null,
+          motivo_reprovacao: null,
+        })
+        .eq("id", tarefaId);
+      if (!erroTarefa) {
+        await admin.from("tarefa_aprovacoes").insert({
+          tarefa_id: tarefaId,
+          supervisor_id: user.id,
+          decisao: "pendente",
+        });
+      }
+    }
   }
 
   revalidatePath(`/tarefas/${tarefaId}`);

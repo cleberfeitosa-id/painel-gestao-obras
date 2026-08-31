@@ -13,7 +13,7 @@ type Opcao<T extends string> = { valor: T; rotulo: string; classe: string };
 export const STATUS_TAREFA: Record<StatusTarefa, Opcao<StatusTarefa>> = {
   pendente: {
     valor: "pendente",
-    rotulo: "Pendente",
+    rotulo: "Não iniciada",
     classe: "bg-slate-100 text-slate-700 ring-slate-600/20",
   },
   em_execucao: {
@@ -128,7 +128,7 @@ export const SITUACAO_TAREFA: Record<
 > = {
   pendente: {
     valor: "pendente",
-    rotulo: "Não iniciado",
+    rotulo: "Não iniciada",
     classe: STATUS_TAREFA.pendente.classe,
     pino: "bg-slate-400",
     regiao: "border-slate-400/80 bg-slate-400/10",

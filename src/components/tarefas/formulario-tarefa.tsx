@@ -72,7 +72,15 @@ function BotaoEnviar({ rotulo }: { rotulo: string }) {
   );
 }
 
-function ResumoLocalizacao({ localizacao }: { localizacao: LocalizacaoInicial }) {
+function ResumoLocalizacao({
+  localizacao,
+  tarefaId,
+  obraId,
+}: {
+  localizacao: LocalizacaoInicial;
+  tarefaId?: string;
+  obraId?: string;
+}) {
   if (localizacao.localizacao_tipo === "nenhuma") return null;
 
   const pagina = localizacao.pagina ? `pagina ${localizacao.pagina}` : "";
@@ -82,15 +90,27 @@ function ResumoLocalizacao({ localizacao }: { localizacao: LocalizacaoInicial })
       : `Regiao com ${localizacao.regiao?.vertices.length ?? 0} vertices`;
 
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-azul-200 bg-azul-50 px-4 py-3 text-sm text-azul-800">
-      <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0" />
-      <div>
-        <p className="font-medium">Localizacao selecionada na planta</p>
-        <p className="text-xs text-azul-700">
-          {detalhe}
-          {pagina ? ` - ${pagina}` : ""}
-        </p>
+    <div className="flex items-start justify-between gap-2 rounded-lg border border-azul-200 bg-azul-50 px-4 py-3 text-sm text-azul-800">
+      <div className="flex items-start gap-2">
+        <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0" />
+        <div>
+          <p className="font-medium">Localizacao selecionada na planta</p>
+          <p className="text-xs text-azul-700">
+            {detalhe}
+            {pagina ? ` - ${pagina}` : ""}
+          </p>
+        </div>
       </div>
+      {tarefaId && localizacao.planta_id && obraId && (
+        <a
+          href={`/obras/${obraId}/plantas/${localizacao.planta_id}?associar=${tarefaId}`}
+          className="inline-flex shrink-0 items-center gap-1 rounded border border-azul-300 bg-white px-2 py-1 text-xs font-medium text-azul-700 hover:bg-azul-50 transition-colors"
+          title="Abrir planta para editar a localização visualmente"
+        >
+          <MapPin className="h-3 w-3" />
+          <span>Editar no mapa</span>
+        </a>
+      )}
     </div>
   );
 }
@@ -298,7 +318,11 @@ export function FormularioTarefa({
         </div>
       ) : (
         localizacao.localizacao_tipo !== "nenhuma" && (
-          <ResumoLocalizacao localizacao={localizacao} />
+          <ResumoLocalizacao
+            localizacao={localizacao}
+            tarefaId={tarefa?.id}
+            obraId={tarefa?.obra_id ?? obraId}
+          />
         )
       )}
 

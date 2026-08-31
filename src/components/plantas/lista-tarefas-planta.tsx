@@ -41,6 +41,7 @@ interface ListaTarefasPlantaProps {
   tags: { id: string; nome: string }[];
   tarefaDestaque: string | null;
   aoDestaque: (id: string | null) => void;
+  aoEditarNoMapa?: (id: string) => void;
 }
 
 export function ListaTarefasPlanta({
@@ -59,6 +60,7 @@ export function ListaTarefasPlanta({
   tags,
   tarefaDestaque,
   aoDestaque,
+  aoEditarNoMapa,
 }: ListaTarefasPlantaProps) {
   const temFiltros =
     filtroSituacao !== "todas" ||
@@ -191,9 +193,26 @@ export function ListaTarefasPlanta({
                         {PRIORIDADE_TAREFA[tarefa.prioridade].rotulo}
                       </Etiqueta>
                     </div>
-                    <p className="mt-1.5 text-xs text-superficie-500">
-                      {prazoInfo.texto}
-                    </p>
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      <p className="text-xs text-superficie-500">
+                        {prazoInfo.texto}
+                      </p>
+                      {aoEditarNoMapa && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            aoEditarNoMapa(tarefa.id);
+                          }}
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-azul-600 hover:bg-azul-50 hover:text-azul-700 transition-colors"
+                          title="Editar posição desta tarefa no mapa"
+                        >
+                          <MapPin className="h-3 w-3" />
+                          <span>Editar no mapa</span>
+                        </button>
+                      )}
+                    </div>
                   </a>
                 </li>
               );

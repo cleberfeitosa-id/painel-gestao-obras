@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -23,6 +23,8 @@ import {
 import { Document, Page, pdfjs } from "react-pdf";
 import { Botao, Etiqueta, Selecao, Spinner } from "@/components/ui";
 import {
+  CANTOS,
+  cantoParaPonto,
   calcularCalibracao,
   centroDaRegiao,
   distanciaEmPontos,
@@ -31,12 +33,14 @@ import {
   medirArea,
   medirDistancia,
   medirPerimetro,
+  moverRegiao,
   pdfParaPercentual,
   pontoEmRegiao,
+  regiaoComCanto,
   retanguloParaRegiao,
   telaParaPdf,
   type Calibracao,
-  type Retangulo,
+  type Canto,
 } from "@/lib/pdf/coordenadas";
 import {
   OPCOES_SITUACAO_TAREFA,
@@ -194,10 +198,6 @@ function RotuloMedicao({
   );
 }
 
-type Canto = "nw" | "ne" | "sw" | "se";
-
-const CANTOS: Canto[] = ["nw", "ne", "sw", "se"];
-
 function textoPonto(ponto: PontoPdf, calibracao: Calibracao | null): string {
   const unidade = calibracao?.unidade ?? "pt";
   const fator = calibracao?.unidadesPorPonto ?? 1;
@@ -220,41 +220,6 @@ function textoDimensoes(regiao: RegiaoPdf, calibracao: Calibracao | null): strin
     escala,
   );
   return `${formatarMedida(largura, unidade)} × ${formatarMedida(altura, unidade)}`;
-}
-
-function cantoParaPonto(limites: Retangulo, canto: Canto): PontoPdf {
-  switch (canto) {
-    case "nw":
-      return { x: limites.x, y: limites.y + limites.altura };
-    case "ne":
-      return { x: limites.x + limites.largura, y: limites.y + limites.altura };
-    case "sw":
-      return { x: limites.x, y: limites.y };
-    case "se":
-      return { x: limites.x + limites.largura, y: limites.y };
-  }
-}
-
-function regiaoComCanto(
-  regiao: RegiaoPdf,
-  canto: Canto,
-  novo: PontoPdf,
-): RegiaoPdf {
-  const limites = limitesDaRegiao(regiao);
-  if (!limites) return regiao;
-  let x1 = limites.x;
-  let x2 = limites.x + limites.largura;
-  let y1 = limites.y;
-  let y2 = limites.y + limites.altura;
-  if (canto === "nw" || canto === "ne") y2 = novo.y;
-  if (canto === "sw" || canto === "se") y1 = novo.y;
-  if (canto === "nw" || canto === "sw") x1 = novo.x;
-  if (canto === "ne" || canto === "se") x2 = novo.x;
-  const ax = Math.min(x1, x2);
-  const bx = Math.max(x1, x2);
-  const ay = Math.min(y1, y2);
-  const by = Math.max(y1, y2);
-  return retanguloParaRegiao({ x: ax, y: ay }, { x: bx, y: by });
 }
 
 function CarregandoPlanta() {
@@ -298,12 +263,17 @@ export function VisualizadorPlanta({
   podeEditar,
 }: PropsAreaPlanta) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const associarParam = searchParams.get("associar") ?? searchParams.get("editarTarefa");
+
   const [urlAtual, setUrlAtual] = useState<string | null>(urlPdf);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [numPaginas, setNumPaginas] = useState(planta.total_paginas);
   const [escala, setEscala] = useState(1);
   const [ajusteLargura, setAjusteLargura] = useState(true);
-  const [ferramenta, setFerramenta] = useState<Ferramenta>("navegar");
+  const [ferramenta, setFerramenta] = useState<Ferramenta>(() =>
+    associarParam && podeEditar ? "associar" : "navegar",
+  );
   const [dimensoes, setDimensoes] = useState<DimensoesPagina | null>(null);
   const [erroDocumento, setErroDocumento] = useState<string | null>(null);
   const [renovando, setRenovando] = useState(false);
@@ -317,7 +287,9 @@ export function VisualizadorPlanta({
   const [tarefaDestaque, setTarefaDestaque] = useState<string | null>(null);
   const [confirmacao, setConfirmacao] = useState<ConfirmacaoLocalizacao | null>(null);
   const [associacaoTipo, setAssociacaoTipo] = useState<"pino" | "regiao">("pino");
-  const [tarefaAssociacao, setTarefaAssociacao] = useState("");
+  const [tarefaAssociacao, setTarefaAssociacao] = useState(() =>
+    associarParam && podeEditar ? associarParam : "",
+  );
   const [associando, setAssociando] = useState(false);
   const [erroAssociacao, setErroAssociacao] = useState<string | null>(null);
   const [criandoLote, setCriandoLote] = useState(false);
@@ -359,6 +331,7 @@ export function VisualizadorPlanta({
   const regiaoRef = useRef<PontoPdf | null>(null);
   const pinoDragRef = useRef<{ ancora: PontoPdf } | null>(null);
   const cantoDragRef = useRef<{ canto: Canto } | null>(null);
+  const regiaoCorpoDragRef = useRef<{ ancora: PontoPdf; regiaoInicial: RegiaoPdf } | null>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<{ distancia: number; escala: number } | null>(null);
   const animacaoZoomRef = useRef<{ fx: number; fy: number; cx: number; cy: number } | null>(null);
@@ -540,6 +513,14 @@ export function VisualizadorPlanta({
       );
       setConfirmacao({ tipo: "regiao", regiao: nova });
       setRegiaoAtual(nova);
+    } else if (regiaoCorpoDragRef.current && confirmacao?.tipo === "regiao") {
+      const ponto = pontoDoEvento(e);
+      if (!ponto) return;
+      const dx = ponto.x - regiaoCorpoDragRef.current.ancora.x;
+      const dy = ponto.y - regiaoCorpoDragRef.current.ancora.y;
+      const nova = moverRegiao(regiaoCorpoDragRef.current.regiaoInicial, dx, dy);
+      setConfirmacao({ tipo: "regiao", regiao: nova });
+      setRegiaoAtual(nova);
     }
   }
 
@@ -555,6 +536,8 @@ export function VisualizadorPlanta({
       setArrastando(false);
       setPosicaoMouse(null);
       pinoDragRef.current = null;
+      cantoDragRef.current = null;
+      regiaoCorpoDragRef.current = null;
       return;
     }
 
@@ -585,6 +568,8 @@ export function VisualizadorPlanta({
       if (ponto) setConfirmacao({ tipo: "ponto", ponto });
       pinoDragRef.current = null;
     }
+    cantoDragRef.current = null;
+    regiaoCorpoDragRef.current = null;
   }
 
   function identificarTarefasNoPonto(
@@ -693,8 +678,63 @@ export function VisualizadorPlanta({
     setMenuSobreposicao(null);
     pinoDragRef.current = null;
     cantoDragRef.current = null;
+    regiaoCorpoDragRef.current = null;
     regiaoRef.current = null;
   }
+
+  const aoSelecionarTarefaParaAssociar = useCallback(
+    (id: string) => {
+      setTarefaAssociacao(id);
+      setErroAssociacao(null);
+      if (!id) {
+        limparRascunho();
+        return;
+      }
+      const tarefa =
+        tarefasObra.find((t) => t.id === id) ??
+        tarefas.find((t) => t.id === id);
+      if (!tarefa) return;
+
+      if (
+        tarefa.localizacao_tipo === "ponto" &&
+        tarefa.ponto_x != null &&
+        tarefa.ponto_y != null
+      ) {
+        setAssociacaoTipo("pino");
+        if (
+          tarefa.pagina &&
+          tarefa.pagina !== paginaAtual &&
+          (!tarefa.planta_id || tarefa.planta_id === planta.id)
+        ) {
+          setPaginaAtual(tarefa.pagina);
+        }
+        setConfirmacao({
+          tipo: "ponto",
+          ponto: { x: tarefa.ponto_x, y: tarefa.ponto_y },
+        });
+      } else if (tarefa.localizacao_tipo === "regiao" && tarefa.regiao != null) {
+        setAssociacaoTipo("regiao");
+        if (
+          tarefa.pagina &&
+          tarefa.pagina !== paginaAtual &&
+          (!tarefa.planta_id || tarefa.planta_id === planta.id)
+        ) {
+          setPaginaAtual(tarefa.pagina);
+        }
+        setConfirmacao({ tipo: "regiao", regiao: tarefa.regiao });
+        setRegiaoAtual(tarefa.regiao);
+      } else {
+        limparRascunho();
+      }
+    },
+    [tarefasObra, tarefas, paginaAtual, planta.id],
+  );
+
+  useEffect(() => {
+    if (associarParam && podeEditar) {
+      aoSelecionarTarefaParaAssociar(associarParam);
+    }
+  }, [associarParam, podeEditar, aoSelecionarTarefaParaAssociar]);
 
   function confirmarCriacao() {
     if (!confirmacao) return;
@@ -1077,9 +1117,9 @@ export function VisualizadorPlanta({
           <div className="flex flex-wrap items-end gap-3 rounded-lg border border-azul-200 bg-azul-50/60 px-3 py-2.5">
             <div className="min-w-[220px] flex-1">
               <Selecao
-                rotulo="Tarefa para associar"
+                rotulo="Tarefa para associar ou editar"
                 value={tarefaAssociacao}
-                onChange={(e) => setTarefaAssociacao(e.target.value)}
+                onChange={(e) => aoSelecionarTarefaParaAssociar(e.target.value)}
               >
                 <option value="">Selecione uma tarefa</option>
                 {tarefasObra.map((tarefa) => {
@@ -1481,6 +1521,62 @@ export function VisualizadorPlanta({
                           classe="stroke-azul-600 fill-azul-600/10"
                         />
                       </svg>
+                      {(() => {
+                        const limites = limitesDaRegiao(confirmacao.regiao);
+                        if (!limites) return null;
+                        const c1 = pdfParaPercentual(
+                          { x: limites.x, y: limites.y },
+                          dimensoes.largura,
+                          dimensoes.altura,
+                        );
+                        const c2 = pdfParaPercentual(
+                          {
+                            x: limites.x + limites.largura,
+                            y: limites.y + limites.altura,
+                          },
+                          dimensoes.largura,
+                          dimensoes.altura,
+                        );
+                        return (
+                          <div
+                            className="absolute z-25 cursor-move border border-dashed border-azul-600/60 bg-azul-500/10 hover:bg-azul-500/20 transition-colors"
+                            style={{
+                              left: `${Math.min(c1.esquerda, c2.esquerda)}%`,
+                              top: `${Math.min(c1.topo, c2.topo)}%`,
+                              width: `${Math.abs(c2.esquerda - c1.esquerda)}%`,
+                              height: `${Math.abs(c2.topo - c1.topo)}%`,
+                            }}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              const p = pontoDoEvento(e);
+                              if (!p) return;
+                              regiaoCorpoDragRef.current = {
+                                ancora: p,
+                                regiaoInicial: confirmacao.regiao,
+                              };
+                              e.currentTarget.setPointerCapture(e.pointerId);
+                            }}
+                            onPointerMove={(e) => {
+                              if (!regiaoCorpoDragRef.current) return;
+                              e.stopPropagation();
+                              const p = pontoDoEvento(e);
+                              if (!p) return;
+                              const dx = p.x - regiaoCorpoDragRef.current.ancora.x;
+                              const dy = p.y - regiaoCorpoDragRef.current.ancora.y;
+                              const nova = moverRegiao(
+                                regiaoCorpoDragRef.current.regiaoInicial,
+                                dx,
+                                dy,
+                              );
+                              setConfirmacao({ tipo: "regiao", regiao: nova });
+                              setRegiaoAtual(nova);
+                            }}
+                            onPointerUp={() => {
+                              regiaoCorpoDragRef.current = null;
+                            }}
+                          />
+                        );
+                      })()}
                       {CANTOS.map((canto) => {
                         const limites = limitesDaRegiao(confirmacao.regiao);
                         if (!limites) return null;
@@ -1659,6 +1755,14 @@ export function VisualizadorPlanta({
           tags={tags}
           tarefaDestaque={tarefaDestaque}
           aoDestaque={setTarefaDestaque}
+          aoEditarNoMapa={
+            podeEditar
+              ? (id) => {
+                  setFerramenta("associar");
+                  aoSelecionarTarefaParaAssociar(id);
+                }
+              : undefined
+          }
         />
       </div>
 

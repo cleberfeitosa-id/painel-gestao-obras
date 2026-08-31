@@ -193,12 +193,23 @@ export default async function DetalheTarefaPage({
       ? await buscarDadosPlantaTarefa(tarefa.planta_id, tarefa.pagina)
       : null;
 
+  const supabase = await createClient();
+  const { data: plantasObra } =
+    !dadosPlanta && tarefa.obra_id
+      ? await supabase
+          .from("plantas")
+          .select("id, nome")
+          .eq("obra_id", tarefa.obra_id)
+          .order("criado_em")
+      : { data: null };
+
   const prazoInfo = situacaoPrazo(tarefa.prazo, tarefa.status === "concluido");
   const podeEscrever = usuario.eGestor || tarefa.responsavel_id === usuario.id;
   const podeAvaliar =
     tarefa.supervisor_id === usuario.id &&
     tarefa.status === "concluido" &&
     tarefa.aprovacao === "pendente";
+  const podeReverter = usuario.eGestor || tarefa.supervisor_id === usuario.id;
 
   const temFoto = complementos.anexos.some((a) => a.tipo === "imagem");
   const temVideo = complementos.anexos.some((a) => a.tipo === "video");
@@ -372,15 +383,16 @@ export default async function DetalheTarefaPage({
                 </div>
               )}
 
-              {tarefa.localizacao_tipo !== "nenhuma" && tarefa.planta_id && (
+              {tarefa.localizacao_tipo !== "nenhuma" && tarefa.planta_id ? (
                 <div className="mt-4 border-t border-borda pt-4 min-w-0 max-w-full">
                   <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
                     Localizacao na planta
                   </dt>
                   <dd className="mt-1">
                     <Link
-                      href={`/obras/${tarefa.obra_id}/plantas/${tarefa.planta_id}`}
+                      href={`/obras/${tarefa.obra_id}/plantas/${tarefa.planta_id}?associar=${tarefa.id}`}
                       className="inline-flex items-center gap-1.5 text-sm font-medium text-azul-600 hover:text-azul-700"
+                      title="Abrir no visualizador completo"
                     >
                       <MapPin className="h-4 w-4" />
                       {tarefa.localizacao_tipo === "ponto"
@@ -404,6 +416,24 @@ export default async function DetalheTarefaPage({
                       />
                     </div>
                   )}
+                </div>
+              ) : (
+                <div className="mt-4 border-t border-borda pt-4 min-w-0 max-w-full">
+                  <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
+                    Localizacao na planta
+                  </dt>
+                  <dd className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm text-superficie-500">Sem localização vinculada</span>
+                    {podeEscrever && plantasObra && plantasObra.length > 0 && (
+                      <Link
+                        href={`/obras/${tarefa.obra_id}/plantas/${plantasObra[0].id}?associar=${tarefa.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-azul-200 bg-azul-50 px-3 py-1.5 text-xs font-medium text-azul-700 hover:bg-azul-100 hover:border-azul-300 transition-colors"
+                      >
+                        <MapPin className="h-3.5 w-3.5" />
+                        Definir localização no mapa
+                      </Link>
+                    )}
+                  </dd>
                 </div>
               )}
             </CartaoConteudo>
@@ -504,7 +534,12 @@ export default async function DetalheTarefaPage({
               )}
 
               <div className="mt-4">
-                <AprovacaoTarefa tarefaId={tarefa.id} podeAvaliar={podeAvaliar} />
+                <AprovacaoTarefa
+                  tarefaId={tarefa.id}
+                  aprovacao={tarefa.aprovacao}
+                  podeAvaliar={podeAvaliar}
+                  podeReverter={podeReverter}
+                />
               </div>
             </CartaoConteudo>
           </Cartao>

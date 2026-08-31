@@ -149,3 +149,54 @@ export function formatarMedida(valor: number, unidade: string, casas = 2) {
     maximumFractionDigits: casas,
   })} ${unidade}`;
 }
+
+export type Canto = "nw" | "ne" | "sw" | "se";
+export const CANTOS: Canto[] = ["nw", "ne", "sw", "se"];
+
+export function cantoParaPonto(limites: Retangulo, canto: Canto): PontoPdf {
+  switch (canto) {
+    case "nw":
+      return { x: limites.x, y: limites.y + limites.altura };
+    case "ne":
+      return { x: limites.x + limites.largura, y: limites.y + limites.altura };
+    case "sw":
+      return { x: limites.x, y: limites.y };
+    case "se":
+      return { x: limites.x + limites.largura, y: limites.y };
+  }
+}
+
+export function regiaoComCanto(
+  regiao: RegiaoPdf,
+  canto: Canto,
+  novo: PontoPdf,
+): RegiaoPdf {
+  const limites = limitesDaRegiao(regiao);
+  if (!limites) return regiao;
+  let x1 = limites.x;
+  let x2 = limites.x + limites.largura;
+  let y1 = limites.y;
+  let y2 = limites.y + limites.altura;
+  if (canto === "nw" || canto === "ne") y2 = novo.y;
+  if (canto === "sw" || canto === "se") y1 = novo.y;
+  if (canto === "nw" || canto === "sw") x1 = novo.x;
+  if (canto === "ne" || canto === "se") x2 = novo.x;
+  const ax = Math.min(x1, x2);
+  const bx = Math.max(x1, x2);
+  const ay = Math.min(y1, y2);
+  const by = Math.max(y1, y2);
+  return retanguloParaRegiao({ x: ax, y: ay }, { x: bx, y: by });
+}
+
+export function moverRegiao(
+  regiao: RegiaoPdf,
+  deltaX: number,
+  deltaY: number,
+): RegiaoPdf {
+  return {
+    vertices: regiao.vertices.map((v) => ({
+      x: v.x + deltaX,
+      y: v.y + deltaY,
+    })),
+  };
+}

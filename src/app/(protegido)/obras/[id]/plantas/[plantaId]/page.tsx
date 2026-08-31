@@ -59,7 +59,7 @@ export default async function DetalhePlantaPage({
       .eq("planta_id", plantaId),
     supabase
       .from("tarefas")
-      .select("id, titulo, localizacao_tipo, planta_id, plantas!tarefas_planta_id_fkey(nome)")
+      .select("id, titulo, localizacao_tipo, planta_id, pagina, ponto_x, ponto_y, regiao, plantas!tarefas_planta_id_fkey(nome)")
       .eq("obra_id", id),
     user
       ? supabase.from("perfis").select("papel").eq("id", user.id).single()
@@ -102,6 +102,10 @@ export default async function DetalhePlantaPage({
       localizacao_tipo: tarefa.localizacao_tipo,
       planta_id: tarefa.planta_id,
       planta_nome: tarefa.plantas?.nome ?? null,
+      pagina: tarefa.pagina,
+      ponto_x: tarefa.ponto_x,
+      ponto_y: tarefa.ponto_y,
+      regiao: tarefa.regiao as RegiaoPdf | null,
     }),
   );
 

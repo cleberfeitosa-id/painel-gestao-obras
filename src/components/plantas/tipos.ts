@@ -21,6 +21,7 @@ export type TarefaPlanta = {
   ponto_x: number | null;
   ponto_y: number | null;
   regiao: RegiaoPdf | null;
+  planta_id?: string | null;
   responsavel: { nome: string } | null;
   executor: { id: string; nome: string } | null;
   tags_tarefa: { id: string; nome: string } | null;
@@ -34,6 +35,10 @@ export type TarefaObraAssociacao = {
   localizacao_tipo: TipoLocalizacao;
   planta_id: string | null;
   planta_nome: string | null;
+  pagina?: number | null;
+  ponto_x?: number | null;
+  ponto_y?: number | null;
+  regiao?: RegiaoPdf | null;
 };
 
 export type PropsAreaPlanta = {
