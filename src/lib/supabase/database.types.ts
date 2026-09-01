@@ -14,6 +14,76 @@ export type Database = {
   }
   public: {
     Tables: {
+      levantamentos: {
+        Row: {
+          atualizado_em: string
+          categorias: Json
+          config_legenda: Json
+          criado_em: string
+          criado_por: string | null
+          descricao: string | null
+          id: string
+          itens: Json
+          niveis: Json
+          nome: string
+          obra_id: string
+          pagina: number
+          planta_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          categorias?: Json
+          config_legenda?: Json
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          itens?: Json
+          niveis?: Json
+          nome?: string
+          obra_id: string
+          pagina?: number
+          planta_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          categorias?: Json
+          config_legenda?: Json
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          itens?: Json
+          niveis?: Json
+          nome?: string
+          obra_id?: string
+          pagina?: number
+          planta_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "levantamentos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "levantamentos_obra_id_fkey"
+            columns: ["obra_id"]
+            isOneToOne: false
+            referencedRelation: "obras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "levantamentos_planta_id_fkey"
+            columns: ["planta_id"]
+            isOneToOne: false
+            referencedRelation: "plantas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       executores: {
         Row: {
           ativo: boolean
@@ -748,6 +818,8 @@ export type Database = {
           exige_foto: boolean
           exige_video: boolean
           id: string
+          levantamento_id: string | null
+          localizacao_detalhe: Json | null
           localizacao_tipo: Database["public"]["Enums"]["tipo_localizacao"]
           motivo_reprovacao: string | null
           obra_id: string
@@ -781,6 +853,8 @@ export type Database = {
           exige_foto?: boolean
           exige_video?: boolean
           id?: string
+          levantamento_id?: string | null
+          localizacao_detalhe?: Json | null
           localizacao_tipo?: Database["public"]["Enums"]["tipo_localizacao"]
           motivo_reprovacao?: string | null
           obra_id: string
@@ -814,6 +888,8 @@ export type Database = {
           exige_foto?: boolean
           exige_video?: boolean
           id?: string
+          levantamento_id?: string | null
+          localizacao_detalhe?: Json | null
           localizacao_tipo?: Database["public"]["Enums"]["tipo_localizacao"]
           motivo_reprovacao?: string | null
           obra_id?: string
@@ -954,7 +1030,7 @@ export type Database = {
       status_obra: "planejamento" | "em_andamento" | "pausada" | "concluida"
       status_tarefa: "pendente" | "em_execucao" | "concluido"
       tipo_anexo: "imagem" | "video" | "arquivo"
-      tipo_localizacao: "nenhuma" | "ponto" | "regiao"
+      tipo_localizacao: "nenhuma" | "ponto" | "regiao" | "distancia" | "circuito" | "area" | "descida"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1089,7 +1165,7 @@ export const Constants = {
       status_obra: ["planejamento", "em_andamento", "pausada", "concluida"],
       status_tarefa: ["pendente", "em_execucao", "concluido"],
       tipo_anexo: ["imagem", "video", "arquivo"],
-      tipo_localizacao: ["nenhuma", "ponto", "regiao"],
+      tipo_localizacao: ["nenhuma", "ponto", "regiao", "distancia", "circuito", "area"],
     },
   },
 } as const
@@ -1130,6 +1206,7 @@ export type NotificacaoRow = Tabelas<"notificacoes">;
 export type TagsTarefaRow = Tabelas<"tags_tarefa">;
 export type TarefaDependenciaRow = Tabelas<"tarefa_dependencias">;
 export type MedicaoPagamentoRow = Tabelas<"medicao_pagamentos">;
+export type LevantamentoRow = Tabelas<"levantamentos">;
 
 // As colunas jsonb chegam como `Json`. Reafirmamos a forma concreta na camada
 // de dominio para que a matematica de coordenadas continue tipada.

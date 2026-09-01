@@ -27,7 +27,7 @@ const esquemaMedicao = z.object({
 
 const esquemaLocalizacao = z
   .object({
-    localizacao_tipo: z.enum(["nenhuma", "ponto", "regiao"]),
+    localizacao_tipo: z.enum(["nenhuma", "ponto", "regiao", "distancia", "circuito", "area", "descida"]),
     planta_id: z.preprocess(
       (val) => (val === "" ? undefined : val),
       z.string().uuid().nullable().optional()
@@ -65,6 +65,24 @@ const esquemaLocalizacao = z
         .nullable()
         .optional()
     ),
+    localizacao_detalhe: z.preprocess(
+      (val) => {
+        if (val === "" || val == null) return undefined;
+        if (typeof val === "string") {
+          try {
+            return JSON.parse(val);
+          } catch {
+            return val;
+          }
+        }
+        return val;
+      },
+      z.any().nullable().optional()
+    ),
+    levantamento_id: z.preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.string().uuid().nullable().optional()
+    ),
   })
   .superRefine((dados, ctx) => {
     // Satisfaz as CHECK constraints do banco: ponto exige x/y, regiao exige
@@ -81,6 +99,15 @@ const esquemaLocalizacao = z
       ctx.addIssue({
         code: "custom",
         message: "Localizacao por regiao exige os vertices da area.",
+      });
+    }
+    if (
+      ["distancia", "circuito", "area", "descida"].includes(dados.localizacao_tipo) &&
+      !dados.localizacao_detalhe
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Localizacao de levantamento exige detalhes geometricos.",
       });
     }
     if (
@@ -206,9 +233,21 @@ function normalizar(dados: DadosTarefa) {
     localizacao_tipo: localizacao as TipoLocalizacao,
     planta_id: localizacao === "nenhuma" ? null : (dados.planta_id ?? null),
     pagina: localizacao === "nenhuma" ? null : (dados.pagina ?? null),
-    ponto_x: localizacao === "ponto" ? (dados.ponto_x ?? null) : null,
-    ponto_y: localizacao === "ponto" ? (dados.ponto_y ?? null) : null,
+    ponto_x:
+      localizacao === "ponto" || localizacao === "descida"
+        ? (dados.ponto_x ?? null)
+        : null,
+    ponto_y:
+      localizacao === "ponto" || localizacao === "descida"
+        ? (dados.ponto_y ?? null)
+        : null,
     regiao: localizacao === "regiao" ? dados.regiao : null,
+    levantamento_id: dados.levantamento_id || null,
+    localizacao_detalhe: ["distancia", "circuito", "area", "descida"].includes(
+      localizacao,
+    )
+      ? dados.localizacao_detalhe
+      : null,
   };
 }
 
@@ -313,6 +352,8 @@ export async function criarTarefa(
     ponto_x: formData.get("ponto_x"),
     ponto_y: formData.get("ponto_y"),
     regiao: formData.get("regiao"),
+    levantamento_id: formData.get("levantamento_id"),
+    localizacao_detalhe: formData.get("localizacao_detalhe"),
     medicoes,
   };
 
@@ -894,6 +935,8 @@ export async function atualizarTarefa(
     ponto_x: formData.get("ponto_x"),
     ponto_y: formData.get("ponto_y"),
     regiao: formData.get("regiao"),
+    levantamento_id: formData.get("levantamento_id"),
+    localizacao_detalhe: formData.get("localizacao_detalhe"),
     medicoes,
   };
 

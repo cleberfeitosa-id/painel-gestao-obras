@@ -1,0 +1,10 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Exportação de plantas:
+    - aproveitando a lógica de visualização de plantas e geração de relatórios, quero que seja possível exportar em pdf uma planta iluminada, com os pinos e regiões com transparência, tal qual vemos na página de plantas.
+    - A planta exportada deverá ter tamanho grande, ao menos A0, onde os pinos e regiões terão hiperlinks para os detalhamentos de suas tarefas.
+    - Os hiperlinks devem funcionar no pdf exportado levando até a respectiva tarefa.
+    - Na tarefa estão suas informações basicas, como também um zoom da área próxima na planta, imagens caso existam, e quantidades cadastradas em seus campos itens de medição caso existam.
+    - Caso o usuário decida, deve ser possível escolher que outras informações sejam incorporadas, como por exemplo o valor total de medição e os valores individuais daquela tarefa naquela medição baseado em seus itens cadastrados.
+    - As imagens podem ser de baixa resolução para reduzir o tamanho do pdf e o processamento envolvido, mas não tanto a ponto de perder a qualidade de identificação de objetos.
+    

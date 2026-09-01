@@ -26,12 +26,14 @@ type MedicaoItem = { catalogo_id: string; quantidade: number };
 type ResultadoFormulario = { erro?: string };
 
 export type LocalizacaoInicial = {
-  localizacao_tipo: "nenhuma" | "ponto" | "regiao";
+  localizacao_tipo: "nenhuma" | "ponto" | "regiao" | "distancia" | "circuito" | "area" | "descida";
   planta_id?: string;
   pagina?: number;
   ponto_x?: number;
   ponto_y?: number;
   regiao?: { vertices: { x: number; y: number }[] };
+  levantamento_id?: string;
+  localizacao_detalhe?: Record<string, unknown>;
 };
 
 export type LocalizacaoLote = {
@@ -58,6 +60,8 @@ interface FormularioTarefaProps {
   localizacaoInicial?: LocalizacaoInicial;
   localizacoesLote?: LocalizacaoLote[];
   obraIdInicial?: string;
+  tituloInicial?: string;
+  descricaoInicial?: string;
   loteId?: string;
   catalogoPrecos?: CatalogoComMedicao[];
   medicoes?: MedicaoItem[];
@@ -83,18 +87,34 @@ function ResumoLocalizacao({
 }) {
   if (localizacao.localizacao_tipo === "nenhuma") return null;
 
-  const pagina = localizacao.pagina ? `pagina ${localizacao.pagina}` : "";
-  const detalhe =
-    localizacao.localizacao_tipo === "ponto"
-      ? `Ponto (x: ${localizacao.ponto_x?.toFixed(2)}, y: ${localizacao.ponto_y?.toFixed(2)})`
-      : `Regiao com ${localizacao.regiao?.vertices.length ?? 0} vertices`;
+  const pagina = localizacao.pagina ? `página ${localizacao.pagina}` : "";
+  let detalhe = "";
+
+  if (localizacao.localizacao_tipo === "ponto") {
+    detalhe = `Ponto (x: ${localizacao.ponto_x?.toFixed(2)}, y: ${localizacao.ponto_y?.toFixed(2)})`;
+  } else if (localizacao.localizacao_tipo === "regiao") {
+    detalhe = `Região com ${localizacao.regiao?.vertices.length ?? 0} vértices`;
+  } else if (localizacao.localizacao_tipo === "distancia") {
+    const comp = localizacao.localizacao_detalhe?.comprimento;
+    detalhe = `Distância linear: ${typeof comp === "number" ? `${comp.toFixed(2)} m` : "Trecho medido"}`;
+  } else if (localizacao.localizacao_tipo === "circuito") {
+    const circ = localizacao.localizacao_detalhe?.circuito;
+    const comp = localizacao.localizacao_detalhe?.comprimento;
+    detalhe = `Circuito ${circ ? `"${circ}"` : ""} (${typeof comp === "number" ? `${comp.toFixed(2)} m` : ""})`;
+  } else if (localizacao.localizacao_tipo === "area") {
+    const ar = localizacao.localizacao_detalhe?.area;
+    detalhe = `Área medida: ${typeof ar === "number" ? `${ar.toFixed(2)} m²` : "Polígono delimitado"}`;
+  } else if (localizacao.localizacao_tipo === "descida") {
+    const comp = localizacao.localizacao_detalhe?.comprimento;
+    detalhe = `Descida/Subida (${typeof comp === "number" ? `${comp.toFixed(2)} m` : "trecho vertical"})`;
+  }
 
   return (
     <div className="flex items-start justify-between gap-2 rounded-lg border border-azul-200 bg-azul-50 px-4 py-3 text-sm text-azul-800">
       <div className="flex items-start gap-2">
         <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0" />
         <div>
-          <p className="font-medium">Localizacao selecionada na planta</p>
+          <p className="font-medium">Localização vinculada à planta / levantamento</p>
           <p className="text-xs text-azul-700">
             {detalhe}
             {pagina ? ` - ${pagina}` : ""}
@@ -127,6 +147,8 @@ export function FormularioTarefa({
   localizacaoInicial,
   localizacoesLote,
   obraIdInicial,
+  tituloInicial,
+  descricaoInicial,
   loteId,
   catalogoPrecos,
   medicoes,
@@ -186,12 +208,14 @@ export function FormularioTarefa({
     : dataPlanejada || undefined;
 
   const localizacao = localizacaoInicial ?? {
-    localizacao_tipo: tarefa?.localizacao_tipo ?? "nenhuma",
+    localizacao_tipo: (tarefa?.localizacao_tipo as LocalizacaoInicial["localizacao_tipo"]) ?? "nenhuma",
     planta_id: tarefa?.planta_id ?? undefined,
     pagina: tarefa?.pagina ?? undefined,
     ponto_x: tarefa?.ponto_x ?? undefined,
     ponto_y: tarefa?.ponto_y ?? undefined,
-    regiao: tarefa?.regiao ?? undefined,
+    regiao: (tarefa?.regiao as { vertices: { x: number; y: number }[] } | null) ?? undefined,
+    levantamento_id: tarefa?.levantamento_id ?? undefined,
+    localizacao_detalhe: (tarefa?.localizacao_detalhe as Record<string, unknown> | null) ?? undefined,
   };
 
   const handlePrazoChange = (valor: string) => {
@@ -288,6 +312,20 @@ export function FormularioTarefa({
             name="regiao"
             value={localizacao.regiao ? JSON.stringify(localizacao.regiao) : ""}
           />
+          <input
+            type="hidden"
+            name="levantamento_id"
+            value={localizacao.levantamento_id ?? ""}
+          />
+          <input
+            type="hidden"
+            name="localizacao_detalhe"
+            value={
+              localizacao.localizacao_detalhe
+                ? JSON.stringify(localizacao.localizacao_detalhe)
+                : ""
+            }
+          />
         </>
       )}
 
@@ -330,7 +368,7 @@ export function FormularioTarefa({
         rotulo="Titulo"
         obrigatorio
         name="titulo"
-        defaultValue={tarefa?.titulo ?? ""}
+        defaultValue={tarefa?.titulo ?? tituloInicial ?? ""}
         placeholder="Ex.: Instalar rede hidraulica"
         list="titulos-existentes"
         autoComplete="off"
@@ -351,7 +389,7 @@ export function FormularioTarefa({
       <AreaTexto
         rotulo="Descricao"
         name="descricao"
-        defaultValue={tarefa?.descricao ?? ""}
+        defaultValue={tarefa?.descricao ?? descricaoInicial ?? ""}
         placeholder="Detalhes, escopo e observacoes da tarefa."
       />
 

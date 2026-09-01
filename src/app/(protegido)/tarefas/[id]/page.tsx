@@ -118,7 +118,7 @@ async function buscarDadosPlantaTarefa(plantaId: string, pagina: number) {
     supabase
       .from("tarefas")
       .select(
-        "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
+        "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, localizacao_detalhe, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
       )
       .eq("planta_id", plantaId)
       .eq("pagina", pagina),
@@ -141,6 +141,7 @@ async function buscarDadosPlantaTarefa(plantaId: string, pagina: number) {
     ponto_x: t.ponto_x,
     ponto_y: t.ponto_y,
     regiao: t.regiao as RegiaoPdf | null,
+    localizacao_detalhe: t.localizacao_detalhe as TarefaPlanta["localizacao_detalhe"],
     responsavel: t.responsavel,
     executor: t.executor,
     tags_tarefa: t.tags_tarefa,
@@ -172,6 +173,41 @@ async function buscarUsuario() {
     eAdmin: perfil?.papel === "admin",
     eGestor: perfil?.papel === "admin" || perfil?.papel === "gestor",
   };
+}
+
+function formatarTextoLocalizacao(tarefa: {
+  localizacao_tipo: string;
+  localizacao_detalhe?: unknown;
+  ponto_x?: number | null;
+  ponto_y?: number | null;
+  regiao?: unknown;
+}) {
+  const detalhe = tarefa.localizacao_detalhe as Record<string, unknown> | null;
+  if (tarefa.localizacao_tipo === "ponto") {
+    return `Ponto (x: ${tarefa.ponto_x?.toFixed(2)}, y: ${tarefa.ponto_y?.toFixed(2)})`;
+  }
+  if (tarefa.localizacao_tipo === "regiao") {
+    const vertices = (tarefa.regiao as { vertices?: unknown[] } | null)?.vertices;
+    return `Região com ${vertices?.length ?? 0} vértices`;
+  }
+  if (tarefa.localizacao_tipo === "distancia") {
+    const comp = typeof detalhe?.comprimento === "number" ? detalhe.comprimento : null;
+    return `Distância linear: ${comp != null ? `${comp.toFixed(2)} m` : "Trecho medido"}`;
+  }
+  if (tarefa.localizacao_tipo === "circuito") {
+    const circ = detalhe?.circuito;
+    const comp = typeof detalhe?.comprimento === "number" ? detalhe.comprimento : null;
+    return `Circuito ${circ ? `"${circ}"` : ""} (${comp != null ? `${comp.toFixed(2)} m` : "Trecho"})`;
+  }
+  if (tarefa.localizacao_tipo === "area") {
+    const ar = typeof detalhe?.area === "number" ? detalhe.area : null;
+    return `Área medida: ${ar != null ? `${ar.toFixed(2)} m²` : "Polígono delimitado"}`;
+  }
+  if (tarefa.localizacao_tipo === "descida") {
+    const comp = typeof detalhe?.comprimento === "number" ? detalhe.comprimento : null;
+    return `Descida/Subida Vertical (${comp != null ? `Δ=${comp.toFixed(2)} m` : "trecho vertical"})`;
+  }
+  return "Localização na planta";
 }
 
 export default async function DetalheTarefaPage({
@@ -394,11 +430,9 @@ export default async function DetalheTarefaPage({
                       className="inline-flex items-center gap-1.5 text-sm font-medium text-azul-600 hover:text-azul-700"
                       title="Abrir no visualizador completo"
                     >
-                      <MapPin className="h-4 w-4" />
-                      {tarefa.localizacao_tipo === "ponto"
-                        ? `Ponto (x: ${tarefa.ponto_x?.toFixed(2)}, y: ${tarefa.ponto_y?.toFixed(2)})`
-                        : `Regiao com ${tarefa.regiao?.vertices.length ?? 0} vertices`}
-                      {tarefa.pagina ? ` - pagina ${tarefa.pagina}` : ""}
+                      <MapPin className="h-4 w-4 shrink-0" />
+                      <span>{formatarTextoLocalizacao(tarefa)}</span>
+                      {tarefa.pagina ? ` - página ${tarefa.pagina}` : ""}
                     </Link>
                   </dd>
 

@@ -106,6 +106,7 @@ export default async function NovaTarefaPage({
         pagina: resultado.data.pagina,
         ponto_x: resultado.data.x,
         ponto_y: resultado.data.y,
+        levantamento_id: params.levantamento,
       };
     }
   } else if (params.tipo === "regiao") {
@@ -116,8 +117,30 @@ export default async function NovaTarefaPage({
         planta_id: resultado.data.planta,
         pagina: resultado.data.pagina,
         regiao: resultado.data.regiao,
+        levantamento_id: params.levantamento,
       };
     }
+  } else if (
+    params.tipo === "distancia" ||
+    params.tipo === "circuito" ||
+    params.tipo === "area" ||
+    params.tipo === "descida"
+  ) {
+    let detalheParsed: Record<string, unknown> | undefined = undefined;
+    if (params.detalhe) {
+      try {
+        detalheParsed = JSON.parse(params.detalhe) as Record<string, unknown>;
+      } catch {}
+    }
+    localizacao = {
+      localizacao_tipo: params.tipo as "distancia" | "circuito" | "area" | "descida",
+      planta_id: params.planta,
+      pagina: params.pagina ? Number(params.pagina) : 1,
+      ponto_x: params.x ? Number(params.x) : undefined,
+      ponto_y: params.y ? Number(params.y) : undefined,
+      levantamento_id: params.levantamento,
+      localizacao_detalhe: detalheParsed,
+    };
   }
 
   return (
@@ -125,16 +148,20 @@ export default async function NovaTarefaPage({
       <div>
         <Link
           href={
-            params.obra && params.planta
-              ? `/obras/${params.obra}/plantas/${params.planta}`
-              : "/tarefas"
+            params.levantamento
+              ? `/levantamento/${params.levantamento}`
+              : params.obra && params.planta
+                ? `/obras/${params.obra}/plantas/${params.planta}`
+                : "/tarefas"
           }
           className="inline-flex items-center gap-1 text-sm font-medium text-azul-600 hover:text-azul-700"
         >
           <ArrowLeft className="h-4 w-4" />
-          {params.obra && params.planta
-            ? "Voltar para a planta"
-            : "Voltar para tarefas"}
+          {params.levantamento
+            ? "Voltar para o levantamento"
+            : params.obra && params.planta
+              ? "Voltar para a planta"
+              : "Voltar para tarefas"}
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-superficie-900">Nova tarefa</h1>
         <p className="mt-1 text-sm text-superficie-500">
@@ -157,6 +184,8 @@ export default async function NovaTarefaPage({
             titulosExistentes={opcoes.titulosExistentes}
             localizacaoInicial={localizacao}
             obraIdInicial={obraIdInicial}
+            tituloInicial={params.titulo}
+            descricaoInicial={params.descricao}
             catalogoPrecos={opcoes.catalogoPrecos}
           />
         </CartaoConteudo>

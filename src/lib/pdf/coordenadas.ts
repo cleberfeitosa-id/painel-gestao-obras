@@ -200,3 +200,63 @@ export function moverRegiao(
     })),
   };
 }
+
+// Constroi um corredor fino (poligono fechado) ao redor de uma polilinha em
+// espaco do PDF: banco esquerdo para frente + banco direito invertido. Usado
+// para visualizar tarefas de "distancia linear" como uma regiao estreita.
+export function corredorDaPolilinha(
+  pontos: PontoPdf[],
+  espessura: number,
+): PontoPdf[] {
+  if (pontos.length < 2) return [];
+
+  const metade = espessura / 2;
+  const bancoEsquerdo: PontoPdf[] = [];
+  const bancoDireito: PontoPdf[] = [];
+
+  for (let i = 0; i < pontos.length; i += 1) {
+    const anterior = pontos[Math.max(0, i - 1)];
+    const atual = pontos[i];
+    const proximo = pontos[Math.min(pontos.length - 1, i + 1)];
+
+    let dx = proximo.x - anterior.x;
+    let dy = proximo.y - anterior.y;
+    let comp = Math.hypot(dx, dy);
+    if (comp === 0) {
+      dx = 0;
+      dy = 1;
+      comp = 1;
+    }
+    const nx = -dy / comp;
+    const ny = dx / comp;
+
+    bancoEsquerdo.push({ x: atual.x + nx * metade, y: atual.y + ny * metade });
+    bancoDireito.push({ x: atual.x - nx * metade, y: atual.y - ny * metade });
+  }
+
+  return [...bancoEsquerdo, ...bancoDireito.reverse()];
+}
+
+export function distanciaPontoPolilinha(
+  p: PontoPdf,
+  pontos: PontoPdf[],
+): number {
+  if (pontos.length === 0) return Infinity;
+  if (pontos.length === 1) return Math.hypot(p.x - pontos[0].x, p.y - pontos[0].y);
+
+  let menorDist = Infinity;
+  for (let i = 0; i < pontos.length - 1; i += 1) {
+    const a = pontos[i];
+    const b = pontos[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const l2 = dx * dx + dy * dy;
+    let t = l2 === 0 ? 0 : ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2;
+    t = Math.max(0, Math.min(1, t));
+    const projX = a.x + t * dx;
+    const projY = a.y + t * dy;
+    const dist = Math.hypot(p.x - projX, p.y - projY);
+    if (dist < menorDist) menorDist = dist;
+  }
+  return menorDist;
+}

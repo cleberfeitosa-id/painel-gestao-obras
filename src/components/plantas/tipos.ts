@@ -9,6 +9,20 @@ import type {
   TipoLocalizacao,
 } from "@/lib/supabase/database.types";
 
+export type DetalheLocalizacaoLevantamento = {
+  elemento?: string;
+  subtipo?: string;
+  categoria?: string;
+  altura?: number;
+  pontos?: { x: number; y: number }[];
+  comprimento?: number;
+  area?: number;
+  perimetro?: number;
+  circuito?: string;
+  alturaOrigem?: number;
+  alturaDestino?: number;
+};
+
 export type TarefaPlanta = {
   id: string;
   titulo: string;
@@ -21,6 +35,7 @@ export type TarefaPlanta = {
   ponto_x: number | null;
   ponto_y: number | null;
   regiao: RegiaoPdf | null;
+  localizacao_detalhe?: DetalheLocalizacaoLevantamento | null;
   planta_id?: string | null;
   responsavel: { nome: string } | null;
   executor: { id: string; nome: string } | null;

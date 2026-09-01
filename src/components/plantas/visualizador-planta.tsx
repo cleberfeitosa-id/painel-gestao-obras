@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowDownUp,
   ChevronLeft,
   ChevronRight,
   Layers,
@@ -27,7 +28,9 @@ import {
   cantoParaPonto,
   calcularCalibracao,
   centroDaRegiao,
+  corredorDaPolilinha,
   distanciaEmPontos,
+  distanciaPontoPolilinha,
   formatarMedida,
   limitesDaRegiao,
   medirArea,
@@ -43,6 +46,7 @@ import {
   type Canto,
 } from "@/lib/pdf/coordenadas";
 import {
+  CORES_CORREDOR,
   OPCOES_SITUACAO_TAREFA,
   PRIORIDADE_TAREFA,
   situacaoDaTarefa,
@@ -590,7 +594,7 @@ export function VisualizadorPlanta({
 
     return tarefasFiltradas.filter((t) => {
       if (
-        t.localizacao_tipo === "ponto" &&
+        (t.localizacao_tipo === "ponto" || t.localizacao_tipo === "descida") &&
         t.ponto_x != null &&
         t.ponto_y != null
       ) {
@@ -606,6 +610,27 @@ export function VisualizadorPlanta({
       }
       if (t.localizacao_tipo === "regiao" && t.regiao) {
         return pontoEmRegiao(pontoPdf, t.regiao);
+      }
+      if (
+        (t.localizacao_tipo === "distancia" ||
+          t.localizacao_tipo === "circuito") &&
+        t.localizacao_detalhe?.pontos &&
+        t.localizacao_detalhe.pontos.length >= 2
+      ) {
+        const distPdf = distanciaPontoPolilinha(
+          pontoPdf,
+          t.localizacao_detalhe.pontos,
+        );
+        return distPdf <= 15;
+      }
+      if (
+        t.localizacao_tipo === "area" &&
+        t.localizacao_detalhe?.pontos &&
+        t.localizacao_detalhe.pontos.length >= 3
+      ) {
+        return pontoEmRegiao(pontoPdf, {
+          vertices: t.localizacao_detalhe.pontos,
+        });
       }
       return false;
     });
@@ -1427,6 +1452,137 @@ export function VisualizadorPlanta({
                         >
                           {dicaTarefa === tarefa.id && (
                             <div className="pointer-events-none absolute z-30 -translate-y-full pb-2">
+                              <DicaTarefa tarefa={tarefa} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {tarefasFiltradas
+                    .filter(
+                      (t) =>
+                        t.localizacao_tipo === "distancia" &&
+                        t.localizacao_detalhe?.pontos &&
+                        t.localizacao_detalhe.pontos.length >= 2,
+                    )
+                    .map((tarefa) => {
+                      const corredor = corredorDaPolilinha(
+                        tarefa.localizacao_detalhe!.pontos!,
+                        8,
+                      );
+                      if (corredor.length < 3) return null;
+                      const pontosPct = corredor
+                        .map((p) =>
+                          pdfParaPercentual(
+                            p,
+                            dimensoes.largura,
+                            dimensoes.altura,
+                          ),
+                        )
+                        .map((p) => `${p.esquerda.toFixed(3)}% ${p.topo.toFixed(3)}%`)
+                        .join(",");
+                      const p0 = tarefa.localizacao_detalhe!.pontos![0];
+                      const p0Pct = pdfParaPercentual(
+                        p0,
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      const sit = situacaoDaTarefa({
+                        status: tarefa.status,
+                        aprovacao: tarefa.aprovacao,
+                      });
+                      return (
+                        <div
+                          key={tarefa.id}
+                          className={cn(
+                            "absolute inset-0 cursor-pointer",
+                            !modoInterativo && "pointer-events-none",
+                          )}
+                          style={{
+                            clipPath: `polygon(${pontosPct})`,
+                            backgroundColor: CORES_CORREDOR[sit],
+                            opacity: 0.4,
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (ferramenta === "navegar") {
+                              setMenuSobreposicao(null);
+                              router.push(`/tarefas/${tarefa.id}`);
+                            } else {
+                              aoClicar(e);
+                            }
+                          }}
+                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
+                          onMouseLeave={aoSairPino}
+                        >
+                          {dicaTarefa === tarefa.id && (
+                            <div
+                              className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2"
+                              style={{
+                                left: `${p0Pct.esquerda}%`,
+                                top: `${p0Pct.topo}%`,
+                              }}
+                            >
+                              <DicaTarefa tarefa={tarefa} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {tarefasFiltradas
+                    .filter(
+                      (t) =>
+                        t.localizacao_tipo === "descida" &&
+                        t.ponto_x != null &&
+                        t.ponto_y != null,
+                    )
+                    .map((tarefa) => {
+                      const pos = pdfParaPercentual(
+                        { x: tarefa.ponto_x!, y: tarefa.ponto_y! },
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      const sit = situacaoDaTarefa({
+                        status: tarefa.status,
+                        aprovacao: tarefa.aprovacao,
+                      });
+                      return (
+                        <div
+                          key={tarefa.id}
+                          className={cn(
+                            "absolute -translate-x-1/2 -translate-y-1/2",
+                            tarefaDestaque === tarefa.id &&
+                              "rounded-lg border-2 border-dashed border-azul-600 bg-azul-600/30 p-1",
+                            !modoInterativo && "pointer-events-none",
+                          )}
+                          style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              aoClicar(e);
+                            }}
+                            onMouseEnter={() => aoEntrarPino(tarefa.id)}
+                            onMouseLeave={aoSairPino}
+                            className="flex items-center justify-center rounded-full p-1.5 shadow ring-2 ring-white"
+                            aria-label={`Tarefa: ${tarefa.titulo}`}
+                          >
+                            <span
+                              className={cn(
+                                "flex h-4 w-4 items-center justify-center rounded-full opacity-[0.8]",
+                                SITUACAO_TAREFA[sit].pino,
+                              )}
+                            >
+                              <ArrowDownUp className="h-3 w-3 text-white" />
+                            </span>
+                          </button>
+                          {dicaTarefa === tarefa.id && (
+                            <div className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2">
                               <DicaTarefa tarefa={tarefa} />
                             </div>
                           )}

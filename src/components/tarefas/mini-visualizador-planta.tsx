@@ -7,6 +7,7 @@ import {
   Calendar,
   Check,
   ExternalLink,
+  ArrowDownUp,
   LocateFixed,
   MapPin,
   MousePointer2,
@@ -24,6 +25,8 @@ import {
   CANTOS,
   cantoParaPonto,
   centroDaRegiao,
+  corredorDaPolilinha,
+  distanciaPontoPolilinha,
   limitesDaRegiao,
   moverRegiao,
   pdfParaPercentual,
@@ -34,6 +37,7 @@ import {
   type Canto,
 } from "@/lib/pdf/coordenadas";
 import {
+  CORES_CORREDOR,
   PRIORIDADE_TAREFA,
   situacaoDaTarefa,
   SITUACAO_TAREFA,
@@ -215,11 +219,31 @@ export function MiniVisualizadorPlanta({
       if (ferramentaEdicao === "regiao" && edicaoRegiao) return centroDaRegiao(edicaoRegiao);
     }
     if (!tarefaAtual) return null;
-    if (tarefaAtual.localizacao_tipo === "ponto" && tarefaAtual.ponto_x != null && tarefaAtual.ponto_y != null) {
+    if (
+      (tarefaAtual.localizacao_tipo === "ponto" ||
+        tarefaAtual.localizacao_tipo === "descida") &&
+      tarefaAtual.ponto_x != null &&
+      tarefaAtual.ponto_y != null
+    ) {
       return { x: tarefaAtual.ponto_x, y: tarefaAtual.ponto_y };
     }
     if (tarefaAtual.localizacao_tipo === "regiao" && tarefaAtual.regiao) {
       return centroDaRegiao(tarefaAtual.regiao);
+    }
+    if (
+      (tarefaAtual.localizacao_tipo === "distancia" ||
+        tarefaAtual.localizacao_tipo === "circuito" ||
+        tarefaAtual.localizacao_tipo === "area") &&
+      tarefaAtual.localizacao_detalhe?.pontos &&
+      tarefaAtual.localizacao_detalhe.pontos.length > 0
+    ) {
+      const pts = tarefaAtual.localizacao_detalhe.pontos;
+      const sumX = pts.reduce((acc, p) => acc + p.x, 0);
+      const sumY = pts.reduce((acc, p) => acc + p.y, 0);
+      return { x: sumX / pts.length, y: sumY / pts.length };
+    }
+    if (tarefaAtual.ponto_x != null && tarefaAtual.ponto_y != null) {
+      return { x: tarefaAtual.ponto_x, y: tarefaAtual.ponto_y };
     }
     return null;
   }, [tarefaAtual, modoEdicao, ferramentaEdicao, edicaoPonto, edicaoRegiao]);
@@ -598,7 +622,7 @@ export function MiniVisualizadorPlanta({
 
     return tarefas.filter((t) => {
       if (
-        t.localizacao_tipo === "ponto" &&
+        (t.localizacao_tipo === "ponto" || t.localizacao_tipo === "descida") &&
         t.ponto_x != null &&
         t.ponto_y != null
       ) {
@@ -614,6 +638,27 @@ export function MiniVisualizadorPlanta({
       }
       if (t.localizacao_tipo === "regiao" && t.regiao) {
         return pontoEmRegiao(pontoPdf, t.regiao);
+      }
+      if (
+        (t.localizacao_tipo === "distancia" ||
+          t.localizacao_tipo === "circuito") &&
+        t.localizacao_detalhe?.pontos &&
+        t.localizacao_detalhe.pontos.length >= 2
+      ) {
+        const distPdf = distanciaPontoPolilinha(
+          pontoPdf,
+          t.localizacao_detalhe.pontos,
+        );
+        return distPdf <= 15;
+      }
+      if (
+        t.localizacao_tipo === "area" &&
+        t.localizacao_detalhe?.pontos &&
+        t.localizacao_detalhe.pontos.length >= 3
+      ) {
+        return pontoEmRegiao(pontoPdf, {
+          vertices: t.localizacao_detalhe.pontos,
+        });
       }
       return false;
     });
@@ -1049,6 +1094,160 @@ export function MiniVisualizadorPlanta({
 
                           {dicaTarefa === tarefa.id && !modoEdicao && (
                             <div className="pointer-events-none absolute z-40 -translate-y-full pb-2">
+                              <DicaTarefa tarefa={tarefa} eAtual={eAtual} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {tarefas
+                    .filter(
+                      (t) =>
+                        t.localizacao_tipo === "distancia" &&
+                        t.localizacao_detalhe?.pontos &&
+                        t.localizacao_detalhe.pontos.length >= 2 &&
+                        (!modoEdicao || t.id !== tarefaAtualId),
+                    )
+                    .map((tarefa) => {
+                      const corredor = corredorDaPolilinha(
+                        tarefa.localizacao_detalhe!.pontos!,
+                        8,
+                      );
+                      if (corredor.length < 3) return null;
+                      const pontosPct = corredor
+                        .map((p) =>
+                          pdfParaPercentual(
+                            p,
+                            dimensoes.largura,
+                            dimensoes.altura,
+                          ),
+                        )
+                        .map((p) => `${p.esquerda.toFixed(3)}% ${p.topo.toFixed(3)}%`)
+                        .join(",");
+                      const p0 = tarefa.localizacao_detalhe!.pontos![0];
+                      const p0Pct = pdfParaPercentual(
+                        p0,
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      const eAtual = tarefa.id === tarefaAtualId;
+                      const sit = situacaoDaTarefa({
+                        status: tarefa.status,
+                        aprovacao: tarefa.aprovacao,
+                      });
+
+                      return (
+                        <div
+                          key={tarefa.id}
+                          className={cn(
+                            "absolute inset-0 cursor-pointer transition-opacity",
+                            eAtual ? "z-30 opacity-90 ring-2 ring-azul-400" : "z-20 opacity-50 hover:opacity-90",
+                            modoEdicao && "opacity-40 pointer-events-none",
+                          )}
+                          style={{
+                            clipPath: `polygon(${pontosPct})`,
+                            backgroundColor: CORES_CORREDOR[sit],
+                          }}
+                          onPointerDown={(e) => !modoEdicao && e.stopPropagation()}
+                          onClick={(e) => {
+                            if (!modoEdicao) {
+                              e.stopPropagation();
+                              setTarefaSelecionada(tarefa);
+                              setMenuSobreposicao(null);
+                            }
+                          }}
+                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
+                          onMouseLeave={aoSairPino}
+                        >
+                          {dicaTarefa === tarefa.id && !modoEdicao && (
+                            <div
+                              className="pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-full pb-2"
+                              style={{
+                                left: `${p0Pct.esquerda}%`,
+                                top: `${p0Pct.topo}%`,
+                              }}
+                            >
+                              <DicaTarefa tarefa={tarefa} eAtual={eAtual} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {tarefas
+                    .filter(
+                      (t) =>
+                        t.localizacao_tipo === "descida" &&
+                        t.ponto_x != null &&
+                        t.ponto_y != null &&
+                        (!modoEdicao || t.id !== tarefaAtualId),
+                    )
+                    .map((tarefa) => {
+                      const pos = pdfParaPercentual(
+                        { x: tarefa.ponto_x!, y: tarefa.ponto_y! },
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      const eAtual = tarefa.id === tarefaAtualId;
+                      const sit = situacaoDaTarefa({
+                        status: tarefa.status,
+                        aprovacao: tarefa.aprovacao,
+                      });
+
+                      return (
+                        <div
+                          key={tarefa.id}
+                          className={cn(
+                            "absolute -translate-x-1/2 -translate-y-1/2 transition-transform",
+                            eAtual ? "z-30 scale-110" : "z-20",
+                            modoEdicao && "opacity-40",
+                            tarefaDestaque === tarefa.id &&
+                              "rounded-full ring-4 ring-azul-400/80 scale-125 z-40",
+                          )}
+                          style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
+                          onPointerDown={(e) => !modoEdicao && e.stopPropagation()}
+                        >
+                          {eAtual && !modoEdicao && (
+                            <span className="absolute -inset-2 rounded-full bg-azul-500/30 animate-ping pointer-events-none" />
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              if (!modoEdicao) {
+                                e.stopPropagation();
+                                aoClicar(e);
+                              }
+                            }}
+                            onMouseEnter={() => aoEntrarPino(tarefa.id)}
+                            onMouseLeave={aoSairPino}
+                            className={cn(
+                              "group relative flex items-center justify-center rounded-full p-1.5 focus:outline-none shadow-md ring-2 ring-white",
+                              eAtual && "ring-offset-2 ring-offset-azul-600 shadow-lg",
+                            )}
+                            aria-label={`Tarefa: ${tarefa.titulo}`}
+                          >
+                            <span
+                              className={cn(
+                                "flex items-center justify-center rounded-full",
+                                eAtual
+                                  ? "h-5 w-5 bg-azul-600"
+                                  : cn("h-4 w-4 opacity-80 hover:opacity-100", SITUACAO_TAREFA[sit].pino),
+                              )}
+                            >
+                              <ArrowDownUp className="h-3 w-3 text-white" />
+                            </span>
+
+                            {eAtual && !modoEdicao && (
+                              <span className="absolute -bottom-5 whitespace-nowrap rounded-md bg-azul-700 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                                Atual
+                              </span>
+                            )}
+                          </button>
+
+                          {dicaTarefa === tarefa.id && !modoEdicao && (
+                            <div className="pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-full pb-2">
                               <DicaTarefa tarefa={tarefa} eAtual={eAtual} />
                             </div>
                           )}

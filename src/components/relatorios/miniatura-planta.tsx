@@ -10,6 +10,7 @@ import type {
   AprovacaoTarefa,
   RegiaoPdf,
   StatusTarefa,
+  TipoLocalizacao,
 } from "@/lib/supabase/database.types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -20,7 +21,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 export type MarcadorPlanta = {
   numero: number;
   titulo: string;
-  localizacao_tipo: "ponto" | "regiao" | "nenhuma";
+  localizacao_tipo: TipoLocalizacao;
   ponto_x: number | null;
   ponto_y: number | null;
   regiao: RegiaoPdf | null;

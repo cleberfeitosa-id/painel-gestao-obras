@@ -1,0 +1,28 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Modulo de levantamento de quantidades:
+    - Use como base sprints/ref/contar_elementos.py para entender a lógica de contagem de elementos.
+    - Permita realizar essa contagem sobre qualquer uma das plantas cadastradas.
+    - Caso a planta já tenha sido calibrada para dimensões reais, importe a calibração, caso não, permita calibrar.
+    - Além de permitir contagem de elementos, deve ser possível levantar distâncias entre dois pontos e áreas de regiões delimitadas por 3 ou mais pontos ou por quadriláteros.
+    - Deve ser possível visualizar todo esse levantamento sobre a planta (distancias desenhadas sobre a planta, áreas desenhadas sobre a planta, elementos contados desenhados sobre a planta).
+    - Deve ser possível exportar esses levantamentos para arquivos csv, e para pdf.
+    - Deve ser produzida de forma interativa uma legenda, também sobre a planta em um dos cantos a ser escolhido pelo usuário e cujo tamanho da fonte também possa ser escolhido pelo usuário para acompanhar o levantamento dinamicamente como resumo de totais.
+    - Os valores individuais devem poder ser vistos sobre a planta, enquanto os totais estarão na legenda.
+    - Para descidas de eletrodutos, por exemplo, deve ser possível cadastrar níveis com alturas distintas relativas ao piso ou a outro nível, para que a descida ou subida seja inserida como um clique na planta 2d, mas interpretada como uma interação com um elemento 3d. o mesmo exemplo é válido para cadastro de caixas 4x2 em distancias baixa, media e alta para tomadas.
+    - Deve ser possível gerar uma imagem 3d apenas com as marcações feitas pelo levantamento, de modo que seja possível exportar essa imagem 3d para pdf ou png.
+    - Essa imagem estará sobre a planta 2d, em perspectiva isometrica, com a legenda colorida sobre a imagem 3d também em um dos cantos a ser escolhido pelo usuário e cujo tamanho da fonte também possa ser escolhido pelo usuário para acompanhar o levantamento dinamicamente como resumo de totais.
+    - Medições de distancias de mesmo tipo se somam para compor o resumo total.
+    - Para levantamento de cabos, deve ser possível identificar em uma única linha metainformações como circuito, tipo de cabo, fase, neutro, terra, retorno, tipo de condutor, quantidade de condutores. Para condutores separados o software deve calcular automaticamente os comprimentos de cada condutor e somar de acordo com o tipo de condutor e fase/neutro/terra/retorno.
+    - Deve ser possível incluir novas plantas nessa tela.
+    - A primeira página do módulo de levantamentos deve ser uma lista com os levantamentos cadastrados (semelhante às páginas de obras ou medições), permitindo criar novos levantamentos.
+    - Na tela inicial de listagem de levantamentos, cada card/item deve exibir o resumo das quantidades que foram levantadas naquela planta (contagem de elementos, distâncias/tubulações, fiação e áreas).
+    - As dimensões do container da planta 2D devem respeitar as margens da tela e permitir rolar horizontalmente e verticalmente no container da planta sem estourar o layout da página.
+    - A troca de plantas deve funcionar perfeitamente entre todas as plantas cadastradas (mesma obra ou obras distintas), abrindo e renderizando o PDF da planta selecionada imediatamente.
+    - As calibrações salvas no módulo de plantas (tabela planta_calibracoes) devem vir perfeitamente sincronizadas ao abrir a planta no levantamento.
+    - Deve haver um seletor explícito de nível 3D ativo na interface durante a medição/desenho, permitindo definir em qual cota/nível estão sendo traçadas distâncias lineares, cabos e áreas.
+    - Deve ser possível adicionar descidas/subidas 3D em lote de forma similar à marcação em lote de pinos e regiões na tela de plantas.
+    - Deve ser possível ocultar/exibir a grade (grid) na visão 3D isométrica.
+    - No gerenciador de categorias e elementos, deve ser possível editar os elementos existentes (nomes, cores, níveis e alturas).
+    - No gerenciador de níveis, deve ser possível editar os níveis existentes (nomes, cotas/alturas e cores).
+    - Ao traçar distâncias lineares e cabos, deve haver um sistema de snap magnético para conexão perfeita entre vértices e segmentos existentes.

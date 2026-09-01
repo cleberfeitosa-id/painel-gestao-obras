@@ -174,6 +174,18 @@ export function situacaoDaTarefa(tarefa: {
 
 export const OPCOES_APROVACAO = Object.values(APROVACAO_TAREFA);
 export const OPCOES_SITUACAO_TAREFA = Object.values(SITUACAO_TAREFA);
+
+// Cor hex de preenchimento das "regioes finas" (corredor de distancia linear),
+// espelhando as cores de pino por situacao. Tailwind nao gera cores dinamicas,
+// entao o corredor (renderizado via clip-path com cor inline) usa estas cores.
+export const CORES_CORREDOR: Record<SituacaoTarefa, string> = {
+  pendente: "#94a3b8",
+  em_execucao: "#f59e0b",
+  concluido: "#0ea5e9",
+  aprovado: "#10b981",
+  reprovado: "#ef4444",
+};
+
 export const OPCOES_STATUS_TAREFA = Object.values(STATUS_TAREFA);
 export const OPCOES_PRIORIDADE = Object.values(PRIORIDADE_TAREFA);
 export const OPCOES_STATUS_OBRA = Object.values(STATUS_OBRA);

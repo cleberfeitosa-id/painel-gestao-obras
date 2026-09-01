@@ -8,6 +8,7 @@ import { AreaPlanta } from "@/components/plantas/area-planta";
 import { BotaoExcluirPlanta } from "@/components/plantas/botao-excluir-planta";
 import { EditarPlantaModal } from "@/components/plantas/editar-planta-modal";
 import type {
+  DetalheLocalizacaoLevantamento,
   ExecutorFiltro,
   TarefaObraAssociacao,
   TarefaPlanta,
@@ -54,7 +55,7 @@ export default async function DetalhePlantaPage({
     supabase
       .from("tarefas")
       .select(
-        "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
+        "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, localizacao_detalhe, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
       )
       .eq("planta_id", plantaId),
     supabase
@@ -90,6 +91,8 @@ export default async function DetalhePlantaPage({
     ponto_x: tarefa.ponto_x,
     ponto_y: tarefa.ponto_y,
     regiao: tarefa.regiao as RegiaoPdf | null,
+    localizacao_detalhe: tarefa
+      .localizacao_detalhe as unknown as DetalheLocalizacaoLevantamento | null,
     responsavel: tarefa.responsavel,
     executor: tarefa.executor,
     tags_tarefa: tarefa.tags_tarefa,
