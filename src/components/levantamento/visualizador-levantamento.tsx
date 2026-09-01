@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Document, Page, pdfjs } from "react-pdf";
 import {
@@ -14,6 +15,7 @@ import {
   ChevronRight,
   ChevronUp,
   Edit2,
+  FileDown,
   FileSpreadsheet,
   FileText,
   Layers,
@@ -51,7 +53,6 @@ import {
 } from "@/lib/levantamento/calculos";
 import {
   baixarArquivoTexto,
-  exportarParaPdfViaImpressao,
   gerarCsvLevantamento,
 } from "@/lib/levantamento/exportacao";
 import {
@@ -80,6 +81,14 @@ import { GerenciadorNiveisModal } from "./gerenciador-niveis-modal";
 import { GerenciadorCategoriasModal } from "./gerenciador-categorias-modal";
 import { ModalUploadNovaPlanta } from "./modal-upload-nova-planta";
 import { Visualizador3D } from "./visualizador-3d";
+
+const ModalExportarPlanta = dynamic(
+  () =>
+    import("@/components/plantas/modal-exportar-planta").then(
+      (m) => m.ModalExportarPlanta,
+    ),
+  { ssr: false },
+);
 import type {
   LevantamentoRow,
   ObraRow,
@@ -173,6 +182,7 @@ export function VisualizadorLevantamento({
   const [modo, setModo] = useState<ModoVisualizacao>("2d");
   const [ferramenta, setFerramenta] =
     useState<FerramentaLevantamento>("navegar");
+  const [modalExportarAberto, setModalExportarAberto] = useState(false);
 
   const [levantamentoId, setLevantamentoId] = useState<string | undefined>(
     levantamentoInicial?.id,
@@ -1062,140 +1072,6 @@ export function VisualizadorLevantamento({
     );
   }
 
-  function exportarRelatorioPdf() {
-    const html = `
-      <div class="header">
-        <div>
-          <h1>Relatório de Levantamento de Quantidades</h1>
-          <p>Obra: <strong>${obraAtual?.nome ?? "Obra"}</strong> | Planta: <strong>${plantaAtual?.nome ?? "Planta"}</strong> (Página ${pagina})</p>
-        </div>
-        <div style="text-align: right;">
-          <p>Levantamento: <strong>${nomeLevantamento}</strong></p>
-          <p>Data: ${new Date().toLocaleDateString("pt-BR")}</p>
-        </div>
-      </div>
-
-      <div class="grid-tabelas">
-        <div class="secao">
-          <h3>1. Resumo de Elementos (Contagem de Pontos)</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Elemento</th>
-                <th>Cota / Nível</th>
-                <th class="text-right">Quantidade</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${resumo.elementos
-                .map(
-                  (el) => `
-                <tr>
-                  <td><span class="badge-cor" style="background:${el.cor}"></span>${el.nome}</td>
-                  <td>${el.nivelNome ?? "-"}</td>
-                  <td class="text-right"><strong>${el.quantidade}</strong> un</td>
-                </tr>
-              `,
-                )
-                .join("")}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="secao">
-          <h3>2. Resumo de Tubulações / Eletrodutos</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th class="text-right">Extensão Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${resumo.distancias
-                .map(
-                  (d) => `
-                <tr>
-                  <td><span class="badge-cor" style="background:${d.cor}"></span>${d.nome}</td>
-                  <td class="text-right">${formatarMetros(d.totalMetros)}</td>
-                </tr>
-              `,
-                )
-                .join("")}
-              ${resumo.descidasSubidas
-                .map(
-                  (desc) => `
-                <tr>
-                  <td><span class="badge-cor" style="background:${desc.cor}"></span>Descida/Subida Vertical</td>
-                  <td class="text-right">${formatarMetros(desc.alturaTotal)}</td>
-                </tr>
-              `,
-                )
-                .join("")}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="secao">
-          <h3>3. Cabos e Condutores por Circuito</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Circuito</th>
-                <th>Cabo / Função</th>
-                <th class="text-right">Metragem Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${resumo.cabos
-                .map(
-                  (c) => `
-                <tr>
-                  <td><strong>${c.circuito}</strong></td>
-                  <td>${c.tipoCabo} (${c.quantidadeCondutores}x ${rotuloCondutor(c.funcao)})</td>
-                  <td class="text-right">${formatarMetros(c.comprimentoTotal)}</td>
-                </tr>
-              `,
-                )
-                .join("")}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="secao">
-          <h3>4. Áreas e Acabamentos</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Tipo de Área</th>
-                <th class="text-right">Área Total</th>
-                <th class="text-right">Perímetro</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${resumo.areas
-                .map(
-                  (a) => `
-                <tr>
-                  <td><span class="badge-cor" style="background:${a.cor}"></span>${a.nome}</td>
-                  <td class="text-right">${formatarMetrosQuadrados(a.totalArea)}</td>
-                  <td class="text-right">${formatarMetros(a.totalPerimetro)}</td>
-                </tr>
-              `,
-                )
-                .join("")}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-
-    exportarParaPdfViaImpressao(
-      html,
-      `Levantamento-Quantidades-${obraAtual?.nome ?? "Obra"}-Pag${pagina}`,
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-2xl border border-superficie-200 bg-white p-4 shadow-sm">
@@ -1278,10 +1154,10 @@ export function VisualizadorLevantamento({
             <Botao
               variante="secundario"
               tamanho="sm"
-              onClick={exportarRelatorioPdf}
-              title="Exportar Relatório PDF"
+              onClick={() => setModalExportarAberto(true)}
+              title="Exportar Relatório e Prancha A0 do Levantamento em PDF"
             >
-              <FileText className="h-4 w-4" />
+              <FileDown className="h-4 w-4 text-azul-600" />
               Relatório PDF
             </Botao>
           </div>
@@ -2869,6 +2745,23 @@ export function VisualizadorLevantamento({
         }}
         aoFechar={() => setModalUploadAberto(false)}
       />
+
+      {urlPdf && plantaAtual && (
+        <ModalExportarPlanta
+          aberto={modalExportarAberto}
+          aoFechar={() => setModalExportarAberto(false)}
+          urlPdf={urlPdf}
+          pagina={pagina}
+          plantaId={plantaAtual.id}
+          obraNome={obraAtual?.nome ?? "Obra"}
+          plantaNome={plantaAtual.nome}
+          modo="levantamento"
+          levantamentoId={levantamentoId}
+          itensLevantamento={itens}
+          resumoLevantamento={resumo}
+          nomeLevantamento={nomeLevantamento}
+        />
+      )}
     </div>
   );
 }

@@ -7,4 +7,10 @@ Implemente as seguintes melhorias no projeto:
     - Na tarefa estão suas informações basicas, como também um zoom da área próxima na planta, imagens caso existam, e quantidades cadastradas em seus campos itens de medição caso existam.
     - Caso o usuário decida, deve ser possível escolher que outras informações sejam incorporadas, como por exemplo o valor total de medição e os valores individuais daquela tarefa naquela medição baseado em seus itens cadastrados.
     - As imagens podem ser de baixa resolução para reduzir o tamanho do pdf e o processamento envolvido, mas não tanto a ponto de perder a qualidade de identificação de objetos.
+    - Aplique exportação semelhante ao clicar em relatório pdf na página de levantamento.
+
+2. Refinamento de UI:
+    - Corrija as palavras medições e relatórios, usuários e outras que possam compartilhar erros semelhantes na barra lateral esquerda.
+    - Da forma que está agora na barra lateral direita, a palavra levantamento está sendo cortada pela margem. reduza o tamanho da fonte para evitar o corte.
+    
     

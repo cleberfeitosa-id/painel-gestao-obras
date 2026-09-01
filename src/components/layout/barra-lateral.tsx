@@ -35,7 +35,7 @@ export function BarraLateral({ papel }: BarraLateralProps) {
     {
       href: obraId ? `/obras/${obraId}/medicoes` : "/obras",
       chave: "medicoes",
-      rotulo: "Medicoes",
+      rotulo: "Medições",
       icone: Ruler,
     },
     {
@@ -46,8 +46,8 @@ export function BarraLateral({ papel }: BarraLateralProps) {
     },
     { href: "/plantas", rotulo: "Plantas", icone: FileText },
     { href: "/tarefas", rotulo: "Tarefas", icone: CheckSquare },
-    { href: "/calendario", rotulo: "Calendario", icone: Calendar },
-    { href: "/relatorios", rotulo: "Relatorios", icone: FileText },
+    { href: "/calendario", rotulo: "Calendário", icone: Calendar },
+    { href: "/relatorios", rotulo: "Relatórios", icone: FileText },
   ];
 
   function estaAtivo(href: string) {
@@ -64,7 +64,7 @@ export function BarraLateral({ papel }: BarraLateralProps) {
   const itens = [
     ...itensNavegacao,
     ...(papel === "admin"
-      ? [{ href: "/usuarios", rotulo: "Usuarios", icone: Users }]
+      ? [{ href: "/usuarios", rotulo: "Usuários", icone: Users }]
       : []),
   ];
 

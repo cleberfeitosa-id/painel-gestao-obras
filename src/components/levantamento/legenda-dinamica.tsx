@@ -65,9 +65,9 @@ export function LegendaDinamica({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between px-3 py-2 border-b border-white/15 gap-2 select-none">
-        <div className="flex items-center gap-2 min-w-0">
-          <Layers className="h-4 w-4 shrink-0 text-azul-400" />
-          <span className="font-bold truncate">Resumo do Levantamento</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Layers className="h-3.5 w-3.5 shrink-0 text-azul-400" />
+          <span className="text-xs font-semibold truncate">Resumo do Levantamento</span>
         </div>
         <div className="flex items-center gap-1">
           {aoMudarConfig && (

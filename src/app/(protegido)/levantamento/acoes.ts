@@ -15,6 +15,11 @@ import {
   CONFIG_LEGENDA_PADRAO,
   NIVEIS_PADRAO,
 } from "@/lib/levantamento/tipos";
+import { BUCKET_PLANTAS, urlAssinada } from "@/lib/armazenamento";
+import {
+  obterDadosCompletosTarefasExportacao,
+  type TarefaExportacaoCompleta,
+} from "@/app/(protegido)/obras/[id]/plantas/acoes";
 
 type ResultadoSalvar = { id: string } | { erro: string };
 type ResultadoExcluir = { ok: true } | { erro: string };
@@ -331,4 +336,55 @@ export async function criarTarefasEmLoteLevantamento(
   }
 
   return { ok: true, quantidade: data.length };
+}
+
+export async function obterDadosExportacaoLevantamento(levantamentoId: string): Promise<{
+  levantamento: LevantamentoRow | null;
+  obraNome: string | null;
+  plantaNome: string | null;
+  urlPdf: string | null;
+  calibracoes: PlantaCalibracaoRow[];
+  tarefas: TarefaExportacaoCompleta[];
+  erro?: string;
+}> {
+  const supabase = await createClient();
+  const { data: lev, error } = await supabase
+    .from("levantamentos")
+    .select("*, obras(id, nome), plantas(*)")
+    .eq("id", levantamentoId)
+    .single();
+
+  if (error || !lev) {
+    return {
+      levantamento: null,
+      obraNome: null,
+      plantaNome: null,
+      urlPdf: null,
+      calibracoes: [],
+      tarefas: [],
+      erro: "Levantamento não encontrado.",
+    };
+  }
+
+  const planta = lev.plantas as unknown as { arquivo_path: string; nome: string; id: string } | null;
+  const obra = lev.obras as unknown as { nome: string; id: string } | null;
+
+  const [{ data: calibs }, urlPdf] = await Promise.all([
+    supabase.from("planta_calibracoes").select("*").eq("planta_id", lev.planta_id),
+    planta ? urlAssinada(BUCKET_PLANTAS, planta.arquivo_path) : Promise.resolve(null),
+  ]);
+
+  const { tarefas } = await obterDadosCompletosTarefasExportacao(
+    lev.planta_id,
+    lev.pagina,
+  );
+
+  return {
+    levantamento: lev as unknown as LevantamentoRow,
+    obraNome: obra?.nome ?? "Obra",
+    plantaNome: planta?.nome ?? "Planta",
+    urlPdf,
+    calibracoes: (calibs ?? []) as PlantaCalibracaoRow[],
+    tarefas,
+  };
 }

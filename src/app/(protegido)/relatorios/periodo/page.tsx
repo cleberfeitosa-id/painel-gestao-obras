@@ -254,8 +254,21 @@ export default async function RelatorioPeriodoPage({
     filtrosDescricao.push({ rotulo: "Executor", valor: e?.nome ?? "—" });
   }
 
+  const dadosExportacao = {
+    titulo: "Relatório de Período de Obra (RDO)",
+    subtitulo: "período",
+    filtros: filtrosDescricao,
+    geradoEm: new Date(),
+    concluidas,
+    andamento,
+    totalAbertas: totalAbertas ?? 0,
+    totalFotos,
+    urlsMap,
+    plantas,
+  };
+
   return (
-    <BotaoImprimir>
+    <BotaoImprimir dadosRelatorio={dadosExportacao}>
       <div className="nao-imprimir">
         <Link
           href="/relatorios"
@@ -270,7 +283,7 @@ export default async function RelatorioPeriodoPage({
         titulo="Relatório de Período de Obra (RDO)"
         subtitulo="período"
         filtros={filtrosDescricao}
-        geradoEm={new Date()}
+        geradoEm={dadosExportacao.geradoEm}
         concluidas={concluidas}
         andamento={andamento}
         totalAbertas={totalAbertas ?? 0}

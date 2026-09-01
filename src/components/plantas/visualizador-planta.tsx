@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowDownUp,
   ChevronLeft,
   ChevronRight,
+  FileDown,
   Layers,
   Link2,
   MapPin,
@@ -57,6 +59,11 @@ import { cn } from "@/lib/utils";
 import { Calibragem } from "./calibragem";
 import { ListaTarefasPlanta } from "./lista-tarefas-planta";
 import { MenuTarefasSobrepostas } from "./menu-tarefas-sobrepostas";
+
+const ModalExportarPlanta = dynamic(
+  () => import("./modal-exportar-planta").then((m) => m.ModalExportarPlanta),
+  { ssr: false },
+);
 import {
   renovarUrlPlanta,
   salvarCalibracao as salvarCalibracaoAcao,
@@ -257,6 +264,7 @@ function ErroPlanta({
 
 export function VisualizadorPlanta({
   obraId,
+  obraNome,
   planta,
   urlPdf,
   calibracoes,
@@ -275,6 +283,7 @@ export function VisualizadorPlanta({
   const [numPaginas, setNumPaginas] = useState(planta.total_paginas);
   const [escala, setEscala] = useState(1);
   const [ajusteLargura, setAjusteLargura] = useState(true);
+  const [modalExportarAberto, setModalExportarAberto] = useState(false);
   const [ferramenta, setFerramenta] = useState<Ferramenta>(() =>
     associarParam && podeEditar ? "associar" : "navegar",
   );
@@ -1125,6 +1134,17 @@ export function VisualizadorPlanta({
               </button>
             </>
           )}
+
+          <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
+          <button
+            type="button"
+            onClick={() => setModalExportarAberto(true)}
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-azul-200 bg-azul-50 px-2.5 text-xs font-semibold text-azul-700 transition-colors hover:bg-azul-100"
+            title="Exportar planta iluminada em PDF (A0) com links interativos"
+          >
+            <FileDown className="h-4 w-4 text-azul-600" />
+            <span className="hidden sm:inline">Exportar PDF</span>
+          </button>
         </div>
 
         <p className="text-[11px] text-superficie-400">{DICA_FERRAMENTA[ferramenta]}</p>
@@ -1932,6 +1952,19 @@ export function VisualizadorPlanta({
           }}
           aoFechar={() => setMenuSobreposicao(null)}
           aoDestaque={setTarefaDestaque}
+        />
+      )}
+
+      {urlAtual && (
+        <ModalExportarPlanta
+          aberto={modalExportarAberto}
+          aoFechar={() => setModalExportarAberto(false)}
+          urlPdf={urlAtual}
+          pagina={paginaAtual}
+          plantaId={planta.id}
+          obraNome={obraNome}
+          plantaNome={planta.nome}
+          modo="planta"
         />
       )}
     </div>

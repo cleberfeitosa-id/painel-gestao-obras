@@ -127,7 +127,6 @@ function ImagensTarefa({
                 src={url}
                 alt={anexo.nome_arquivo}
                 className="aspect-square w-full object-cover"
-                loading="lazy"
               />
             ) : (
               <div className="flex aspect-square w-full items-center justify-center bg-superficie-100 text-xs text-superficie-400">
