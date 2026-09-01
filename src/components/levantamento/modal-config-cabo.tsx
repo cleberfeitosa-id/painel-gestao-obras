@@ -374,12 +374,12 @@ export function ModalConfigCabo({
       descricao="Defina o circuito, a bitola do cabo, as fases presentes e a quantidade de condutores por fase."
       tamanho="lg"
     >
-      <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+      <div className="space-y-4">
         <div>
           <label className="block text-xs font-semibold text-superficie-700 mb-1">
             Predefinições Rápidas de Circuito:
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-32 overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {PRESETS_CABOS.map((p, idx) => (
               <button
                 key={p.nome}

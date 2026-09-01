@@ -538,7 +538,7 @@ export function Visualizador3D({
                 .map(
                   (c) => `
                 <tr>
-                  <td>${c.circuito} (${c.tipoCabo} - ${c.funcao})</td>
+                  <td>${c.corCabo ? `<span class="badge-cor" style="background:${c.corCabo};"></span>` : ""}${c.circuito} (${c.tipoCabo} - ${c.funcao}${c.fase ? ` - Fase ${c.fase}` : ""})</td>
                   <td class="text-right">${c.comprimentoTotal.toFixed(2)} m</td>
                 </tr>
               `,

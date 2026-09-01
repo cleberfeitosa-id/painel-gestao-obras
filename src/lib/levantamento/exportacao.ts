@@ -1,6 +1,6 @@
 import type { Calibracao } from "@/lib/pdf/coordenadas";
 import { formatarMedida } from "@/lib/pdf/coordenadas";
-import { rotuloCondutor } from "./calculos";
+import { obterNomeCorCabo, rotuloCondutor } from "./calculos";
 import type { ItemLevantamento, Nivel3D, ResumoLevantamento } from "./tipos";
 
 interface DadosExportacao {
@@ -143,6 +143,8 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
       escaparCsv("Tipo de Cabo / Bitola"),
       escaparCsv("Tipo Condutor"),
       escaparCsv("Função Condutor"),
+      escaparCsv("Fase"),
+      escaparCsv("Cor do Cabo"),
       escaparCsv("Qtd Condutores"),
       escaparCsv("Comprimento Total"),
       escaparCsv("Unidade"),
@@ -155,6 +157,8 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
         escaparCsv(c.tipoCabo),
         escaparCsv(c.tipoCondutor),
         escaparCsv(rotuloCondutor(c.funcao)),
+        escaparCsv(c.fase ? `Fase ${c.fase}` : "-"),
+        escaparCsv(obterNomeCorCabo(c.corCabo)),
         escaparCsv(c.quantidadeCondutores),
         escaparCsv(c.comprimentoTotal.toFixed(2).replace(".", ",")),
         escaparCsv("m"),
@@ -164,6 +168,8 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
   linhas.push(
     [
       escaparCsv("TOTAL DE CONDUTORES / CABOS"),
+      escaparCsv(""),
+      escaparCsv(""),
       escaparCsv(""),
       escaparCsv(""),
       escaparCsv(""),

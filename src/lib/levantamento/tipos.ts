@@ -125,9 +125,12 @@ export interface ResumoItemDistancia {
 
 export interface ResumoItemCabo {
   circuito: string;
+  corCircuito?: string;
   tipoCabo: string;
   tipoCondutor: string;
   funcao: FuncaoCondutor;
+  fase?: string;
+  corCabo?: string;
   quantidadeCondutores: number;
   comprimentoTotal: number;
 }
@@ -135,6 +138,7 @@ export interface ResumoItemCabo {
 export interface ResumoItemCaboPorTipo {
   tipoCabo: string;
   funcao: FuncaoCondutor;
+  corCabo?: string;
   comprimentoTotal: number;
 }
 

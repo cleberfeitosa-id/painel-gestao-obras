@@ -49,6 +49,7 @@ import {
   calcularResumoLevantamento,
   formatarMetros,
   formatarMetrosQuadrados,
+  obterNomeCorCabo,
   rotuloCondutor,
 } from "@/lib/levantamento/calculos";
 import {
@@ -555,6 +556,34 @@ export function VisualizadorLevantamento({
     setCriandoLoteTarefas(true);
     setMensagemLote(null);
 
+    let idLevantamentoAtual = levantamentoId;
+    if (podeEditar) {
+      const resSalvar = await salvarLevantamento({
+        id: levantamentoId,
+        obraId: obraSelecionadaId,
+        plantaId: plantaSelecionadaId,
+        pagina,
+        nome: nomeLevantamento,
+        descricao: descricaoLevantamento,
+        niveis: JSON.parse(JSON.stringify(niveis)),
+        categorias: JSON.parse(JSON.stringify(categorias)),
+        itens: JSON.parse(JSON.stringify(itens)),
+        configLegenda: JSON.parse(JSON.stringify(configLegenda)),
+      });
+
+      if ("erro" in resSalvar) {
+        setCriandoLoteTarefas(false);
+        setMensagemLote({
+          tipo: "erro",
+          texto: `Erro ao salvar anotações do levantamento: ${resSalvar.erro}`,
+        });
+        return;
+      }
+
+      idLevantamentoAtual = resSalvar.id;
+      setLevantamentoId(resSalvar.id);
+    }
+
     const localizacoes = itensAlvo.map((it) => {
       const dados = gerarDadosTarefaDeItem(it, nomeLevantamento);
       return {
@@ -564,7 +593,7 @@ export function VisualizadorLevantamento({
         ponto_x: dados.ponto_x,
         ponto_y: dados.ponto_y,
         localizacao_detalhe: dados.detalhe,
-        levantamento_id: levantamentoId ?? null,
+        levantamento_id: idLevantamentoAtual ?? null,
         descricao_especifica: dados.descricao,
         comprimento: it.comprimentoReal,
         area: it.areaReal,
@@ -595,15 +624,36 @@ export function VisualizadorLevantamento({
       lote: res.id,
       titulo: tituloComum,
     });
-    if (levantamentoId) {
-      params.set("levantamento", levantamentoId);
+    if (idLevantamentoAtual) {
+      params.set("levantamento", idLevantamentoAtual);
     }
 
     router.push(`/tarefas/nova-em-lote?${params.toString()}`);
   }
 
-  function criarTarefaAPartirDeItem(item: ItemLevantamento) {
+  async function criarTarefaAPartirDeItem(item: ItemLevantamento) {
     if (!obraSelecionadaId || !plantaSelecionadaId) return;
+
+    let idLevantamentoAtual = levantamentoId;
+    if (podeEditar) {
+      const resSalvar = await salvarLevantamento({
+        id: levantamentoId,
+        obraId: obraSelecionadaId,
+        plantaId: plantaSelecionadaId,
+        pagina,
+        nome: nomeLevantamento,
+        descricao: descricaoLevantamento,
+        niveis: JSON.parse(JSON.stringify(niveis)),
+        categorias: JSON.parse(JSON.stringify(categorias)),
+        itens: JSON.parse(JSON.stringify(itens)),
+        configLegenda: JSON.parse(JSON.stringify(configLegenda)),
+      });
+
+      if (!("erro" in resSalvar)) {
+        idLevantamentoAtual = resSalvar.id;
+        setLevantamentoId(resSalvar.id);
+      }
+    }
 
     const dados = gerarDadosTarefaDeItem(item, nomeLevantamento);
 
@@ -619,8 +669,8 @@ export function VisualizadorLevantamento({
       detalhe: JSON.stringify(dados.detalhe),
     });
 
-    if (levantamentoId) {
-      query.set("levantamento", levantamentoId);
+    if (idLevantamentoAtual) {
+      query.set("levantamento", idLevantamentoAtual);
     }
 
     router.push(`/tarefas/nova?${query.toString()}`);
@@ -2814,19 +2864,59 @@ export function VisualizadorLevantamento({
                     <th className="p-3">Circuito</th>
                     <th className="p-3">Tipo do Cabo / Bitola</th>
                     <th className="p-3">Condutor</th>
+                    <th className="p-3">Fase</th>
+                    <th className="p-3">Cor do Cabo</th>
                     <th className="p-3">Qtd Condutores</th>
                     <th className="p-3 text-right">Comprimento Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-superficie-100">
                   {resumo.cabos.map((c, idx) => (
-                    <tr key={`${c.circuito}_${c.tipoCabo}_${c.funcao}_${idx}`}>
+                    <tr key={`${c.circuito}_${c.tipoCabo}_${c.funcao}_${c.fase ?? ""}_${c.corCabo ?? ""}_${idx}`}>
                       <td className="p-3 font-bold text-azul-700">
-                        {c.circuito}
+                        <div className="flex items-center gap-2">
+                          {c.corCircuito && (
+                            <span
+                              className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0"
+                              style={{ backgroundColor: c.corCircuito }}
+                              title={`Cor do circuito: ${c.circuito}`}
+                            />
+                          )}
+                          <span>{c.circuito}</span>
+                        </div>
                       </td>
-                      <td className="p-3 text-superficie-700">{c.tipoCabo}</td>
+                      <td className="p-3 text-superficie-700">
+                        <div>{c.tipoCabo}</div>
+                        {c.tipoCondutor && (
+                          <div className="text-[10px] text-superficie-400 font-mono">
+                            {c.tipoCondutor}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-3 font-semibold text-superficie-800">
                         {rotuloCondutor(c.funcao)}
+                      </td>
+                      <td className="p-3">
+                        {c.fase ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md font-mono font-semibold text-[11px] bg-superficie-100 text-superficie-800 border border-superficie-200">
+                            Fase {c.fase}
+                          </span>
+                        ) : (
+                          <span className="text-superficie-400 font-mono text-[11px]">—</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          {c.corCabo && (
+                            <span
+                              className="w-3.5 h-3.5 rounded-full border border-black/25 shrink-0 shadow-xs"
+                              style={{ backgroundColor: c.corCabo }}
+                            />
+                          )}
+                          <span className="text-superficie-700 font-medium">
+                            {obterNomeCorCabo(c.corCabo)}
+                          </span>
+                        </div>
                       </td>
                       <td className="p-3 text-superficie-600">
                         {c.quantidadeCondutores}x
@@ -2839,7 +2929,7 @@ export function VisualizadorLevantamento({
                   {resumo.cabos.length === 0 && (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={7}
                         className="p-6 text-center text-superficie-400 italic"
                       >
                         Nenhum trecho de circuito ou fiação cadastrado.

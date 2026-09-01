@@ -280,12 +280,21 @@ export function LegendaDinamica({
                   <div className="space-y-1">
                     {resumo.cabos.map((c, idx) => (
                       <div
-                        key={`${c.circuito}_${c.tipoCabo}_${c.funcao}_${idx}`}
+                        key={`${c.circuito}_${c.tipoCabo}_${c.funcao}_${c.fase ?? ""}_${idx}`}
                         className="flex items-center justify-between text-xs py-0.5"
                       >
                         <div className="min-w-0 pr-2">
-                          <div className="truncate font-medium text-emerald-300">
-                            {c.circuito} · {rotuloCondutor(c.funcao)}
+                          <div className="truncate font-medium text-emerald-300 flex items-center gap-1.5">
+                            {c.corCabo && (
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0 border border-white/40"
+                                style={{ backgroundColor: c.corCabo }}
+                              />
+                            )}
+                            <span className="truncate">
+                              {c.circuito} · {rotuloCondutor(c.funcao)}
+                              {c.fase && ` (${c.fase})`}
+                            </span>
                           </div>
                           <div className="text-[10px] text-white/60 truncate">
                             {c.tipoCabo} ({c.quantidadeCondutores}x)
