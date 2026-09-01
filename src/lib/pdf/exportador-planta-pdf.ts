@@ -55,13 +55,11 @@ const DIMENSOES_FOLHA_PT: Record<TamanhoFolhaPdf, { largura: number; altura: num
 const DIMENSOES_A4_PT = { largura: 595.28, altura: 841.89 };
 
 const CORES_STATUS_HEX: Record<string, string> = {
-  pendente: "#64748b",
-  em_andamento: "#2563eb",
-  concluida: "#16a34a",
-  bloqueada: "#dc2626",
-  aguardando_aprovacao: "#d97706",
-  aprovada: "#16a34a",
-  reprovada: "#dc2626",
+  pendente: "#94a3b8",
+  em_execucao: "#f59e0b",
+  concluido: "#10b981",
+  aprovado: "#10b981",
+  reprovado: "#ef4444",
 };
 
 function hexParaRgba(hex: string, alfa = 1): string {
@@ -175,24 +173,25 @@ async function renderizarPaginaPdfEmCanvas(
   };
 }
 
-async function comprimirImagem(
+  const comprimirImagem = async (
   url: string,
   maxDimensao = 1200,
-): Promise<{ canvas: HTMLCanvasElement; width: number; height: number; nome: string } | null> {
+): Promise<{ canvas: HTMLCanvasElement; width: number; height: number; nome: string } | null> => {
   try {
     const img = await carregarElementoImagem(url);
     if (!img || img.naturalWidth === 0) return null;
 
+    const naturalAspect = img.naturalWidth / img.naturalHeight;
     let width = img.naturalWidth;
     let height = img.naturalHeight;
 
     if (width > maxDimensao || height > maxDimensao) {
-      if (width > height) {
-        height = Math.round((height * maxDimensao) / width);
+      if (naturalAspect > 1) {
         width = maxDimensao;
+        height = Math.round(maxDimensao / naturalAspect);
       } else {
-        width = Math.round((width * maxDimensao) / height);
         height = maxDimensao;
+        width = Math.round(maxDimensao * naturalAspect);
       }
     }
 
@@ -207,8 +206,9 @@ async function comprimirImagem(
   } catch {
     return null;
   }
-}
+};
 
+// 1. Corrigir proporção no zoom (Crop Canvas)
 function extrairRecortePlantaCanvas(
   baseCanvas: HTMLCanvasElement,
   centroPct: { xPct: number; yPct: number },
@@ -217,40 +217,75 @@ function extrairRecortePlantaCanvas(
   numeroMarcador = 1,
 ): HTMLCanvasElement | null {
   const cropCanvas = document.createElement("canvas");
-  cropCanvas.width = 1000;
-  cropCanvas.height = 680;
+  cropCanvas.width = 800;
+  cropCanvas.height = 600;
   const ctx = cropCanvas.getContext("2d");
   if (!ctx) return null;
 
   ctx.fillStyle = "#f8fafc";
-  ctx.fillRect(0, 0, 1000, 680);
+  ctx.fillRect(0, 0, 800, 600);
 
   const cx = (centroPct.xPct / 100) * baseCanvas.width;
   const cy = (centroPct.yPct / 100) * baseCanvas.height;
 
-  let srcW = baseCanvas.width * 0.22;
-  let srcH = baseCanvas.height * 0.22;
+  let srcW = baseCanvas.width * 0.15;
+  let srcH = baseCanvas.height * 0.15;
 
   if (limitesPct) {
     const regW = ((limitesPct.maxX - limitesPct.minX) / 100) * baseCanvas.width;
     const regH = ((limitesPct.maxY - limitesPct.minY) / 100) * baseCanvas.height;
-    srcW = Math.max(baseCanvas.width * 0.15, regW * 1.5);
-    srcH = Math.max(baseCanvas.height * 0.15, regH * 1.5);
+    srcW = Math.max(baseCanvas.width * 0.1, regW * 1.2);
+    srcH = Math.max(baseCanvas.height * 0.1, regH * 1.2);
+  }
+
+  const targetAspect = 800 / 600;
+  if (srcW / srcH !== targetAspect) {
+    if (srcW / srcH > targetAspect) {
+      srcH = srcW / targetAspect;
+    } else {
+      srcW = srcH * targetAspect;
+    }
+  }
+
+  if (srcW > baseCanvas.width) {
+    srcW = baseCanvas.width;
+    srcH = srcW / targetAspect;
+  }
+  if (srcH > baseCanvas.height) {
+    srcH = baseCanvas.height;
+    srcW = srcH * targetAspect;
   }
 
   const srcX = Math.max(0, Math.min(baseCanvas.width - srcW, cx - srcW / 2));
   const srcY = Math.max(0, Math.min(baseCanvas.height - srcH, cy - srcH / 2));
 
-  ctx.drawImage(baseCanvas, srcX, srcY, srcW, srcH, 0, 0, 1000, 680);
+  const destAspect = 800 / 600;
+  const srcAspect = srcW / srcH;
+  
+  let dW, dH, dX, dY;
+  
+  if (srcAspect > destAspect) {
+    dW = 800;
+    dH = 800 / srcAspect;
+    dX = 0;
+    dY = (600 - dH) / 2;
+  } else {
+    dH = 600;
+    dW = 600 * srcAspect;
+    dX = (800 - dW) / 2;
+    dY = 0;
+  }
+  
+  ctx.drawImage(baseCanvas, srcX, srcY, srcW, srcH, dX, dY, dW, dH);
 
-  const destCenterX = ((cx - srcX) / srcW) * 1000;
-  const destCenterY = ((cy - srcY) / srcH) * 680;
+  const destCenterX = ((cx - srcX) / srcW) * 800;
+  const destCenterY = ((cy - srcY) / srcH) * 600;
 
   if (limitesPct) {
-    const rMinX = (((limitesPct.minX / 100) * baseCanvas.width - srcX) / srcW) * 1000;
-    const rMaxX = (((limitesPct.maxX / 100) * baseCanvas.width - srcX) / srcW) * 1000;
-    const rMinY = (((limitesPct.minY / 100) * baseCanvas.height - srcY) / srcH) * 680;
-    const rMaxY = (((limitesPct.maxY / 100) * baseCanvas.height - srcY) / srcH) * 680;
+    const rMinX = (((limitesPct.minX / 100) * baseCanvas.width - srcX) / srcW) * 800;
+    const rMaxX = (((limitesPct.maxX / 100) * baseCanvas.width - srcX) / srcW) * 800;
+    const rMinY = (((limitesPct.minY / 100) * baseCanvas.height - srcY) / srcH) * 600;
+    const rMaxY = (((limitesPct.maxY / 100) * baseCanvas.height - srcY) / srcH) * 600;
 
     ctx.fillStyle = hexParaRgba(corDestaque, 0.25);
     ctx.fillRect(rMinX, rMinY, rMaxX - rMinX, rMaxY - rMinY);
@@ -614,6 +649,7 @@ export async function exportarPlantaIluminadaPdf(
     pctMaxY: number;
   }[] = [];
 
+  // Remover badge de texto e pinos numerados
   tarefasParaExportar.forEach((t) => {
     const cor = CORES_STATUS_HEX[t.status] ?? "#2563eb";
 
@@ -628,47 +664,18 @@ export async function exportarPlantaIluminadaPdf(
       const py = (pct.topo / 100) * compositeCanvas.height;
 
       ctx.beginPath();
-      ctx.arc(px, py, 36, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.arc(px, py, 9, 0, Math.PI * 2);
+      ctx.fillStyle = hexParaRgba(cor, 0.6);
       ctx.fill();
 
-      ctx.beginPath();
-      ctx.arc(px, py, 26, 0, Math.PI * 2);
-      ctx.fillStyle = cor;
-      ctx.fill();
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = "#ffffff";
-      ctx.stroke();
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 22px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(t.numero), px, py);
-
-      const textoBadge = `${t.numero}. ${t.titulo.substring(0, 26)}`;
-      ctx.font = "bold 15px sans-serif";
-      const largTexto = ctx.measureText(textoBadge).width;
-      const badgeW = largTexto + 20;
-      const badgeH = 28;
-      const badgeX = px + 32;
-      const badgeY = py - 14;
-
-      ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
-      desenharRetanguloArredondado(ctx, badgeX, badgeY, badgeW, badgeH, 5);
-      ctx.fill();
-
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "left";
-      ctx.fillText(textoBadge, badgeX + 10, badgeY + 19);
 
       coordenadasClickA0.push({
         tarefaId: t.id,
         numero: t.numero,
-        pctMinX: pct.esquerda - 2.5,
-        pctMinY: pct.topo - 2.5,
-        pctMaxX: pct.esquerda + 2.5,
-        pctMaxY: pct.topo + 2.5,
+        pctMinX: pct.esquerda - 2,
+        pctMinY: pct.topo - 2,
+        pctMaxX: pct.esquerda + 2,
+        pctMaxY: pct.topo + 2,
       });
     } else if (t.localizacao_tipo === "regiao" && t.regiao) {
       const limites = limitesDaRegiao(t.regiao);
@@ -687,25 +694,8 @@ export async function exportarPlantaIluminadaPdf(
       const rw = ((maxLeft - minLeft) / 100) * compositeCanvas.width;
       const rh = ((maxTop - minTop) / 100) * compositeCanvas.height;
 
-      ctx.fillStyle = hexParaRgba(cor, 0.28);
+      ctx.fillStyle = hexParaRgba(cor, 0.4);
       ctx.fillRect(rx, ry, rw, rh);
-      ctx.strokeStyle = cor;
-      ctx.lineWidth = 5;
-      ctx.strokeRect(rx, ry, rw, rh);
-
-      ctx.beginPath();
-      ctx.arc(rx, ry, 24, 0, Math.PI * 2);
-      ctx.fillStyle = cor;
-      ctx.fill();
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = "#ffffff";
-      ctx.stroke();
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 20px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(t.numero), rx, ry);
 
       coordenadasClickA0.push({
         tarefaId: t.id,
@@ -718,36 +708,9 @@ export async function exportarPlantaIluminadaPdf(
     }
   });
 
-  const seloW = 460;
-  const seloH = 180;
-  const seloX = compositeCanvas.width - seloW - 40;
-  const seloY = compositeCanvas.height - seloH - 40;
-
-  ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
-  desenharRetanguloArredondado(ctx, seloX, seloY, seloW, seloH, 12);
-  ctx.fill();
-
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  ctx.fillStyle = "#38bdf8";
-  ctx.font = "bold 18px sans-serif";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.fillText("VASCONCELOS ENGENHARIA", seloX + 28, seloY + 22);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 20px sans-serif";
-  ctx.fillText(`OBRA: ${obraNome.toUpperCase()}`, seloX + 28, seloY + 52);
-
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = "14px sans-serif";
-  ctx.fillText(`Planta: ${plantaNome} · Pág. ${paginaNumero}`, seloX + 28, seloY + 82);
-  ctx.fillText(`Emissão: ${new Date().toLocaleDateString("pt-BR")} · Formato: ${opcoes.tamanhoFolha}`, seloX + 28, seloY + 106);
-  ctx.fillText(`Total de Tarefas: ${tarefasParaExportar.length}`, seloX + 28, seloY + 130);
 
   notificar("Inicializando documento PDF...", 35);
+
   const pdfDoc = await PDFDocument.create();
 
   const dims = DIMENSOES_FOLHA_PT[opcoes.tamanhoFolha];
@@ -1599,46 +1562,30 @@ export async function exportarRelatorioRdoCompletoPdf(
       }),
     );
 
-    const MAX_ALTURA_COLUNA = 3200;
-    const GAP_Y = 24;
+    const TAREFAS_POR_PAGINA = 12;
     const paginasAgrupadas: {
       col1: { item: ItemPreparadoTarefa; y: number }[];
       col2: { item: ItemPreparadoTarefa; y: number }[];
     }[] = [];
 
-    let col1Atual: { item: ItemPreparadoTarefa; y: number }[] = [];
-    let col2Atual: { item: ItemPreparadoTarefa; y: number }[] = [];
-    let h1Atual = 160;
-    let h2Atual = 160;
+    for (let i = 0; i < itensPreparados.length; i += TAREFAS_POR_PAGINA) {
+      const paginaItens = itensPreparados.slice(i, i + TAREFAS_POR_PAGINA);
+      const col1: { item: ItemPreparadoTarefa; y: number }[] = [];
+      const col2: { item: ItemPreparadoTarefa; y: number }[] = [];
+      
+      let h1Atual = 160;
+      let h2Atual = 160;
 
-    for (const item of itensPreparados) {
-      const hNecessaria = item.alturaCalculada + GAP_Y;
-
-      if (h1Atual <= h2Atual) {
-        if (h1Atual + hNecessaria > MAX_ALTURA_COLUNA && (col1Atual.length > 0 || col2Atual.length > 0)) {
-          paginasAgrupadas.push({ col1: col1Atual, col2: col2Atual });
-          col1Atual = [];
-          col2Atual = [];
-          h1Atual = 160;
-          h2Atual = 160;
+      paginaItens.forEach((item, idx) => {
+        if (idx % 2 === 0) {
+          col1.push({ item, y: h1Atual });
+          h1Atual += item.alturaCalculada + 24;
+        } else {
+          col2.push({ item, y: h2Atual });
+          h2Atual += item.alturaCalculada + 24;
         }
-        col1Atual.push({ item, y: h1Atual });
-        h1Atual += hNecessaria;
-      } else {
-        if (h2Atual + hNecessaria > MAX_ALTURA_COLUNA && (col1Atual.length > 0 || col2Atual.length > 0)) {
-          paginasAgrupadas.push({ col1: col1Atual, col2: col2Atual });
-          col1Atual = [];
-          col2Atual = [];
-          h1Atual = 160;
-          h2Atual = 160;
-        }
-        col2Atual.push({ item, y: h2Atual });
-        h2Atual += hNecessaria;
-      }
-    }
-
-    if (col1Atual.length > 0 || col2Atual.length > 0) {
-      paginasAgrupadas.push({ col1: col1Atual, col2: col2Atual });
+      });
+      paginasAgrupadas.push({ col1, col2 });
     }
 
     const totalPaginasDetalhes = paginasAgrupadas.length;

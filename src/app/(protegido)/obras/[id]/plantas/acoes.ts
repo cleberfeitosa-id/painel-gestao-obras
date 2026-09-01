@@ -339,6 +339,7 @@ export async function obterDadosCompletosTarefasExportacao(
   const { data: tarefasDb, error } = await consulta;
 
   if (error || !tarefasDb) {
+    console.error("Erro ao carregar tarefas:", error);
     return { tarefas: [], erro: "Não foi possível carregar as tarefas." };
   }
 
@@ -348,25 +349,50 @@ export async function obterDadosCompletosTarefasExportacao(
 
   const tarefaIds = tarefasDb.map((t) => t.id);
 
-  const [{ data: anexosDb }, { data: comentariosDb }, { data: medicoesDb }] =
-    await Promise.all([
-      supabase
-        .from("tarefa_anexos")
-        .select("id, tarefa_id, nome_arquivo, tipo, momento, caminho, tamanho_bytes, criado_em")
-        .in("tarefa_id", tarefaIds)
-        .order("criado_em", { ascending: true }),
-      supabase
-        .from("tarefa_comentarios")
-        .select("id, tarefa_id, texto, criado_em, autor:perfis!tarefa_comentarios_autor_id_fkey(nome)")
-        .in("tarefa_id", tarefaIds)
-        .order("criado_em", { ascending: true }),
-      supabase
-        .from("tarefa_medicoes")
-        .select(
-          "id, tarefa_id, quantidade, catalogo_id, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, medicoes!inner(id, titulo, valor_contrato))",
-        )
-        .in("tarefa_id", tarefaIds),
-    ]);
+  const TAMANHO_BLOCO = 50;
+  
+  const [anexosDb, comentariosDb, medicoesDb] = await Promise.all([
+    (async () => {
+      let resultados: any[] = [];
+      for (let i = 0; i < tarefaIds.length; i += TAMANHO_BLOCO) {
+        const bloco = tarefaIds.slice(i, i + TAMANHO_BLOCO);
+        const { data } = await supabase
+          .from("tarefa_anexos")
+          .select("id, tarefa_id, nome_arquivo, tipo, momento, caminho, tamanho_bytes, criado_em")
+          .in("tarefa_id", bloco)
+          .order("criado_em", { ascending: true });
+        if (data) resultados = resultados.concat(data);
+      }
+      return resultados;
+    })(),
+    (async () => {
+      let resultados: any[] = [];
+      for (let i = 0; i < tarefaIds.length; i += TAMANHO_BLOCO) {
+        const bloco = tarefaIds.slice(i, i + TAMANHO_BLOCO);
+        const { data } = await supabase
+          .from("tarefa_comentarios")
+          .select("id, tarefa_id, texto, criado_em, autor:perfis!tarefa_comentarios_autor_id_fkey(nome)")
+          .in("tarefa_id", bloco)
+          .order("criado_em", { ascending: true });
+        if (data) resultados = resultados.concat(data);
+      }
+      return resultados;
+    })(),
+    (async () => {
+      let resultados: any[] = [];
+      for (let i = 0; i < tarefaIds.length; i += TAMANHO_BLOCO) {
+        const bloco = tarefaIds.slice(i, i + TAMANHO_BLOCO);
+        const { data } = await supabase
+          .from("tarefa_medicoes")
+          .select(
+            "id, tarefa_id, quantidade, catalogo_id, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, medicoes!inner(id, titulo, valor_contrato))",
+          )
+          .in("tarefa_id", bloco);
+        if (data) resultados = resultados.concat(data);
+      }
+      return resultados;
+    })(),
+  ]);
 
   const caminhosAnexos = (anexosDb ?? []).map((a) => a.caminho);
   const mapaUrls = caminhosAnexos.length > 0
@@ -469,8 +495,9 @@ export async function obterDadosCompletosTarefasExportacao(
       const resp = t.responsavel as unknown as { nome: string } | null;
       const exec = t.executor as unknown as { nome: string } | null;
       const sup = t.supervisor as unknown as { nome: string } | null;
-      const tags = (t.tags_tarefa as unknown as { id: string; nome: string }[]) ?? [];
-
+      const tagsRaw = t.tags_tarefa;
+      const tags = Array.isArray(tagsRaw) ? (tagsRaw as { id: string; nome: string }[]) : [];
+      
       return {
         id: t.id,
         numero: index + 1,
