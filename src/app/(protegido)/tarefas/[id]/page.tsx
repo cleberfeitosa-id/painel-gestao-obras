@@ -413,7 +413,7 @@ export default async function DetalheTarefaPage({
                   <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
                     Descricao
                   </dt>
-                  <dd className="mt-1 text-sm leading-relaxed text-superficie-700">
+                  <dd className="mt-1 text-sm leading-relaxed text-superficie-700 whitespace-pre-wrap font-sans">
                     {tarefa.descricao}
                   </dd>
                 </div>

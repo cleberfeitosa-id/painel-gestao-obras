@@ -1,32 +1,35 @@
 import Link from "next/link";
-import { ArrowLeft, Tag } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { formatarData } from "@/lib/datas";
-import { Cartao, CartaoConteudo, EstadoVazio } from "@/components/ui";
-import { BotaoExcluirTag } from "@/components/tarefas/botao-excluir-tag";
+import { GerenciadorTags, type ItemTag } from "@/components/tarefas/gerenciador-tags";
 
 export default async function GerenciarTagsPage() {
   const supabase = await createClient();
 
   const [
     { data: tags },
-    { data: { user } }
+    {
+      data: { user },
+    },
   ] = await Promise.all([
-    supabase.from("tags_tarefa").select("id, nome, criado_em, criado_por(nome)").order("nome"),
-    supabase.auth.getUser()
+    supabase
+      .from("tags_tarefa")
+      .select("id, nome, criado_em, criado_por(nome)")
+      .order("nome"),
+    supabase.auth.getUser(),
   ]);
 
-  let podeExcluir = false;
+  let podeEditar = false;
   if (user) {
     const { data: perfil } = await supabase
       .from("perfis")
       .select("papel")
       .eq("id", user.id)
       .single();
-    podeExcluir = perfil?.papel === "admin" || perfil?.papel === "gestor";
+    podeEditar = perfil?.papel === "admin" || perfil?.papel === "gestor";
   }
 
-  const listTags = tags ?? [];
+  const listTags = (tags ?? []) as ItemTag[];
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -39,40 +42,16 @@ export default async function GerenciarTagsPage() {
           Voltar para tarefas
         </Link>
         <div className="mt-2 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-superficie-900">Gerenciar Tags</h1>
+          <h1 className="text-2xl font-bold text-superficie-900">
+            Gerenciar Tags
+          </h1>
         </div>
         <p className="mt-1 text-sm text-superficie-500">
-          Vocabulario de tags globais agrupando tarefas do sistema.
+          Vocabulário de tags globais para categorizar e filtrar tarefas em todas as obras.
         </p>
       </div>
 
-      <Cartao>
-        <CartaoConteudo>
-          {listTags.length === 0 ? (
-            <EstadoVazio
-              icone={<Tag className="h-8 w-8" />}
-              titulo="Nenhuma tag cadastrada"
-              descricao="As tags podem ser criadas diretamente no formulario de criacao de tarefas."
-            />
-          ) : (
-            <ul className="divide-y divide-superficie-100">
-              {listTags.map((tag) => (
-                <li key={tag.id} className="flex items-center justify-between py-4">
-                  <div>
-                    <p className="font-medium text-superficie-900">{tag.nome}</p>
-                    <p className="text-xs text-superficie-500 mt-1">
-                      Criada por {(tag.criado_por as { nome: string } | null)?.nome ?? "Sistema"} em {formatarData(tag.criado_em)}
-                    </p>
-                  </div>
-                  {podeExcluir && (
-                    <BotaoExcluirTag tagId={tag.id} nome={tag.nome} />
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CartaoConteudo>
-      </Cartao>
+      <GerenciadorTags tagsIniciais={listTags} podeEditar={podeEditar} />
     </div>
   );
 }

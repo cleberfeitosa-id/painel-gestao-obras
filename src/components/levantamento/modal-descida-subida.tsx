@@ -9,9 +9,11 @@ import type { Nivel3D } from "@/lib/levantamento/tipos";
 interface ModalDescidaSubidaProps {
   aberto: boolean;
   niveis: Nivel3D[];
+  circuitosDisponiveis?: string[];
   dadosIniciais?: {
     nome?: string;
     subtipo?: string;
+    circuito?: string;
     nivelOrigemId?: string;
     alturaOrigem?: number;
     nivelDestinoId?: string;
@@ -21,6 +23,7 @@ interface ModalDescidaSubidaProps {
     nome: string;
     subtipo: string;
     cor: string;
+    circuito?: string;
     nivelOrigemId?: string;
     alturaOrigem: number;
     nivelDestinoId?: string;
@@ -32,13 +35,15 @@ interface ModalDescidaSubidaProps {
 export function ModalDescidaSubida({
   aberto,
   niveis,
+  circuitosDisponiveis = [],
   dadosIniciais,
   aoSalvar,
   aoFechar,
 }: ModalDescidaSubidaProps) {
   const [nome, setNome] = useState(
-    dadosIniciais?.nome ?? "Descida de Eletroduto (Forro → Tomada Média)",
+    dadosIniciais?.nome ?? "Descida de Eletroduto (Forro → Tomada Baixa)",
   );
+  const [circuito, setCircuito] = useState(dadosIniciais?.circuito ?? "");
   const [nivelOrigemId, setNivelOrigemId] = useState(
     dadosIniciais?.nivelOrigemId ??
       (niveis.find((n) => n.id === "forro_teto")?.id ?? niveis[niveis.length - 1]?.id ?? "forro_teto"),
@@ -50,12 +55,24 @@ export function ModalDescidaSubida({
 
   const [nivelDestinoId, setNivelDestinoId] = useState(
     dadosIniciais?.nivelDestinoId ??
-      (niveis.find((n) => n.id === "tomada_media")?.id ?? niveis[2]?.id ?? "tomada_media"),
+      (niveis.find((n) => n.id === "tomada_baixa")?.id ?? niveis[1]?.id ?? "tomada_baixa"),
   );
   const [alturaDestino, setAlturaDestino] = useState<number>(
     dadosIniciais?.alturaDestino ??
-      (niveis.find((n) => n.id === "tomada_media")?.cota ?? 1.2),
+      (niveis.find((n) => n.id === "tomada_baixa")?.cota ?? 0.3),
   );
+
+  function aplicarPresetDescida(origemId: string, destinoId: string, label: string) {
+    setNivelOrigemId(origemId);
+    const orig = niveis.find((n) => n.id === origemId);
+    if (orig) setAlturaOrigem(orig.cota);
+
+    setNivelDestinoId(destinoId);
+    const dest = niveis.find((n) => n.id === destinoId);
+    if (dest) setAlturaDestino(dest.cota);
+
+    setNome(circuito ? `Descida Circuito ${circuito} (${label})` : `Descida (${label})`);
+  }
 
   function selecionarOrigem(id: string) {
     setNivelOrigemId(id);
@@ -63,7 +80,7 @@ export function ModalDescidaSubida({
     if (n) {
       setAlturaOrigem(n.cota);
       const destNome = niveis.find((x) => x.id === nivelDestinoId)?.nome ?? "";
-      setNome(`Descida/Subida (${n.nome} → ${destNome})`);
+      setNome(circuito ? `Descida Circuito ${circuito} (${n.nome} → ${destNome})` : `Descida/Subida (${n.nome} → ${destNome})`);
     }
   }
 
@@ -73,7 +90,7 @@ export function ModalDescidaSubida({
     if (n) {
       setAlturaDestino(n.cota);
       const origNome = niveis.find((x) => x.id === nivelOrigemId)?.nome ?? "";
-      setNome(`Descida/Subida (${origNome} → ${n.nome})`);
+      setNome(circuito ? `Descida Circuito ${circuito} (${origNome} → ${n.nome})` : `Descida/Subida (${origNome} → ${n.nome})`);
     }
   }
 
@@ -84,6 +101,7 @@ export function ModalDescidaSubida({
       nome: nome.trim() || "Descida de Eletroduto",
       subtipo: "descida_eletroduto",
       cor: "#a855f7",
+      circuito: circuito.trim() || undefined,
       nivelOrigemId,
       alturaOrigem,
       nivelDestinoId,
@@ -100,11 +118,88 @@ export function ModalDescidaSubida({
       tamanho="md"
     >
       <div className="space-y-4">
-        <Campo
-          rotulo="Descrição / Identificação"
-          value={nome}
-          onChange={(e) => setNome(e.target.value)}
-        />
+        <div>
+          <label className="block text-xs font-semibold text-superficie-700 mb-1.5">
+            Predefinições Rápidas de Descida:
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() =>
+                aplicarPresetDescida("forro_teto", "tomada_baixa", "Forro → Tomada Baixa")
+              }
+              className="text-left px-2.5 py-1.5 rounded-lg border border-superficie-200 hover:border-purple-500 hover:bg-purple-50/50 text-xs transition-colors"
+            >
+              <div className="font-semibold text-purple-900">Forro (2.80m) ➔ Tomada Baixa (0.30m)</div>
+              <div className="text-[10px] text-superficie-500">Descida vertical de 2.50m</div>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                aplicarPresetDescida("forro_teto", "tomada_media", "Forro → Média / Interruptor")
+              }
+              className="text-left px-2.5 py-1.5 rounded-lg border border-superficie-200 hover:border-purple-500 hover:bg-purple-50/50 text-xs transition-colors"
+            >
+              <div className="font-semibold text-purple-900">Forro (2.80m) ➔ Média / Interruptor (1.20m)</div>
+              <div className="text-[10px] text-superficie-500">Descida vertical de 1.60m</div>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                aplicarPresetDescida("forro_teto", "tomada_alta", "Forro → Tomada Alta")
+              }
+              className="text-left px-2.5 py-1.5 rounded-lg border border-superficie-200 hover:border-purple-500 hover:bg-purple-50/50 text-xs transition-colors"
+            >
+              <div className="font-semibold text-purple-900">Forro (2.80m) ➔ Tomada Alta (2.20m)</div>
+              <div className="text-[10px] text-superficie-500">Descida vertical de 0.60m</div>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                aplicarPresetDescida("piso", "tomada_baixa", "Piso → Tomada Baixa")
+              }
+              className="text-left px-2.5 py-1.5 rounded-lg border border-superficie-200 hover:border-purple-500 hover:bg-purple-50/50 text-xs transition-colors"
+            >
+              <div className="font-semibold text-purple-900">Piso (0.00m) ➔ Tomada Baixa (0.30m)</div>
+              <div className="text-[10px] text-superficie-500">Subida vertical de 0.30m</div>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-superficie-100">
+          <Campo
+            rotulo="Descrição / Identificação"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+          />
+
+          {circuitosDisponiveis.length > 0 ? (
+            <Selecao
+              rotulo="Vincular ao Circuito (Opcional)"
+              value={circuito}
+              onChange={(e) => {
+                setCircuito(e.target.value);
+                if (e.target.value) {
+                  setNome(`Descida Circuito ${e.target.value}`);
+                }
+              }}
+            >
+              <option value="">Nenhum (Eletroduto Geral)</option>
+              {circuitosDisponiveis.map((c) => (
+                <option key={c} value={c}>
+                  Circuito {c}
+                </option>
+              ))}
+            </Selecao>
+          ) : (
+            <Campo
+              rotulo="Circuito Vinculado (Opcional)"
+              placeholder="Ex.: C1, C4"
+              value={circuito}
+              onChange={(e) => setCircuito(e.target.value)}
+            />
+          )}
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-2 p-3 rounded-xl border border-sky-200 bg-sky-50/50">

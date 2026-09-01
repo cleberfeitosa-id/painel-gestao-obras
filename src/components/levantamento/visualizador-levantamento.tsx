@@ -47,6 +47,7 @@ import {
   calcularAreaPoligono,
   calcularDistanciaPontos,
   calcularResumoLevantamento,
+  formatarDescricaoTarefaCircuito,
   formatarMetros,
   formatarMetrosQuadrados,
   obterNomeCorCabo,
@@ -78,6 +79,10 @@ import { Calibragem } from "@/components/plantas/calibragem";
 import { LegendaDinamica } from "./legenda-dinamica";
 import { ModalConfigCabo, CORES_CIRCUITO_SUGERIDAS } from "./modal-config-cabo";
 import { ModalDescidaSubida } from "./modal-descida-subida";
+import {
+  ModalEditarCircuitosLote,
+  type DadosEdicaoLoteCircuito,
+} from "./modal-editar-circuitos-lote";
 import { GerenciadorNiveisModal } from "./gerenciador-niveis-modal";
 import { GerenciadorCategoriasModal } from "./gerenciador-categorias-modal";
 import { ModalUploadNovaPlanta } from "./modal-upload-nova-planta";
@@ -311,6 +316,18 @@ export function VisualizadorLevantamento({
     [itens],
   );
 
+  const circuitosDisponiveis = useMemo(() => {
+    const setCircs = new Set<string>();
+    for (const item of itens) {
+      if (item.metadadosCabo?.circuito) {
+        setCircs.add(item.metadadosCabo.circuito);
+      }
+    }
+    return Array.from(setCircs).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true }),
+    );
+  }, [itens]);
+
   const [historicoDesfazer, setHistoricoDesfazer] = useState<
     ItemLevantamento[][]
   >([]);
@@ -339,11 +356,16 @@ export function VisualizadorLevantamento({
   const [loteDescidasPontos, setLoteDescidasPontos] = useState<PontoPdf[]>([]);
 
   const [modalCaboAberto, setModalCaboAberto] = useState(false);
+  const [itemCaboEmEdicao, setItemCaboEmEdicao] = useState<ItemLevantamento | null>(null);
+  const [modalEditarLoteCircuitosAberto, setModalEditarLoteCircuitosAberto] = useState(false);
+  const [pontosAlvoDescidaLote, setPontosAlvoDescidaLote] = useState<ItemLevantamento[]>([]);
   const [metadadosCaboAtivo, setMetadadosCaboAtivo] = useState<MetadadosCabo>({
     circuito: "C1",
     cor: "#eab308",
     tipoCabo: "Cabo Flexível 750V 2.5mm²",
     tipoCondutor: "Cobre",
+    nivelId: "forro_teto",
+    altura: 2.8,
     fases: [{ nome: "R", cor: "#FFFFFF", quantidade: 1 }],
     condutores: [
       { tipo: "fase", quantidade: 1 },
@@ -490,26 +512,36 @@ export function VisualizadorLevantamento({
       detalhe.fases = item.metadadosCabo?.fases;
       detalhe.tipoCabo = item.metadadosCabo?.tipoCabo;
       detalhe.tipoCondutor = item.metadadosCabo?.tipoCondutor;
+      detalhe.nivelId = item.nivelId;
+      detalhe.altura = item.altura;
       detalhe.cor = item.cor || item.metadadosCabo?.cor;
       detalhe.corFaseR = item.metadadosCabo?.corFaseR;
       detalhe.corFaseS = item.metadadosCabo?.corFaseS;
       detalhe.corFaseT = item.metadadosCabo?.corFaseT;
       detalhe.corFase = item.metadadosCabo?.corFase;
+      detalhe.observacao = item.metadadosCabo?.observacao || item.observacao;
       tituloSugerido = `Passagem de Cabo - Circuito ${item.metadadosCabo?.circuito ?? ""}`;
-      const condutoresDescricao =
-        item.metadadosCabo?.fases && item.metadadosCabo.fases.length > 0
-          ? [
-              ...item.metadadosCabo.fases.map(
-                (f) => `${f.quantidade}x Fase ${f.nome}`,
-              ),
-              ...(item.metadadosCabo.condutores ?? [])
-                .filter((c) => c.tipo !== "fase")
-                .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`),
-            ].join(", ")
-          : item.metadadosCabo?.condutores
-              ?.map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`)
-              .join(", ") ?? "";
-      descSugerida += `Trecho de Circuito ${item.metadadosCabo?.circuito ?? ""}: ${item.comprimentoReal ? `${item.comprimentoReal.toFixed(2)}m` : ""}.\nTipo de cabo: ${item.metadadosCabo?.tipoCabo ?? ""}.\nCondutores: ${condutoresDescricao}.`;
+
+      const nivelNome = item.nivelId
+        ? niveis.find((n) => n.id === item.nivelId)?.nome
+        : undefined;
+
+      descSugerida = formatarDescricaoTarefaCircuito({
+        nomeLevantamento: nomeLev,
+        circuito: item.metadadosCabo?.circuito,
+        tipoCabo: item.metadadosCabo?.tipoCabo,
+        tipoCondutor: item.metadadosCabo?.tipoCondutor,
+        comprimento: item.comprimentoReal,
+        altura: item.altura,
+        nivelNome,
+        condutores: item.metadadosCabo?.condutores,
+        fases: item.metadadosCabo?.fases,
+        corFase: item.metadadosCabo?.corFase,
+        corFaseR: item.metadadosCabo?.corFaseR,
+        corFaseS: item.metadadosCabo?.corFaseS,
+        corFaseT: item.metadadosCabo?.corFaseT,
+        observacao: item.metadadosCabo?.observacao || item.observacao,
+      });
     } else if (item.tipo === "area") {
       detalhe.area = item.areaReal;
       detalhe.perimetro = item.perimetroReal;
@@ -524,8 +556,23 @@ export function VisualizadorLevantamento({
       detalhe.alturaDestino = item.alturaDestino;
       detalhe.nivelOrigemId = item.nivelOrigemId;
       detalhe.nivelDestinoId = item.nivelDestinoId;
-      tituloSugerido = `Descida/Subida Vertical ${item.nome}`;
-      descSugerida += `Trecho vertical: ${item.comprimentoReal?.toFixed(2)}m (Origem: ${item.alturaOrigem ?? 0}m -> Destino: ${item.alturaDestino ?? 0}m).`;
+      detalhe.circuito = item.circuito;
+      tituloSugerido = item.circuito
+        ? `Descida Eletroduto - Circuito ${item.circuito}`
+        : `Descida/Subida Vertical ${item.nome}`;
+      const nomeOrigem = item.nivelOrigemId
+        ? niveis.find((n) => n.id === item.nivelOrigemId)?.nome
+        : `${item.alturaOrigem ?? 0}m`;
+      const nomeDestino = item.nivelDestinoId
+        ? niveis.find((n) => n.id === item.nivelDestinoId)?.nome
+        : `${item.alturaDestino ?? 0}m`;
+      descSugerida =
+        `Levantamento: ${nomeLev}\n` +
+        `⚡ DESCIDA VERTICAL DE TUBULAÇÃO / ELETRODUTO${item.circuito ? ` — CIRCUITO ${item.circuito}` : ""}\n` +
+        `• Trecho Vertical: ${formatarMetros(item.comprimentoReal ?? 0)}\n` +
+        `• Origem: ${nomeOrigem} (${formatarMetros(item.alturaOrigem ?? 0)})\n` +
+        `• Destino: ${nomeDestino} (${formatarMetros(item.alturaDestino ?? 0)})\n` +
+        `• Quantidade: 1 prumada vertical`;
     }
 
     const p0 = item.pontos[0] ?? { x: 0, y: 0 };
@@ -980,7 +1027,13 @@ export function VisualizadorLevantamento({
           : metadadosCaboAtivo.condutores
               .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`)
               .join("+");
-      const { altura, nivelId } = obterAlturaENivelElemento(elementoAtivo);
+      const alturaCircuito =
+        metadadosCaboAtivo.altura !== undefined
+          ? metadadosCaboAtivo.altura
+          : 2.8;
+      const nivelCircuitoId =
+        metadadosCaboAtivo.nivelId || "forro_teto";
+
       novoItem = {
         id: `cabo_${Date.now()}`,
         numero: getNextNumero("cabo_circuito"),
@@ -990,10 +1043,14 @@ export function VisualizadorLevantamento({
         nome: `Circuito ${metadadosCaboAtivo.circuito} (${condsTexto})`,
         cor: metadadosCaboAtivo.cor || "#eab308",
         pontos: pontosEmDesenho,
-        altura: altura || 2.8,
-        nivelId,
+        altura: alturaCircuito,
+        nivelId: nivelCircuitoId,
         comprimentoReal: compReal,
-        metadadosCabo: metadadosCaboAtivo,
+        metadadosCabo: {
+          ...metadadosCaboAtivo,
+          altura: alturaCircuito,
+          nivelId: nivelCircuitoId,
+        },
         criadoEm: new Date().toISOString(),
       };
       registrarEstado([...itens, novoItem]);
@@ -1054,6 +1111,7 @@ export function VisualizadorLevantamento({
     nome: string;
     subtipo: string;
     cor: string;
+    circuito?: string;
     nivelOrigemId?: string;
     alturaOrigem: number;
     nivelDestinoId?: string;
@@ -1062,7 +1120,47 @@ export function VisualizadorLevantamento({
     const alturaDelta = Math.abs(dados.alturaOrigem - dados.alturaDestino);
     const agora = new Date().toISOString();
 
-    if (loteDescidasPontos.length > 0) {
+    if (pontosAlvoDescidaLote.length > 0) {
+      const novosItens: ItemLevantamento[] = pontosAlvoDescidaLote.map(
+        (itemPonto, idx) => {
+          const altDest =
+            itemPonto.altura !== undefined
+              ? itemPonto.altura
+              : dados.alturaDestino;
+          const delta = Math.abs(dados.alturaOrigem - altDest);
+          const p = itemPonto.pontos[0] ?? { x: 0, y: 0 };
+          const nomeItem = dados.circuito
+            ? `Descida Circuito ${dados.circuito} (${itemPonto.nome})`
+            : `${dados.nome} (${itemPonto.nome})`;
+
+          return {
+            id: `desc_lote_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 5)}`,
+            numero: getNextNumero(dados.subtipo) + idx,
+            tipo: "descida_subida",
+            categoria: "Tubulações e Cabos",
+            subtipo: dados.subtipo,
+            nome: nomeItem,
+            cor: dados.cor,
+            circuito: dados.circuito,
+            pontos: [p],
+            nivelOrigemId: dados.nivelOrigemId,
+            alturaOrigem: dados.alturaOrigem,
+            nivelDestinoId: itemPonto.nivelId || dados.nivelDestinoId,
+            alturaDestino: altDest,
+            comprimentoReal: delta,
+            criadoEm: agora,
+          };
+        },
+      );
+
+      registrarEstado([...itens, ...novosItens]);
+      if (novosItens[0]) setItemSelecionado(novosItens[0]);
+      setPontosAlvoDescidaLote([]);
+      setMensagemLote({
+        tipo: "sucesso",
+        texto: `${novosItens.length} descida(s) vertical(is) criada(s) com sucesso!`,
+      });
+    } else if (loteDescidasPontos.length > 0) {
       const novosItens: ItemLevantamento[] = loteDescidasPontos.map(
         (p, idx) => ({
           id: `desc_lote_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 5)}`,
@@ -1072,6 +1170,7 @@ export function VisualizadorLevantamento({
           subtipo: dados.subtipo,
           nome: dados.nome,
           cor: dados.cor,
+          circuito: dados.circuito,
           pontos: [p],
           nivelOrigemId: dados.nivelOrigemId,
           alturaOrigem: dados.alturaOrigem,
@@ -1093,6 +1192,7 @@ export function VisualizadorLevantamento({
         subtipo: dados.subtipo,
         nome: dados.nome,
         cor: dados.cor,
+        circuito: dados.circuito,
         pontos: [pontoDescidaPendente],
         nivelOrigemId: dados.nivelOrigemId,
         alturaOrigem: dados.alturaOrigem,
@@ -1106,6 +1206,121 @@ export function VisualizadorLevantamento({
       setPontoDescidaPendente(null);
     }
     setModalDescidaAberto(false);
+  }
+
+  function salvarConfiguracaoCabo(dados: MetadadosCabo) {
+    if (itemCaboEmEdicao) {
+      const condsTexto =
+        dados.fases && dados.fases.length > 0
+          ? [
+              ...dados.fases.map(
+                (f) => `${f.quantidade > 1 ? `${f.quantidade}x` : ""}${f.nome}`,
+              ),
+              ...dados.condutores
+                .filter((c) => c.tipo !== "fase")
+                .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`),
+            ].join("+")
+          : dados.condutores.map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`).join("+");
+
+      const alturaCircuito =
+        dados.altura !== undefined ? dados.altura : (itemCaboEmEdicao.altura ?? 2.8);
+      const nivelCircuitoId =
+        dados.nivelId || (itemCaboEmEdicao.nivelId || "forro_teto");
+
+      const atualizado: ItemLevantamento = {
+        ...itemCaboEmEdicao,
+        nome: `Circuito ${dados.circuito} (${condsTexto})`,
+        cor: dados.cor || "#eab308",
+        altura: alturaCircuito,
+        nivelId: nivelCircuitoId,
+        metadadosCabo: {
+          ...dados,
+          altura: alturaCircuito,
+          nivelId: nivelCircuitoId,
+        },
+      };
+
+      const novosItens = itens.map((it) => (it.id === itemCaboEmEdicao.id ? atualizado : it));
+      registrarEstado(novosItens);
+      setItemSelecionado(atualizado);
+      setItemCaboEmEdicao(null);
+      setMensagemSucesso(`Circuito ${dados.circuito} atualizado com sucesso!`);
+      setTimeout(() => setMensagemSucesso(null), 3000);
+    } else {
+      setMetadadosCaboAtivo(dados);
+    }
+    setModalCaboAberto(false);
+  }
+
+  function salvarEdicaoLoteCircuitos(dados: DadosEdicaoLoteCircuito) {
+    const circuitosIds = new Set(
+      itens
+        .filter((i) => itensLoteSelecionados.includes(i.id) && i.tipo === "tubulacao_cabo")
+        .map((i) => i.id),
+    );
+
+    if (circuitosIds.size === 0) return;
+
+    const novosItens = itens.map((item) => {
+      if (!circuitosIds.has(item.id)) return item;
+
+      const metaAtual = item.metadadosCabo || {
+        circuito: "C1",
+        tipoCabo: "Cabo Flexível 750V 2.5mm²",
+        tipoCondutor: "Cobre",
+        condutores: [],
+      };
+
+      const novoCircuito = dados.alterarCircuito ? dados.circuito : metaAtual.circuito;
+      const novoTipoCabo = dados.alterarTipoCabo ? dados.tipoCabo : metaAtual.tipoCabo;
+      const novoTipoCondutor = dados.alterarTipoCondutor ? dados.tipoCondutor : metaAtual.tipoCondutor;
+      const novoNivelId = dados.alterarNivel ? dados.nivelId : (metaAtual.nivelId || item.nivelId);
+      const novaAltura = dados.alterarNivel ? dados.altura : (metaAtual.altura ?? item.altura ?? 2.8);
+      const novaCor = dados.alterarCor ? dados.cor : (item.cor || metaAtual.cor || "#eab308");
+
+      const novasFases = dados.alterarCondutores ? dados.fases : (metaAtual.fases || []);
+      const novosCondutores = dados.alterarCondutores ? dados.condutores : (metaAtual.condutores || []);
+
+      const condsTexto =
+        novasFases && novasFases.length > 0
+          ? [
+              ...novasFases.map((f) => `${f.quantidade > 1 ? `${f.quantidade}x` : ""}${f.nome}`),
+              ...novosCondutores
+                .filter((c) => c.tipo !== "fase")
+                .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`),
+            ].join("+")
+          : novosCondutores.map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`).join("+");
+
+      const novoNome = `Circuito ${novoCircuito} (${condsTexto})`;
+
+      const novosMetadados: MetadadosCabo = {
+        ...metaAtual,
+        circuito: novoCircuito,
+        tipoCabo: novoTipoCabo,
+        tipoCondutor: novoTipoCondutor,
+        nivelId: novoNivelId,
+        altura: novaAltura,
+        cor: novaCor,
+        fases: novasFases,
+        condutores: novosCondutores,
+      };
+
+      return {
+        ...item,
+        nome: novoNome,
+        cor: novaCor,
+        altura: novaAltura,
+        nivelId: novoNivelId,
+        metadadosCabo: novosMetadados,
+      };
+    });
+
+    registrarEstado(novosItens);
+    setModalEditarLoteCircuitosAberto(false);
+    setMensagemLote({
+      tipo: "sucesso",
+      texto: `${circuitosIds.size} circuito(s) atualizado(s) com sucesso!`,
+    });
   }
 
   async function salvarCalibracaoModal(
@@ -1481,7 +1696,10 @@ export function VisualizadorLevantamento({
                     </div>
                     <button
                       type="button"
-                      onClick={() => setModalCaboAberto(true)}
+                      onClick={() => {
+                        setItemCaboEmEdicao(null);
+                        setModalCaboAberto(true);
+                      }}
                       className="text-[11px] font-semibold text-amber-700 hover:underline cursor-pointer"
                     >
                       Configurar
@@ -1497,6 +1715,12 @@ export function VisualizadorLevantamento({
                         style={{ backgroundColor: metadadosCaboAtivo.cor || "#eab308" }}
                         title="Cor atual do traço do circuito"
                       />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-amber-900/80 font-medium">
+                      <span>
+                        Nível: {niveis.find((n) => n.id === metadadosCaboAtivo.nivelId)?.nome || formatarMetros(metadadosCaboAtivo.altura ?? 2.8)}
+                      </span>
+                      <span className="font-mono">Cota {formatarMetros(metadadosCaboAtivo.altura ?? 2.8)}</span>
                     </div>
                     <div className="text-[10px] text-amber-700">
                       {metadadosCaboAtivo.fases &&
@@ -1672,25 +1896,73 @@ export function VisualizadorLevantamento({
                   </div>
                 )}
 
-                {itensLoteSelecionados.length > 0 && (
-                  <div className="p-2.5 bg-azul-50 border border-azul-200 rounded-xl flex items-center justify-between gap-2 animate-in fade-in duration-150">
-                    <div className="text-xs text-azul-900 font-medium truncate">
-                      <span className="font-bold">
-                        {itensLoteSelecionados.length}
-                      </span>{" "}
-                      de {itens.length} selecionado(s)
+                {itensLoteSelecionados.length > 0 && (() => {
+                  const circuitosLote = itens.filter(
+                    (i) =>
+                      itensLoteSelecionados.includes(i.id) &&
+                      i.tipo === "tubulacao_cabo",
+                  );
+                  const pontosLote = itens.filter(
+                    (i) =>
+                      itensLoteSelecionados.includes(i.id) &&
+                      i.tipo === "ponto",
+                  );
+
+                  return (
+                    <div className="p-2.5 bg-azul-50 border border-azul-200 rounded-xl space-y-2 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs text-azul-900 font-medium truncate">
+                          <span className="font-bold">
+                            {itensLoteSelecionados.length}
+                          </span>{" "}
+                          de {itens.length} selecionado(s)
+                        </div>
+                        <Botao
+                          tamanho="sm"
+                          onClick={() => criarTarefasLoteSelecionados()}
+                          carregando={criandoLoteTarefas}
+                          className="bg-azul-600 hover:bg-azul-700 text-white font-semibold text-xs py-1 px-2.5 shrink-0"
+                        >
+                          <Layers className="h-3.5 w-3.5 mr-1" />
+                          Gerar {itensLoteSelecionados.length} Tarefas
+                        </Botao>
+                      </div>
+
+                      {(circuitosLote.length > 0 || pontosLote.length > 0) && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-azul-200/70">
+                          {circuitosLote.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setModalEditarLoteCircuitosAberto(true)
+                              }
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-semibold border border-amber-300 transition-colors cursor-pointer"
+                              title="Editar propriedades dos circuitos selecionados em lote"
+                            >
+                              <Zap className="h-3.5 w-3.5 text-amber-700" />
+                              <span>Editar {circuitosLote.length} Circuito(s)</span>
+                            </button>
+                          )}
+
+                          {pontosLote.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPontosAlvoDescidaLote(pontosLote);
+                                setModalDescidaAberto(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 text-xs font-semibold border border-purple-300 transition-colors cursor-pointer"
+                              title="Lançar descidas verticais do forro para todos os pontos selecionados em lote"
+                            >
+                              <ArrowDownUp className="h-3.5 w-3.5 text-purple-700" />
+                              <span>Lançar Descidas ({pontosLote.length} pts)</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <Botao
-                      tamanho="sm"
-                      onClick={() => criarTarefasLoteSelecionados()}
-                      carregando={criandoLoteTarefas}
-                      className="bg-azul-600 hover:bg-azul-700 text-white font-semibold text-xs py-1 px-3 shrink-0"
-                    >
-                      <Layers className="h-3.5 w-3.5 mr-1" />
-                      Gerar {itensLoteSelecionados.length} Tarefas
-                    </Botao>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {itens.length === 0 ? (
                   <div className="py-8 text-center px-2 text-xs text-superficie-400 bg-superficie-50 rounded-xl border border-dashed border-superficie-200">
@@ -2703,6 +2975,36 @@ export function VisualizadorLevantamento({
                   <div className="h-4 w-px bg-superficie-700 hidden sm:block shrink-0" />
 
                   <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                    {itemSelecionado.tipo === "tubulacao_cabo" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setItemCaboEmEdicao(itemSelecionado);
+                          setModalCaboAberto(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
+                        title="Editar especificações, condutores e cota deste circuito"
+                      >
+                        <Zap className="h-3.5 w-3.5" />
+                        <span>Editar Circuito</span>
+                      </button>
+                    )}
+
+                    {itemSelecionado.tipo === "ponto" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPontosAlvoDescidaLote([itemSelecionado]);
+                          setModalDescidaAberto(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
+                        title="Lançar descida vertical de eletroduto do forro até este ponto"
+                      >
+                        <ArrowDownUp className="h-3.5 w-3.5" />
+                        <span>Lançar Descida</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => criarTarefaAPartirDeItem(itemSelecionado)}
@@ -2966,21 +3268,36 @@ export function VisualizadorLevantamento({
 
       <ModalConfigCabo
         aberto={modalCaboAberto}
-        dadosIniciais={metadadosCaboAtivo}
-        aoSalvar={(dados) => {
-          setMetadadosCaboAtivo(dados);
+        niveis={niveis}
+        dadosIniciais={itemCaboEmEdicao?.metadadosCabo || metadadosCaboAtivo}
+        aoSalvar={salvarConfiguracaoCabo}
+        aoFechar={() => {
           setModalCaboAberto(false);
+          setItemCaboEmEdicao(null);
         }}
-        aoFechar={() => setModalCaboAberto(false)}
+      />
+
+      <ModalEditarCircuitosLote
+        aberto={modalEditarLoteCircuitosAberto}
+        itensSelecionados={itens.filter(
+          (i) =>
+            itensLoteSelecionados.includes(i.id) &&
+            i.tipo === "tubulacao_cabo",
+        )}
+        niveis={niveis}
+        aoSalvar={salvarEdicaoLoteCircuitos}
+        aoFechar={() => setModalEditarLoteCircuitosAberto(false)}
       />
 
       <ModalDescidaSubida
         aberto={modalDescidaAberto}
         niveis={niveis}
+        circuitosDisponiveis={circuitosDisponiveis}
         aoSalvar={salvarDescidaSubida}
         aoFechar={() => {
           setModalDescidaAberto(false);
           setPontoDescidaPendente(null);
+          setPontosAlvoDescidaLote([]);
         }}
       />
 

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Plus, Trash2, Zap } from "lucide-react";
 import { Botao, Campo, Modal, Selecao } from "@/components/ui";
+import { formatarMetros } from "@/lib/levantamento/calculos";
+import { NIVEIS_PADRAO, type Nivel3D } from "@/lib/levantamento/tipos";
 import type {
   FaseCabo,
   FuncaoCondutor,
@@ -11,6 +13,7 @@ import type {
 
 interface ModalConfigCaboProps {
   aberto: boolean;
+  niveis?: Nivel3D[];
   dadosIniciais?: MetadadosCabo;
   aoSalvar: (dados: MetadadosCabo) => void;
   aoFechar: () => void;
@@ -165,6 +168,7 @@ function extrairFasesIniciais(dados?: MetadadosCabo): FaseCabo[] {
 
 export function ModalConfigCabo({
   aberto,
+  niveis = NIVEIS_PADRAO,
   dadosIniciais,
   aoSalvar,
   aoFechar,
@@ -178,6 +182,12 @@ export function ModalConfigCabo({
   );
   const [tipoCondutor, setTipoCondutor] = useState(
     dadosIniciais?.tipoCondutor ?? "Cobre",
+  );
+  const [nivelId, setNivelId] = useState(
+    dadosIniciais?.nivelId ?? "forro_teto",
+  );
+  const [altura, setAltura] = useState<number>(
+    dadosIniciais?.altura ?? 2.8,
   );
   const [fases, setFases] = useState<FaseCabo[]>(() =>
     extrairFasesIniciais(dadosIniciais),
@@ -332,39 +342,49 @@ export function ModalConfigCabo({
     }
   }
 
-  function salvar() {
-    const condutores: { tipo: FuncaoCondutor; quantidade: number; cor?: string }[] = [];
-    if (totalCondutoresFase > 0) {
-      condutores.push({ tipo: "fase", quantidade: totalCondutoresFase });
-    }
-    if (qtdNeutro > 0) {
-      condutores.push({ tipo: "neutro", quantidade: qtdNeutro, cor: "#2563EB" });
-    }
-    if (qtdTerra > 0) {
-      condutores.push({ tipo: "terra", quantidade: qtdTerra, cor: "#16A34A" });
-    }
-    if (qtdRetorno > 0) {
-      condutores.push({ tipo: "retorno", quantidade: qtdRetorno, cor: "#F59E0B" });
+    function selecionarNivel(id: string) {
+      setNivelId(id);
+      const n = niveis.find((x) => x.id === id);
+      if (n) {
+        setAltura(n.cota);
+      }
     }
 
-    const faseR = fases.find((f) => f.nome.toUpperCase() === "R") || fases[0];
-    const faseS = fases.find((f) => f.nome.toUpperCase() === "S") || fases[1];
-    const faseT = fases.find((f) => f.nome.toUpperCase() === "T") || fases[2];
+    function salvar() {
+      const condutores: { tipo: FuncaoCondutor; quantidade: number; cor?: string }[] = [];
+      if (totalCondutoresFase > 0) {
+        condutores.push({ tipo: "fase", quantidade: totalCondutoresFase });
+      }
+      if (qtdNeutro > 0) {
+        condutores.push({ tipo: "neutro", quantidade: qtdNeutro, cor: "#2563EB" });
+      }
+      if (qtdTerra > 0) {
+        condutores.push({ tipo: "terra", quantidade: qtdTerra, cor: "#16A34A" });
+      }
+      if (qtdRetorno > 0) {
+        condutores.push({ tipo: "retorno", quantidade: qtdRetorno, cor: "#F59E0B" });
+      }
 
-    aoSalvar({
-      circuito: circuito.trim() || "C1",
-      tipoCabo: tipoCabo.trim() || "Cabo 2.5mm²",
-      tipoCondutor: tipoCondutor.trim() || "Cobre",
-      condutores,
-      fases,
-      cor: corCircuito,
-      corFase: faseR?.cor || "#FFFFFF",
-      corFaseR: faseR?.cor || "#FFFFFF",
-      corFaseS: faseS?.cor || "#000000",
-      corFaseT: faseT?.cor || "#EF4444",
-      observacao: observacao.trim() || undefined,
-    });
-  }
+      const faseR = fases.find((f) => f.nome.toUpperCase() === "R") || fases[0];
+      const faseS = fases.find((f) => f.nome.toUpperCase() === "S") || fases[1];
+      const faseT = fases.find((f) => f.nome.toUpperCase() === "T") || fases[2];
+
+      aoSalvar({
+        circuito: circuito.trim() || "C1",
+        tipoCabo: tipoCabo.trim() || "Cabo 2.5mm²",
+        tipoCondutor: tipoCondutor.trim() || "Cobre",
+        nivelId,
+        altura,
+        condutores,
+        fases,
+        cor: corCircuito,
+        corFase: faseR?.cor || "#FFFFFF",
+        corFaseR: faseR?.cor || "#FFFFFF",
+        corFaseS: faseS?.cor || "#000000",
+        corFaseT: faseT?.cor || "#EF4444",
+        observacao: observacao.trim() || undefined,
+      });
+    }
 
   return (
     <Modal
@@ -412,6 +432,41 @@ export function ModalConfigCabo({
             value={tipoCabo}
             onChange={(e) => setTipoCabo(e.target.value)}
           />
+        </div>
+
+        <div className="p-3 rounded-xl border border-sky-200 bg-sky-50/50 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-sky-900 uppercase tracking-wider">
+              Nível / Elevação do Circuito (Cota Z):
+            </label>
+            <span className="text-xs font-bold text-sky-700 font-mono">
+              {formatarMetros(altura)}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <Selecao
+              rotulo="Nível de Referência"
+              value={nivelId}
+              onChange={(e) => selecionarNivel(e.target.value)}
+            >
+              {niveis.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.nome} ({formatarMetros(n.cota)})
+                </option>
+              ))}
+              <option value="custom">Personalizado (Outro)</option>
+            </Selecao>
+            <Campo
+              rotulo="Altura / Cota (m)"
+              type="number"
+              step="0.05"
+              value={altura}
+              onChange={(e) => setAltura(Number(e.target.value))}
+            />
+          </div>
+          <p className="text-[11px] text-sky-700">
+            Define a cota onde este circuito e seus eletrodutos estão posicionados (ex.: Forro / Teto a 2.80m).
+          </p>
         </div>
 
         <div className="rounded-xl border border-superficie-200 bg-superficie-50 p-3 space-y-2">

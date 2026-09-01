@@ -420,3 +420,211 @@ export function formatarMetrosQuadrados(valor: number, casas = 2): string {
     maximumFractionDigits: casas,
   })} m²`;
 }
+
+export interface DadosDescricaoCircuito {
+  nomeLevantamento?: string;
+  circuito?: string;
+  tipoCabo?: string;
+  tipoCondutor?: string;
+  comprimento?: number;
+  altura?: number;
+  nivelNome?: string;
+  condutores?: {
+    tipo: FuncaoCondutor;
+    quantidade: number;
+    cor?: string;
+    secaoMm2?: string;
+    fase?: string;
+  }[];
+  fases?: {
+    nome: string;
+    cor: string;
+    quantidade: number;
+  }[];
+  corFase?: string;
+  corFaseR?: string;
+  corFaseS?: string;
+  corFaseT?: string;
+  observacao?: string;
+}
+
+export function formatarDescricaoTarefaCircuito(
+  dados: DadosDescricaoCircuito,
+): string {
+  const circuitoId = dados.circuito ? `Circuito ${dados.circuito}` : "Circuito Elétrico";
+  const tipoCabo = dados.tipoCabo || "Cabo Flexível 750V 2.5mm²";
+  const tipoCondutor = dados.tipoCondutor || "Cobre";
+  const compLinear = dados.comprimento ?? 0;
+  const alturaTrecho = dados.altura !== undefined ? dados.altura : 2.8;
+
+  const listaCondutores: {
+    funcaoRotulo: string;
+    corHex: string;
+    corNome: string;
+    quantidade: number;
+    comprimentoTotal: number;
+  }[] = [];
+
+  if (dados.fases && dados.fases.length > 0) {
+    for (const f of dados.fases) {
+      if (f.quantidade > 0) {
+        const cor = f.cor || CORES_PADRAO_CONDUTOR.faseR;
+        listaCondutores.push({
+          funcaoRotulo: `Fase ${f.nome}`,
+          corHex: cor,
+          corNome: obterNomeCorCabo(cor),
+          quantidade: f.quantidade,
+          comprimentoTotal: compLinear * f.quantidade,
+        });
+      }
+    }
+    for (const cond of dados.condutores ?? []) {
+      if (cond.tipo !== "fase" && cond.quantidade > 0) {
+        const corPadrao =
+          cond.tipo === "neutro"
+            ? CORES_PADRAO_CONDUTOR.neutro
+            : cond.tipo === "terra"
+              ? CORES_PADRAO_CONDUTOR.terra
+              : CORES_PADRAO_CONDUTOR.retorno;
+        const cor = cond.cor || corPadrao;
+        listaCondutores.push({
+          funcaoRotulo: rotuloCondutor(cond.tipo),
+          corHex: cor,
+          corNome: obterNomeCorCabo(cor),
+          quantidade: cond.quantidade,
+          comprimentoTotal: compLinear * cond.quantidade,
+        });
+      }
+    }
+  } else if (dados.condutores && dados.condutores.length > 0) {
+    for (const cond of dados.condutores) {
+      if (cond.quantidade > 0) {
+        if (cond.tipo === "fase") {
+          if (cond.fase) {
+            const cor = cond.cor || dados.corFase || CORES_PADRAO_CONDUTOR.faseR;
+            listaCondutores.push({
+              funcaoRotulo: `Fase ${cond.fase}`,
+              corHex: cor,
+              corNome: obterNomeCorCabo(cor),
+              quantidade: cond.quantidade,
+              comprimentoTotal: compLinear * cond.quantidade,
+            });
+          } else if (cond.quantidade === 1) {
+            const cor = dados.corFaseR || dados.corFase || cond.cor || CORES_PADRAO_CONDUTOR.faseR;
+            listaCondutores.push({
+              funcaoRotulo: "Fase R",
+              corHex: cor,
+              corNome: obterNomeCorCabo(cor),
+              quantidade: 1,
+              comprimentoTotal: compLinear,
+            });
+          } else if (cond.quantidade === 2) {
+            const corR = dados.corFaseR || dados.corFase || CORES_PADRAO_CONDUTOR.faseR;
+            const corS = dados.corFaseS || CORES_PADRAO_CONDUTOR.faseS;
+            listaCondutores.push({
+              funcaoRotulo: "Fase R",
+              corHex: corR,
+              corNome: obterNomeCorCabo(corR),
+              quantidade: 1,
+              comprimentoTotal: compLinear,
+            });
+            listaCondutores.push({
+              funcaoRotulo: "Fase S",
+              corHex: corS,
+              corNome: obterNomeCorCabo(corS),
+              quantidade: 1,
+              comprimentoTotal: compLinear,
+            });
+          } else if (cond.quantidade === 3) {
+            const corR = dados.corFaseR || dados.corFase || CORES_PADRAO_CONDUTOR.faseR;
+            const corS = dados.corFaseS || CORES_PADRAO_CONDUTOR.faseS;
+            const corT = dados.corFaseT || CORES_PADRAO_CONDUTOR.faseT;
+            listaCondutores.push({
+              funcaoRotulo: "Fase R",
+              corHex: corR,
+              corNome: obterNomeCorCabo(corR),
+              quantidade: 1,
+              comprimentoTotal: compLinear,
+            });
+            listaCondutores.push({
+              funcaoRotulo: "Fase S",
+              corHex: corS,
+              corNome: obterNomeCorCabo(corS),
+              quantidade: 1,
+              comprimentoTotal: compLinear,
+            });
+            listaCondutores.push({
+              funcaoRotulo: "Fase T",
+              corHex: corT,
+              corNome: obterNomeCorCabo(corT),
+              quantidade: 1,
+              comprimentoTotal: compLinear,
+            });
+          } else {
+            const cor = cond.cor || dados.corFase || CORES_PADRAO_CONDUTOR.faseR;
+            listaCondutores.push({
+              funcaoRotulo: "Fase",
+              corHex: cor,
+              corNome: obterNomeCorCabo(cor),
+              quantidade: cond.quantidade,
+              comprimentoTotal: compLinear * cond.quantidade,
+            });
+          }
+        } else {
+          const corPadrao =
+            cond.tipo === "neutro"
+              ? CORES_PADRAO_CONDUTOR.neutro
+              : cond.tipo === "terra"
+                ? CORES_PADRAO_CONDUTOR.terra
+                : CORES_PADRAO_CONDUTOR.retorno;
+          const cor = cond.cor || corPadrao;
+          listaCondutores.push({
+            funcaoRotulo: rotuloCondutor(cond.tipo),
+            corHex: cor,
+            corNome: obterNomeCorCabo(cor),
+            quantidade: cond.quantidade,
+            comprimentoTotal: compLinear * cond.quantidade,
+          });
+        }
+      }
+    }
+  }
+
+  const totalCondutores = listaCondutores.reduce((acc, c) => acc + c.quantidade, 0);
+  const totalGeralMetros = listaCondutores.reduce((acc, c) => acc + c.comprimentoTotal, 0);
+
+  const linhas: string[] = [];
+
+  if (dados.nomeLevantamento) {
+    linhas.push(`Levantamento: ${dados.nomeLevantamento}`);
+  }
+
+  const cotaTexto = dados.nivelNome
+    ? `${dados.nivelNome} (${formatarMetros(alturaTrecho)})`
+    : formatarMetros(alturaTrecho);
+
+  linhas.push(
+    `${circuitoId} (${tipoCabo}${tipoCondutor ? `, ${tipoCondutor}` : ""}) — Trecho: ${formatarMetros(compLinear)} — Cota: ${cotaTexto}`,
+  );
+
+  linhas.push("Cabos a passar:");
+  if (listaCondutores.length === 0) {
+    linhas.push("• Nenhum condutor especificado");
+  } else {
+    for (const c of listaCondutores) {
+      const qtdTexto = c.quantidade > 1 ? `${c.quantidade}x ` : "";
+      linhas.push(
+        `• ${qtdTexto}${c.funcaoRotulo} (${c.corNome}): ${formatarMetros(c.comprimentoTotal)}`,
+      );
+    }
+  }
+  linhas.push(
+    `Total de fiação: ${formatarMetros(totalGeralMetros)} (${totalCondutores} condutores)`,
+  );
+
+  if (dados.observacao) {
+    linhas.push(`Obs: ${dados.observacao}`);
+  }
+
+  return linhas.join("\n");
+}

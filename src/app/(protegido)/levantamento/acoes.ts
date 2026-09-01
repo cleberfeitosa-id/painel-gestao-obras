@@ -15,6 +15,10 @@ import {
   CONFIG_LEGENDA_PADRAO,
   NIVEIS_PADRAO,
 } from "@/lib/levantamento/tipos";
+import {
+  formatarDescricaoTarefaCircuito,
+  type DadosDescricaoCircuito,
+} from "@/lib/levantamento/calculos";
 import { BUCKET_PLANTAS, urlAssinada } from "@/lib/armazenamento";
 import {
   obterDadosCompletosTarefasExportacao,
@@ -387,4 +391,85 @@ export async function obterDadosExportacaoLevantamento(levantamentoId: string): 
     calibracoes: (calibs ?? []) as PlantaCalibracaoRow[],
     tarefas,
   };
+}
+
+export async function atualizarDescricoesTarefasCircuitosExistentes(): Promise<
+  { ok: true; atualizadas: number } | { erro: string }
+> {
+  const negado = await verificarGestor();
+  if (negado) return negado;
+
+  const supabase = await createClient();
+
+  const { data: tarefas, error } = await supabase
+    .from("tarefas")
+    .select("id, titulo, descricao, localizacao_tipo, localizacao_detalhe, levantamento_id")
+    .eq("localizacao_tipo", "circuito");
+
+  if (error || !tarefas) {
+    return { erro: "Nao foi possivel buscar as tarefas de circuito." };
+  }
+
+  let contagem = 0;
+
+  const levIds = Array.from(
+    new Set(
+      tarefas
+        .map((t) => t.levantamento_id)
+        .filter((id): id is string => typeof id === "string"),
+    ),
+  );
+
+  const mapaNomesLev = new Map<string, string>();
+  if (levIds.length > 0) {
+    const { data: levs } = await supabase
+      .from("levantamentos")
+      .select("id, nome")
+      .in("id", levIds);
+    if (levs) {
+      for (const l of levs) {
+        mapaNomesLev.set(l.id, l.nome);
+      }
+    }
+  }
+
+  for (const tarefa of tarefas) {
+    const detalhe = (tarefa.localizacao_detalhe as Record<string, unknown>) || {};
+    const nomeLev = tarefa.levantamento_id
+      ? mapaNomesLev.get(tarefa.levantamento_id)
+      : undefined;
+
+    const novaDescricao = formatarDescricaoTarefaCircuito({
+      nomeLevantamento: nomeLev,
+      circuito: (detalhe.circuito as string) || tarefa.titulo,
+      tipoCabo: detalhe.tipoCabo as string | undefined,
+      tipoCondutor: detalhe.tipoCondutor as string | undefined,
+      comprimento: typeof detalhe.comprimento === "number" ? detalhe.comprimento : undefined,
+      altura: typeof detalhe.altura === "number" ? detalhe.altura : undefined,
+      condutores: Array.isArray(detalhe.condutores)
+        ? (detalhe.condutores as DadosDescricaoCircuito["condutores"])
+        : undefined,
+      fases: Array.isArray(detalhe.fases)
+        ? (detalhe.fases as DadosDescricaoCircuito["fases"])
+        : undefined,
+      corFase: detalhe.corFase as string | undefined,
+      corFaseR: detalhe.corFaseR as string | undefined,
+      corFaseS: detalhe.corFaseS as string | undefined,
+      corFaseT: detalhe.corFaseT as string | undefined,
+      observacao: detalhe.observacao as string | undefined,
+    });
+
+    const { error: updateErr } = await supabase
+      .from("tarefas")
+      .update({ descricao: novaDescricao })
+      .eq("id", tarefa.id);
+
+    if (!updateErr) {
+      contagem += 1;
+    }
+  }
+
+  revalidatePath("/tarefas");
+  revalidatePath("/painel");
+  return { ok: true, atualizadas: contagem };
 }

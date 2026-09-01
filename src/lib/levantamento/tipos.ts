@@ -64,6 +64,8 @@ export interface MetadadosCabo {
   tipoCondutor: string;
   condutores: CondutorCabo[];
   fases?: FaseCabo[];
+  nivelId?: string;
+  altura?: number;
   observacao?: string;
   cor?: string;
   corFase?: string;
@@ -88,6 +90,7 @@ export interface ItemLevantamento {
   alturaOrigem?: number;
   nivelDestinoId?: string;
   alturaDestino?: number;
+  circuito?: string;
   comprimentoReal?: number;
   areaReal?: number;
   perimetroReal?: number;

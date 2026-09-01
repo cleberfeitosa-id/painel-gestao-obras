@@ -1737,7 +1737,52 @@ export async function criarTag(nome: string): Promise<{ id: string; nome: string
     return { erro: "Falha ao criar tag." };
   }
 
+  revalidatePath("/tarefas/tags");
+  revalidatePath("/tarefas");
   return { id: data.id, nome: data.nome };
+}
+
+export async function atualizarTag(
+  tagId: string,
+  novoNome: string,
+): Promise<{ ok: true; nome: string } | { erro: string }> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada." };
+
+  const papel = await papelDoUsuario(user.id);
+  if (!eGestor(papel)) {
+    return { erro: "Apenas administradores e gestores podem editar tags globais." };
+  }
+
+  const schema = z
+    .string()
+    .trim()
+    .min(1, "O nome da tag é obrigatório.")
+    .max(60, "O nome da tag é muito longo.");
+  const resultado = schema.safeParse(novoNome);
+
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0].message };
+  }
+
+  const supabase = await createClient();
+  const nomeValidado = resultado.data;
+
+  const { error } = await supabase
+    .from("tags_tarefa")
+    .update({ nome: nomeValidado })
+    .eq("id", tagId);
+
+  if (error) {
+    if (error.code === "23505") {
+      return { erro: "Já existe uma tag com este nome." };
+    }
+    return { erro: "Falha ao atualizar a tag." };
+  }
+
+  revalidatePath("/tarefas/tags");
+  revalidatePath("/tarefas");
+  return { ok: true, nome: nomeValidado };
 }
 
 export async function excluirTag(tagId: string): Promise<Resultado> {
@@ -1757,6 +1802,7 @@ export async function excluirTag(tagId: string): Promise<Resultado> {
     return { erro: "Falha ao excluir a tag. Pode estar em uso." };
   }
 
+  revalidatePath("/tarefas/tags");
   revalidatePath("/tarefas");
   return {};
 }
