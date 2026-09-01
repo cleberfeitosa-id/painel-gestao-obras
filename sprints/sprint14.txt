@@ -1,0 +1,5 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Gestão de tarefas:
+    - Permita excluir tarefas em lote, peça confirmação do usuário;
+    - Nas tarefas geradas a partir de circuitos e distancias lineares e areas, e ademais, na visualização de mapa interativo, dentro da tela da tarefa, identifique a tarefa atual, semelhante ao que fazemos com pinos e regiões.

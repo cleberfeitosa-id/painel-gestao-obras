@@ -2,6 +2,8 @@
 
 import { PDFDocument, PDFName, PDFArray } from "pdf-lib";
 import {
+  corredorDaPolilinha,
+  deslocarPolilinha,
   limitesDaRegiao,
   pdfParaPercentual,
 } from "@/lib/pdf/coordenadas";
@@ -705,6 +707,177 @@ export async function exportarPlantaIluminadaPdf(
         pctMaxX: maxLeft,
         pctMaxY: maxTop,
       });
+    } else if (
+      t.localizacao_tipo === "distancia" &&
+      t.localizacao_detalhe?.pontos &&
+      t.localizacao_detalhe.pontos.length >= 2
+    ) {
+      const corredor = corredorDaPolilinha(t.localizacao_detalhe.pontos, 8);
+      if (corredor.length >= 3) {
+        ctx.beginPath();
+        corredor.forEach((p, idx) => {
+          const pct = pdfParaPercentual(p, dimensoesPdf.largura, dimensoesPdf.altura);
+          const px = (pct.esquerda / 100) * compositeCanvas.width;
+          const py = (pct.topo / 100) * compositeCanvas.height;
+          if (idx === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.closePath();
+        ctx.fillStyle = hexParaRgba(cor, 0.45);
+        ctx.fill();
+      }
+    } else if (
+      t.localizacao_tipo === "circuito" &&
+      t.localizacao_detalhe?.pontos &&
+      t.localizacao_detalhe.pontos.length >= 2
+    ) {
+      const pontos = t.localizacao_detalhe.pontos;
+      const condutores =
+        (t.localizacao_detalhe.condutores as Array<{
+          tipo: string;
+          quantidade: number;
+        }>) || [];
+      const itemFase = condutores.find((c) => c.tipo === "fase");
+      const itemNeutro = condutores.find((c) => c.tipo === "neutro");
+      const itemTerra = condutores.find((c) => c.tipo === "terra");
+      const itemRetorno = condutores.find((c) => c.tipo === "retorno");
+
+      const corFaseR =
+        (t.localizacao_detalhe.corFaseR as string) ||
+        (t.localizacao_detalhe.corFase as string) ||
+        "#FFFFFF";
+      const corFaseS =
+        (t.localizacao_detalhe.corFaseS as string) || "#000000";
+      const corFaseT =
+        (t.localizacao_detalhe.corFaseT as string) || "#EF4444";
+
+      const linhas: {
+        cor: string;
+        dash?: number[];
+        strokeContrast?: boolean;
+      }[] = [];
+      const qtdFase =
+        itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+      const qtdNeutro =
+        itemNeutro?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+      const qtdTerra =
+        itemTerra?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+      const qtdRetorno = itemRetorno?.quantidade ?? 0;
+
+      if (qtdFase >= 1)
+        linhas.push({
+          cor: corFaseR,
+          strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
+        });
+      if (qtdFase >= 2)
+        linhas.push({
+          cor: corFaseS,
+          strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
+        });
+      if (qtdFase >= 3)
+        linhas.push({
+          cor: corFaseT,
+          strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
+        });
+      for (let i = 0; i < qtdNeutro; i++)
+        linhas.push({ cor: "#2563EB", dash: [10, 5] });
+      for (let i = 0; i < qtdTerra; i++)
+        linhas.push({ cor: "#16A34A", dash: [4, 4] });
+      for (let i = 0; i < qtdRetorno; i++)
+        linhas.push({ cor: "#F59E0B", dash: [6, 3] });
+      if (linhas.length === 0)
+        linhas.push({
+          cor: corFaseR,
+          strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
+        });
+
+      const K = linhas.length;
+      const gap = 2.4;
+      const larguraCorredor = Math.max(14, K * gap + 10);
+      const corredor = corredorDaPolilinha(pontos, larguraCorredor);
+      if (corredor.length >= 3) {
+        ctx.beginPath();
+        corredor.forEach((p, idx) => {
+          const pct = pdfParaPercentual(
+            p,
+            dimensoesPdf.largura,
+            dimensoesPdf.altura,
+          );
+          const px = (pct.esquerda / 100) * compositeCanvas.width;
+          const py = (pct.topo / 100) * compositeCanvas.height;
+          if (idx === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.closePath();
+        ctx.fillStyle = hexParaRgba(cor, 0.55);
+        ctx.fill();
+      }
+
+      linhas.forEach((linha, idx) => {
+        const offset = (idx - (K - 1) / 2) * gap;
+        const ptsDeslocados = deslocarPolilinha(pontos, offset);
+        if (ptsDeslocados.length >= 2) {
+          ctx.beginPath();
+          ptsDeslocados.forEach((p, pIdx) => {
+            const pct = pdfParaPercentual(
+              p,
+              dimensoesPdf.largura,
+              dimensoesPdf.altura,
+            );
+            const px = (pct.esquerda / 100) * compositeCanvas.width;
+            const py = (pct.topo / 100) * compositeCanvas.height;
+            if (pIdx === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          });
+          if (linha.strokeContrast) {
+            ctx.strokeStyle = "rgba(15, 23, 42, 0.7)";
+            ctx.lineWidth = 3;
+            ctx.setLineDash([]);
+            ctx.stroke();
+          }
+          ctx.strokeStyle = linha.cor;
+          ctx.lineWidth = 2;
+          ctx.setLineDash(linha.dash || []);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      });
+    } else if (
+      t.localizacao_tipo === "area" &&
+      t.localizacao_detalhe?.pontos &&
+      t.localizacao_detalhe.pontos.length >= 3
+    ) {
+      ctx.beginPath();
+      t.localizacao_detalhe.pontos.forEach((p, idx) => {
+        const pct = pdfParaPercentual(p, dimensoesPdf.largura, dimensoesPdf.altura);
+        const px = (pct.esquerda / 100) * compositeCanvas.width;
+        const py = (pct.topo / 100) * compositeCanvas.height;
+        if (idx === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fillStyle = hexParaRgba(cor, 0.35);
+      ctx.fill();
+      ctx.strokeStyle = hexParaRgba(cor, 0.8);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else if (
+      t.localizacao_tipo === "descida" &&
+      t.ponto_x != null &&
+      t.ponto_y != null
+    ) {
+      const pct = pdfParaPercentual(
+        { x: t.ponto_x, y: t.ponto_y },
+        dimensoesPdf.largura,
+        dimensoesPdf.altura,
+      );
+      const px = (pct.esquerda / 100) * compositeCanvas.width;
+      const py = (pct.topo / 100) * compositeCanvas.height;
+
+      ctx.beginPath();
+      ctx.arc(px, py, 9, 0, Math.PI * 2);
+      ctx.fillStyle = hexParaRgba(cor, 0.8);
+      ctx.fill();
     }
   });
 

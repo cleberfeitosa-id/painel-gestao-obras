@@ -31,6 +31,7 @@ import {
   calcularCalibracao,
   centroDaRegiao,
   corredorDaPolilinha,
+  deslocarPolilinha,
   distanciaEmPontos,
   distanciaPontoPolilinha,
   formatarMedida,
@@ -138,6 +139,111 @@ const cursorPorFerramenta: Record<Ferramenta, string> = {
   calibrar: "crosshair",
   associar: "crosshair",
 };
+
+function obterLinhasCondutoresCircuito(detalhe?: Record<string, unknown> | null): {
+  cor: string;
+  dash?: string;
+  largura: number;
+  rotulo: string;
+  strokeContrast?: boolean;
+}[] {
+  const condutores = (detalhe?.condutores as Array<{
+    tipo: string;
+    quantidade: number;
+    cor?: string;
+  }>) || [];
+
+  const corFaseR =
+    (detalhe?.corFaseR as string) ||
+    (detalhe?.corFase as string) ||
+    "#FFFFFF";
+  const corFaseS = (detalhe?.corFaseS as string) || "#000000";
+  const corFaseT = (detalhe?.corFaseT as string) || "#EF4444";
+
+  const linhas: {
+    cor: string;
+    dash?: string;
+    largura: number;
+    rotulo: string;
+    strokeContrast?: boolean;
+  }[] = [];
+
+  const itemFase = condutores.find((c) => c.tipo === "fase");
+  const itemNeutro = condutores.find((c) => c.tipo === "neutro");
+  const itemTerra = condutores.find((c) => c.tipo === "terra");
+  const itemRetorno = condutores.find((c) => c.tipo === "retorno");
+
+  const qtdFase =
+    itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+  const qtdNeutro =
+    itemNeutro?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+  const qtdTerra =
+    itemTerra?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+  const qtdRetorno = itemRetorno?.quantidade ?? 0;
+
+  if (qtdFase >= 1) {
+    linhas.push({
+      cor: corFaseR,
+      largura: 2,
+      rotulo: "Fase R",
+      strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
+    });
+  }
+  if (qtdFase >= 2) {
+    linhas.push({
+      cor: corFaseS,
+      largura: 2,
+      rotulo: "Fase S",
+      strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
+    });
+  }
+  if (qtdFase >= 3) {
+    linhas.push({
+      cor: corFaseT,
+      largura: 2,
+      rotulo: "Fase T",
+      strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
+    });
+  }
+
+  for (let i = 0; i < qtdNeutro; i++) {
+    linhas.push({
+      cor: "#2563EB",
+      dash: "8,4",
+      largura: 2,
+      rotulo: "Neutro",
+    });
+  }
+
+  for (let i = 0; i < qtdTerra; i++) {
+    linhas.push({
+      cor: "#16A34A",
+      dash: "3,3",
+      largura: 2,
+      rotulo: "Terra",
+    });
+  }
+
+  for (let i = 0; i < qtdRetorno; i++) {
+    linhas.push({
+      cor: "#F59E0B",
+      dash: "6,3",
+      largura: 1.8,
+      rotulo: "Retorno",
+    });
+  }
+
+  if (linhas.length === 0) {
+    linhas.push({
+      cor: corFaseR,
+      largura: 2,
+      rotulo: "Circuito",
+      strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
+    });
+  }
+
+  return linhas;
+}
 
 function DicaTarefa({ tarefa }: { tarefa: TarefaPlanta }) {
   const prazoInfo = situacaoPrazo(tarefa.prazo, tarefa.status === "concluido");
@@ -1537,6 +1643,215 @@ export function VisualizadorPlanta({
                           onMouseEnter={() => aoEntrarPino(tarefa.id)}
                           onMouseLeave={aoSairPino}
                         >
+                          {dicaTarefa === tarefa.id && (
+                            <div
+                              className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2"
+                              style={{
+                                left: `${p0Pct.esquerda}%`,
+                                top: `${p0Pct.topo}%`,
+                              }}
+                            >
+                              <DicaTarefa tarefa={tarefa} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {tarefasFiltradas
+                    .filter(
+                      (t) =>
+                        t.localizacao_tipo === "circuito" &&
+                        t.localizacao_detalhe?.pontos &&
+                        t.localizacao_detalhe.pontos.length >= 2,
+                    )
+                    .map((tarefa) => {
+                      const pontos = tarefa.localizacao_detalhe!.pontos!;
+                      const linhas = obterLinhasCondutoresCircuito(
+                        tarefa.localizacao_detalhe,
+                      );
+                      const K = linhas.length;
+                      const gap = 2.4;
+                      const larguraCorredor = Math.max(14, K * gap + 10);
+                      const corredor = corredorDaPolilinha(pontos, larguraCorredor);
+                      if (corredor.length < 3) return null;
+
+                      const sit = situacaoDaTarefa({
+                        status: tarefa.status,
+                        aprovacao: tarefa.aprovacao,
+                      });
+
+                      const p0 = pontos[0];
+                      const p0Pct = pdfParaPercentual(
+                        p0,
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+
+                      return (
+                        <div
+                          key={tarefa.id}
+                          className={cn(
+                            "absolute inset-0 cursor-pointer pointer-events-auto",
+                            !modoInterativo && "pointer-events-none",
+                          )}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (ferramenta === "navegar") {
+                              setMenuSobreposicao(null);
+                              router.push(`/tarefas/${tarefa.id}`);
+                            } else {
+                              aoClicar(e);
+                            }
+                          }}
+                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
+                          onMouseLeave={aoSairPino}
+                        >
+                          <svg
+                            viewBox="0 0 100 100"
+                            preserveAspectRatio="none"
+                            className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+                          >
+                            <polygon
+                              points={corredor
+                                .map((p) => {
+                                  const pct = pdfParaPercentual(
+                                    p,
+                                    dimensoes.largura,
+                                    dimensoes.altura,
+                                  );
+                                  return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
+                                })
+                                .join(" ")}
+                              fill={CORES_CORREDOR[sit]}
+                              fillOpacity={0.6}
+                              stroke={CORES_CORREDOR[sit]}
+                              strokeWidth={0.5}
+                              vectorEffect="non-scaling-stroke"
+                            />
+                            {linhas.map((linha, idx) => {
+                              const offset = (idx - (K - 1) / 2) * gap;
+                              const ptsDeslocados = deslocarPolilinha(pontos, offset);
+                              const pathData = ptsDeslocados
+                                .map((p, pIdx) => {
+                                  const pct = pdfParaPercentual(
+                                    p,
+                                    dimensoes.largura,
+                                    dimensoes.altura,
+                                  );
+                                  return `${pIdx === 0 ? "M" : "L"} ${pct.esquerda.toFixed(3)} ${pct.topo.toFixed(3)}`;
+                                })
+                                .join(" ");
+
+                              return (
+                                <g key={idx}>
+                                  {linha.strokeContrast && (
+                                    <path
+                                      d={pathData}
+                                      fill="none"
+                                      stroke="#0f172a"
+                                      strokeWidth={3}
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      opacity={0.7}
+                                      vectorEffect="non-scaling-stroke"
+                                    />
+                                  )}
+                                  <path
+                                    d={pathData}
+                                    fill="none"
+                                    stroke={linha.cor}
+                                    strokeWidth={linha.largura}
+                                    strokeDasharray={linha.dash}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    vectorEffect="non-scaling-stroke"
+                                  />
+                                </g>
+                              );
+                            })}
+                          </svg>
+                          {dicaTarefa === tarefa.id && (
+                            <div
+                              className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2"
+                              style={{
+                                left: `${p0Pct.esquerda}%`,
+                                top: `${p0Pct.topo}%`,
+                              }}
+                            >
+                              <DicaTarefa tarefa={tarefa} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {tarefasFiltradas
+                    .filter(
+                      (t) =>
+                        t.localizacao_tipo === "area" &&
+                        t.localizacao_detalhe?.pontos &&
+                        t.localizacao_detalhe.pontos.length >= 3,
+                    )
+                    .map((tarefa) => {
+                      const pontos = tarefa.localizacao_detalhe!.pontos!;
+                      const sit = situacaoDaTarefa({
+                        status: tarefa.status,
+                        aprovacao: tarefa.aprovacao,
+                      });
+                      const p0 = pontos[0];
+                      const p0Pct = pdfParaPercentual(
+                        p0,
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      const pontosSvg = pontos
+                        .map((p) => {
+                          const pct = pdfParaPercentual(
+                            p,
+                            dimensoes.largura,
+                            dimensoes.altura,
+                          );
+                          return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
+                        })
+                        .join(" ");
+
+                      return (
+                        <div
+                          key={tarefa.id}
+                          className={cn(
+                            "absolute inset-0 cursor-pointer pointer-events-auto",
+                            !modoInterativo && "pointer-events-none",
+                          )}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (ferramenta === "navegar") {
+                              setMenuSobreposicao(null);
+                              router.push(`/tarefas/${tarefa.id}`);
+                            } else {
+                              aoClicar(e);
+                            }
+                          }}
+                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
+                          onMouseLeave={aoSairPino}
+                        >
+                          <svg
+                            viewBox="0 0 100 100"
+                            preserveAspectRatio="none"
+                            className="pointer-events-none absolute inset-0 h-full w-full"
+                          >
+                            <polygon
+                              points={pontosSvg}
+                              fill={CORES_CORREDOR[sit]}
+                              fillOpacity={0.35}
+                              stroke={CORES_CORREDOR[sit]}
+                              strokeWidth={2}
+                              strokeDasharray="4 2"
+                              vectorEffect="non-scaling-stroke"
+                            />
+                          </svg>
                           {dicaTarefa === tarefa.id && (
                             <div
                               className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2"

@@ -39,7 +39,17 @@ export interface CondutorCabo {
   tipo: FuncaoCondutor;
   quantidade: number;
   secaoMm2?: string;
+  cor?: string;
 }
+
+export const CORES_PADRAO_CONDUTOR = {
+  faseR: "#FFFFFF",
+  faseS: "#000000",
+  faseT: "#EF4444",
+  neutro: "#2563EB",
+  terra: "#16A34A",
+  retorno: "#F59E0B",
+} as const;
 
 export interface MetadadosCabo {
   circuito: string;
@@ -47,6 +57,11 @@ export interface MetadadosCabo {
   tipoCondutor: string;
   condutores: CondutorCabo[];
   observacao?: string;
+  cor?: string;
+  corFase?: string;
+  corFaseR?: string;
+  corFaseS?: string;
+  corFaseT?: string;
 }
 
 export interface ItemLevantamento {

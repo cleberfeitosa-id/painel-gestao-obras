@@ -15,7 +15,15 @@ import type {
 } from "@/lib/supabase/database.types";
 
 const esquemaLocalizacao = z.object({
-  localizacao_tipo: z.enum(["ponto", "regiao"]),
+  localizacao_tipo: z.enum([
+    "ponto",
+    "regiao",
+    "distancia",
+    "circuito",
+    "area",
+    "descida",
+    "nenhuma",
+  ]),
   planta_id: z.string().uuid(),
   pagina: z.number().int().positive(),
   ponto_x: z.number().nullable().optional(),
@@ -26,10 +34,19 @@ const esquemaLocalizacao = z.object({
     })
     .nullable()
     .optional(),
+  localizacao_detalhe: z.record(z.string(), z.any()).nullable().optional(),
+  levantamento_id: z.string().uuid().nullable().optional(),
+  descricao_especifica: z.string().nullable().optional(),
+  comprimento: z.number().nullable().optional(),
+  area: z.number().nullable().optional(),
+  quantidade: z.number().nullable().optional(),
 });
 
 const esquemaParams = z.object({
   lote: z.string().uuid(),
+  levantamento: z.string().uuid().optional(),
+  titulo: z.string().optional(),
+  descricao: z.string().optional(),
 });
 
 async function buscarOpcoes() {
@@ -103,6 +120,12 @@ export default async function NovaEmLotePage({
           ponto_x: loc.ponto_x ?? undefined,
           ponto_y: loc.ponto_y ?? undefined,
           regiao: loc.regiao ?? undefined,
+          localizacao_detalhe: loc.localizacao_detalhe ?? undefined,
+          levantamento_id: loc.levantamento_id ?? undefined,
+          descricao_especifica: loc.descricao_especifica ?? undefined,
+          comprimento: loc.comprimento ?? undefined,
+          area: loc.area ?? undefined,
+          quantidade: loc.quantidade ?? undefined,
         }));
       }
       obraEncontrada = opcoes.obras.find((o) => o.id === rascunho.obra_id);
@@ -113,19 +136,26 @@ export default async function NovaEmLotePage({
   const obraParaVoltar =
     obraEncontrada && localizacoes.length > 0 ? obraEncontrada : undefined;
 
+  const levantamentoId = params.levantamento || (localizacoes[0]?.levantamento_id);
+  const linkVoltar = levantamentoId
+    ? `/levantamento/${levantamentoId}`
+    : obraParaVoltar && plantaId
+      ? `/obras/${obraParaVoltar.id}/plantas/${plantaId}`
+      : "/tarefas";
+
+  const textoVoltar = levantamentoId
+    ? "Voltar para o levantamento"
+    : "Voltar para a planta";
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <Link
-          href={
-            obraParaVoltar && plantaId
-              ? `/obras/${obraParaVoltar.id}/plantas/${plantaId}`
-              : "/tarefas"
-          }
+          href={linkVoltar}
           className="inline-flex items-center gap-1 text-sm font-medium text-azul-600 hover:text-azul-700"
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar para a planta
+          {textoVoltar}
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-superficie-900">
           Criar tarefas em lote
@@ -135,7 +165,7 @@ export default async function NovaEmLotePage({
             ? `Preencha uma vez e os dados serao replicados para as ${localizacoes.length} ${
                 localizacoes.length === 1 ? "localizacao" : "localizacoes"
               } selecionadas.`
-            : "Selecione os pontos ou regioes na planta para criar tarefas em lote."}
+            : "Selecione os pontos, circuitos ou regioes na planta para criar tarefas em lote."}
         </p>
       </div>
 
@@ -148,13 +178,15 @@ export default async function NovaEmLotePage({
             <FormularioTarefa
               acao={criarTarefasEmLote}
               obras={opcoes.obras}
-            responsaveis={opcoes.responsaveis}
-            executores={opcoes.executores}
-            supervisores={opcoes.supervisores}
-            tags={opcoes.tags}
-            titulosExistentes={opcoes.titulosExistentes}
-            localizacoesLote={localizacoes}
+              responsaveis={opcoes.responsaveis}
+              executores={opcoes.executores}
+              supervisores={opcoes.supervisores}
+              tags={opcoes.tags}
+              titulosExistentes={opcoes.titulosExistentes}
+              localizacoesLote={localizacoes}
               obraIdInicial={obraParaVoltar.id}
+              tituloInicial={params.titulo}
+              descricaoInicial={params.descricao}
               loteId={loteId ?? undefined}
               catalogoPrecos={opcoes.catalogoPrecos}
             />

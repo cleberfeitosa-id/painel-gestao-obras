@@ -1,0 +1,12 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Exibição das tarefas geradas por lote, especialmente as de circuitos:
+    - Tarefas a partir de circuitos traçados e geradas em lote pela página de levantamento não estão sendo exibidas sobre a planta na tela de plantas.
+    - Também observei que ao gerar tarefas em lote , o formulário para preenchimento dos detalhes das tarefas não está sendo chamado.
+    - Todas as tarefas geradas em lote devem ter o mesmo título e serem dintintas apenas pela sua descrição onde constarão as informações básicas daquele segmento como comprimento e descrição do segmento.
+    - Deve haver também um campo automaticamente preenchido com o comprimento, área, quantidade, para ser posteriormente possível de ser herdado para fins de preenchimento de medição.
+    - O padrão de exibição deve ser semelhante ao de tarefas geradas a partir de distâncias lineares, mas incorporando uma diferenciação baseada na quantidade de cabos e tipo de cabos.
+    - Para segmentos onde haverá fase deve haver um traço contínuo e com uma cor a ser escolhida na tela de configuração do circuito. Opções de cores são Branco contrastante com a planta para fase R, Preto para a fase S, vermelho para a fase T, Azul para o neutro e Verde para o aterramento.
+    - Para o neutro o traço deve ser tracejado longo e para o aterramento tracejado curto.
+    - Para circuitos com múltiplas fases ou neutro/aterramento, os traços devem ser paralelos um ao outro, com uma ligeira diferença na posição para que seja possível visualizar todos.  
+    - Sob os traços deve haver uma região fina colorida de acordo com o status da tarefa. A região deve ser larga o suficiente para que seja possível visualizar a cor claramente mesmo com o traço sobreposto.

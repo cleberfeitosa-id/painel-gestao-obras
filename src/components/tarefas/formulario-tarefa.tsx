@@ -37,12 +37,25 @@ export type LocalizacaoInicial = {
 };
 
 export type LocalizacaoLote = {
-  localizacao_tipo: "ponto" | "regiao";
+  localizacao_tipo:
+    | "ponto"
+    | "regiao"
+    | "distancia"
+    | "circuito"
+    | "area"
+    | "descida"
+    | "nenhuma";
   planta_id: string;
   pagina: number;
   ponto_x?: number;
   ponto_y?: number;
   regiao?: { vertices: { x: number; y: number }[] };
+  localizacao_detalhe?: Record<string, unknown>;
+  levantamento_id?: string;
+  descricao_especifica?: string;
+  comprimento?: number;
+  area?: number;
+  quantidade?: number;
 };
 
 interface FormularioTarefaProps {
@@ -341,17 +354,56 @@ export function FormularioTarefa({
       {localizacoesLote ? (
         <div className="flex items-start gap-2 rounded-lg border border-azul-200 bg-azul-50 px-4 py-3 text-sm text-azul-800">
           <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0" />
-          <div>
+          <div className="space-y-1">
             <p className="font-medium">
               {localizacoesLote.length}{" "}
               {localizacoesLote.length === 1
-                ? "localizacao selecionada"
-                : "localizacoes selecionadas"}
+                ? "localização selecionada"
+                : "localizações selecionadas"}
             </p>
             <p className="text-xs text-azul-700">
-              Os dados abaixo serao replicados para cada tarefa do lote, uma por
-              localizacao.
+              Todas as tarefas geradas terão o mesmo título definido abaixo e serão distintas apenas pela sua descrição com os dados individuais de cada segmento (comprimento, circuito, condutores, área).
             </p>
+            {localizacoesLote.some(
+              (l) => l.comprimento || l.localizacao_detalhe?.comprimento,
+            ) && (
+              <p className="text-xs font-semibold text-azul-800">
+                Comprimento total dos trechos:{" "}
+                {localizacoesLote
+                  .reduce(
+                    (acc, l) =>
+                      acc +
+                      Number(
+                        l.comprimento ??
+                          l.localizacao_detalhe?.comprimento ??
+                          0,
+                      ),
+                    0,
+                  )
+                  .toFixed(2)}
+                m
+              </p>
+            )}
+            {localizacoesLote.some(
+              (l) => l.area || l.localizacao_detalhe?.area,
+            ) && (
+              <p className="text-xs font-semibold text-azul-800">
+                Área total medida:{" "}
+                {localizacoesLote
+                  .reduce(
+                    (acc, l) =>
+                      acc +
+                      Number(
+                        l.area ??
+                          l.localizacao_detalhe?.area ??
+                          0,
+                      ),
+                    0,
+                  )
+                  .toFixed(2)}
+                m²
+              </p>
+            )}
           </div>
         </div>
       ) : (

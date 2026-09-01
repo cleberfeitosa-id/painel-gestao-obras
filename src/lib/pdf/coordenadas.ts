@@ -237,6 +237,60 @@ export function corredorDaPolilinha(
   return [...bancoEsquerdo, ...bancoDireito.reverse()];
 }
 
+export function deslocarPolilinha(
+  pontos: PontoPdf[],
+  offset: number,
+): PontoPdf[] {
+  if (pontos.length < 2 || offset === 0) return pontos;
+
+  const resultado: PontoPdf[] = [];
+  const n = pontos.length;
+  const normals: { x: number; y: number }[] = [];
+
+  for (let i = 0; i < n - 1; i++) {
+    const dx = pontos[i + 1].x - pontos[i].x;
+    const dy = pontos[i + 1].y - pontos[i].y;
+    const len = Math.hypot(dx, dy) || 1;
+    normals.push({ x: -dy / len, y: dx / len });
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (i === 0) {
+      resultado.push({
+        x: pontos[0].x + normals[0].x * offset,
+        y: pontos[0].y + normals[0].y * offset,
+      });
+    } else if (i === n - 1) {
+      resultado.push({
+        x: pontos[n - 1].x + normals[n - 2].x * offset,
+        y: pontos[n - 1].y + normals[n - 2].y * offset,
+      });
+    } else {
+      const n1 = normals[i - 1];
+      const n2 = normals[i];
+      let nx = (n1.x + n2.x) / 2;
+      let ny = (n1.y + n2.y) / 2;
+      const nlen = Math.hypot(nx, ny);
+      let scale = 1;
+      if (nlen < 0.001) {
+        nx = n1.x;
+        ny = n1.y;
+      } else {
+        nx /= nlen;
+        ny /= nlen;
+        const cosAngle = n1.x * nx + n1.y * ny;
+        scale = Math.min(2.5, 1 / Math.max(0.4, cosAngle));
+      }
+      resultado.push({
+        x: pontos[i].x + nx * offset * scale,
+        y: pontos[i].y + ny * offset * scale,
+      });
+    }
+  }
+
+  return resultado;
+}
+
 export function distanciaPontoPolilinha(
   p: PontoPdf,
   pontos: PontoPdf[],

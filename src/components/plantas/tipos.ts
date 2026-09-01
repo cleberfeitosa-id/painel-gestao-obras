@@ -18,9 +18,19 @@ export type DetalheLocalizacaoLevantamento = {
   comprimento?: number;
   area?: number;
   perimetro?: number;
+  quantidade?: number;
   circuito?: string;
+  tipoCabo?: string;
+  tipoCondutor?: string;
+  condutores?: { tipo: string; quantidade: number; cor?: string }[];
+  corFase?: string;
+  corFaseR?: string;
+  corFaseS?: string;
+  corFaseT?: string;
   alturaOrigem?: number;
   alturaDestino?: number;
+  nivelOrigemId?: string;
+  nivelDestinoId?: string;
 };
 
 export type TarefaPlanta = {

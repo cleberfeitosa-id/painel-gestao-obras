@@ -409,7 +409,15 @@ export async function criarTarefa(
 
 const esquemaLocalizacaoLote = z
   .object({
-    localizacao_tipo: z.enum(["ponto", "regiao"]),
+    localizacao_tipo: z.enum([
+      "ponto",
+      "regiao",
+      "distancia",
+      "circuito",
+      "area",
+      "descida",
+      "nenhuma",
+    ]),
     planta_id: z.string().uuid(),
     pagina: z.coerce.number().int().positive(),
     ponto_x: z.coerce.number().nullable().optional(),
@@ -422,6 +430,12 @@ const esquemaLocalizacaoLote = z
       })
       .nullable()
       .optional(),
+    localizacao_detalhe: z.record(z.string(), z.any()).nullable().optional(),
+    levantamento_id: z.string().uuid().nullable().optional(),
+    descricao_especifica: z.string().nullable().optional(),
+    comprimento: z.coerce.number().nullable().optional(),
+    area: z.coerce.number().nullable().optional(),
+    quantidade: z.coerce.number().nullable().optional(),
   })
   .superRefine((dados, ctx) => {
     if (dados.localizacao_tipo === "ponto") {
@@ -561,38 +575,46 @@ export async function criarTarefasEmLote(
   if (erroExecutor) return { erro: erroExecutor };
 
   const dados = resultado.data;
-  const linhas = dados.localizacoes.map((localizacao) => ({
-    titulo: dados.titulo,
-    descricao: dados.descricao || null,
-    obra_id: dados.obra_id,
-    responsavel_id: dados.responsavel_id || null,
-    executor_id: dados.executor_id || null,
-    supervisor_id: dados.supervisor_id || null,
-    status: dados.status as StatusTarefa,
-    prioridade: dados.prioridade as PrioridadeTarefa,
-    tag_id: dados.tag_id || null,
-    prazo: dados.prazo || null,
-    data_planejada: dados.data_planejada || null,
-    data_inicio: dados.data_inicio || null,
-    data_fim: dados.data_fim || null,
-    exige_foto: dados.exige_foto ?? false,
-    exige_video: dados.exige_video ?? false,
-    exige_arquivo: dados.exige_arquivo ?? false,
-    localizacao_tipo: localizacao.localizacao_tipo as TipoLocalizacao,
-    planta_id: localizacao.planta_id,
-    pagina: localizacao.pagina,
-    ponto_x:
-      localizacao.localizacao_tipo === "ponto"
-        ? (localizacao.ponto_x ?? null)
-        : null,
-    ponto_y:
-      localizacao.localizacao_tipo === "ponto"
-        ? (localizacao.ponto_y ?? null)
-        : null,
-    regiao:
-      localizacao.localizacao_tipo === "regiao" ? localizacao.regiao : null,
-    criado_por: user.id,
-  }));
+  const linhas = dados.localizacoes.map((localizacao) => {
+    let descFinal = dados.descricao || null;
+    const descEsp = localizacao.descricao_especifica;
+    if (descEsp) {
+      descFinal = dados.descricao
+        ? `${dados.descricao}\n\n${descEsp}`
+        : descEsp;
+    }
+
+    return {
+      titulo: dados.titulo,
+      descricao: descFinal,
+      obra_id: dados.obra_id,
+      responsavel_id: dados.responsavel_id || null,
+      executor_id: dados.executor_id || null,
+      supervisor_id: dados.supervisor_id || null,
+      status: dados.status as StatusTarefa,
+      prioridade: dados.prioridade as PrioridadeTarefa,
+      tag_id: dados.tag_id || null,
+      prazo: dados.prazo || null,
+      data_planejada: dados.data_planejada || null,
+      data_inicio: dados.data_inicio || null,
+      data_fim: dados.data_fim || null,
+      exige_foto: dados.exige_foto ?? false,
+      exige_video: dados.exige_video ?? false,
+      exige_arquivo: dados.exige_arquivo ?? false,
+      localizacao_tipo: localizacao.localizacao_tipo as TipoLocalizacao,
+      planta_id: localizacao.planta_id,
+      pagina: localizacao.pagina,
+      ponto_x: localizacao.ponto_x ?? null,
+      ponto_y: localizacao.ponto_y ?? null,
+      regiao:
+        localizacao.localizacao_tipo === "regiao"
+          ? (localizacao.regiao ?? null)
+          : null,
+      localizacao_detalhe: localizacao.localizacao_detalhe ?? null,
+      levantamento_id: localizacao.levantamento_id ?? null,
+      criado_por: user.id,
+    };
+  });
 
   const { data, error } = await supabase
     .from("tarefas")
@@ -607,14 +629,28 @@ export async function criarTarefasEmLote(
 
   // Inserir medicoes em lote para todas as tarefas criadas.
   if (resultado.data.medicoes && resultado.data.medicoes.length > 0) {
-    const medicoesInsert = data.flatMap((tarefa) =>
-      resultado.data.medicoes!.map((m) => ({
+    const medicoesInsert = data.flatMap((tarefa, idx) => {
+      const loc = dados.localizacoes[idx];
+      const quantHerdada =
+        loc?.localizacao_detalhe?.comprimento ??
+        loc?.localizacao_detalhe?.area ??
+        loc?.localizacao_detalhe?.quantidade ??
+        loc?.comprimento ??
+        loc?.area ??
+        loc?.quantidade;
+
+      return resultado.data.medicoes!.map((m) => ({
         tarefa_id: tarefa.id,
         catalogo_id: m.catalogo_id,
-        quantidade: m.quantidade,
+        quantidade:
+          m.quantidade && m.quantidade > 0
+            ? m.quantidade
+            : typeof quantHerdada === "number" && quantHerdada > 0
+              ? quantHerdada
+              : m.quantidade || 1,
         criado_por: user.id,
-      }))
-    );
+      }));
+    });
 
     const { error: erroMedicoes } = await supabase
       .from("tarefa_medicoes")

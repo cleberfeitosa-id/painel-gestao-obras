@@ -67,15 +67,15 @@ import {
   type TipoElementoLevantamento,
 } from "@/lib/levantamento/tipos";
 import {
-  criarTarefasEmLoteLevantamento,
   obterCalibracoesPlanta,
   salvarCalibracaoDireta,
   salvarLevantamento,
 } from "@/app/(protegido)/levantamento/acoes";
+import { salvarRascunhoLote } from "@/app/(protegido)/tarefas/acoes";
 import { renovarUrlPlanta } from "@/app/(protegido)/obras/[id]/plantas/acoes";
 import { Calibragem } from "@/components/plantas/calibragem";
 import { LegendaDinamica } from "./legenda-dinamica";
-import { ModalConfigCabo } from "./modal-config-cabo";
+import { ModalConfigCabo, CORES_CIRCUITO_SUGERIDAS } from "./modal-config-cabo";
 import { ModalDescidaSubida } from "./modal-descida-subida";
 import { GerenciadorNiveisModal } from "./gerenciador-niveis-modal";
 import { GerenciadorCategoriasModal } from "./gerenciador-categorias-modal";
@@ -340,6 +340,7 @@ export function VisualizadorLevantamento({
   const [modalCaboAberto, setModalCaboAberto] = useState(false);
   const [metadadosCaboAtivo, setMetadadosCaboAtivo] = useState<MetadadosCabo>({
     circuito: "C1",
+    cor: "#eab308",
     tipoCabo: "Cabo Flexível 750V 2.5mm²",
     tipoCondutor: "Cobre",
     condutores: [
@@ -470,37 +471,45 @@ export function VisualizadorLevantamento({
       categoria: item.categoria,
       altura: item.altura,
       pontos: item.pontos,
+      quantidade: 1,
     };
 
     let tituloSugerido = `Executar ${item.nome}`;
-    let descSugerida = `Tarefa gerada a partir do levantamento "${nomeLev}".\n`;
+    let descSugerida = `Levantamento: ${nomeLev}\n`;
 
     if (item.tipo === "distancia") {
       detalhe.comprimento = item.comprimentoReal;
-      tituloSugerido = `Instalar ${item.nome} (${item.comprimentoReal ? `${item.comprimentoReal.toFixed(2)}m` : ""})`;
-      descSugerida += `Extensão linear: ${item.comprimentoReal ? `${item.comprimentoReal.toFixed(2)} metros` : ""}.\nCota/Altura: ${item.altura ?? 0}m.`;
+      tituloSugerido = `Instalar ${item.nome}`;
+      descSugerida += `Segmento: ${item.nome} (${item.comprimentoReal ? `${item.comprimentoReal.toFixed(2)}m` : ""}). Cota/Altura: ${item.altura ?? 0}m.`;
     } else if (item.tipo === "tubulacao_cabo") {
       detalhe.circuito = item.metadadosCabo?.circuito;
       detalhe.comprimento = item.comprimentoReal;
       detalhe.condutores = item.metadadosCabo?.condutores;
       detalhe.tipoCabo = item.metadadosCabo?.tipoCabo;
-      tituloSugerido = `Passagem de Cabo - Circuito ${item.metadadosCabo?.circuito ?? ""} (${item.comprimentoReal ? `${item.comprimentoReal.toFixed(2)}m` : ""})`;
-      descSugerida += `Circuito: ${item.metadadosCabo?.circuito}\nTipo de cabo: ${item.metadadosCabo?.tipoCabo}\nCondutores: ${item.metadadosCabo?.condutores?.map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`).join(", ")}\nComprimento: ${item.comprimentoReal ? `${item.comprimentoReal.toFixed(2)}m` : ""}.`;
+      detalhe.tipoCondutor = item.metadadosCabo?.tipoCondutor;
+      detalhe.cor = item.cor || item.metadadosCabo?.cor;
+      detalhe.corFaseR = item.metadadosCabo?.corFaseR;
+      detalhe.corFaseS = item.metadadosCabo?.corFaseS;
+      detalhe.corFaseT = item.metadadosCabo?.corFaseT;
+      detalhe.corFase = item.metadadosCabo?.corFase;
+      tituloSugerido = `Passagem de Cabo - Circuito ${item.metadadosCabo?.circuito ?? ""}`;
+      descSugerida += `Trecho de Circuito ${item.metadadosCabo?.circuito ?? ""}: ${item.comprimentoReal ? `${item.comprimentoReal.toFixed(2)}m` : ""}.\nTipo de cabo: ${item.metadadosCabo?.tipoCabo ?? ""}.\nCondutores: ${item.metadadosCabo?.condutores?.map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`).join(", ") ?? ""}.`;
     } else if (item.tipo === "area") {
       detalhe.area = item.areaReal;
       detalhe.perimetro = item.perimetroReal;
-      tituloSugerido = `Execução de ${item.nome} (${item.areaReal ? `${item.areaReal.toFixed(2)}m²` : ""})`;
-      descSugerida += `Área total: ${item.areaReal ? `${item.areaReal.toFixed(2)} m²` : ""}\nPerímetro: ${item.perimetroReal ? `${item.perimetroReal.toFixed(2)} m` : ""}.`;
+      tituloSugerido = `Execução de ${item.nome}`;
+      descSugerida += `Área delimitada: ${item.areaReal ? `${item.areaReal.toFixed(2)} m²` : ""} (Perímetro: ${item.perimetroReal ? `${item.perimetroReal.toFixed(2)} m` : ""}).`;
     } else if (item.tipo === "ponto") {
-      tituloSugerido = `Instalar ${item.nome} #${item.numero}`;
-      descSugerida += `Elemento pontual #${item.numero} (${item.nome})\nAltura de instalação: ${item.altura ?? 0}m.`;
+      tituloSugerido = `Instalar ${item.nome}`;
+      descSugerida += `Elemento #${item.numero} (${item.nome}). Altura: ${item.altura ?? 0}m.`;
     } else if (item.tipo === "descida_subida") {
+      detalhe.comprimento = item.comprimentoReal;
       detalhe.alturaOrigem = item.alturaOrigem;
       detalhe.alturaDestino = item.alturaDestino;
       detalhe.nivelOrigemId = item.nivelOrigemId;
       detalhe.nivelDestinoId = item.nivelDestinoId;
-      tituloSugerido = `Descida/Subida Vertical ${item.nome} (Δ=${item.comprimentoReal?.toFixed(2)}m)`;
-      descSugerida += `Trecho vertical: ${item.comprimentoReal?.toFixed(2)}m\nOrigem: ${item.alturaOrigem ?? 0}m -> Destino: ${item.alturaDestino ?? 0}m.`;
+      tituloSugerido = `Descida/Subida Vertical ${item.nome}`;
+      descSugerida += `Trecho vertical: ${item.comprimentoReal?.toFixed(2)}m (Origem: ${item.alturaOrigem ?? 0}m -> Destino: ${item.alturaDestino ?? 0}m).`;
     }
 
     const p0 = item.pontos[0] ?? { x: 0, y: 0 };
@@ -531,35 +540,51 @@ export function VisualizadorLevantamento({
     setCriandoLoteTarefas(true);
     setMensagemLote(null);
 
-    const itensFormatados = itensAlvo.map((it) =>
-      gerarDadosTarefaDeItem(it, nomeLevantamento),
-    );
+    const localizacoes = itensAlvo.map((it) => {
+      const dados = gerarDadosTarefaDeItem(it, nomeLevantamento);
+      return {
+        localizacao_tipo: dados.tipo,
+        planta_id: plantaSelecionadaId,
+        pagina,
+        ponto_x: dados.ponto_x,
+        ponto_y: dados.ponto_y,
+        localizacao_detalhe: dados.detalhe,
+        levantamento_id: levantamentoId ?? null,
+        descricao_especifica: dados.descricao,
+        comprimento: it.comprimentoReal,
+        area: it.areaReal,
+        quantidade: 1,
+      };
+    });
 
-    const res = await criarTarefasEmLoteLevantamento({
-      obraId: obraSelecionadaId,
-      plantaId: plantaSelecionadaId,
+    const res = await salvarRascunhoLote({
+      obra_id: obraSelecionadaId,
+      planta_id: plantaSelecionadaId,
       pagina,
-      levantamentoId: levantamentoId ?? null,
-      itens: itensFormatados,
+      localizacoes,
     });
 
     setCriandoLoteTarefas(false);
     if ("erro" in res) {
       setMensagemLote({ tipo: "erro", texto: res.erro });
-    } else {
-      setMensagemLote({
-        tipo: "sucesso",
-        texto: `${res.quantidade} tarefa(s) gerada(s) em lote com sucesso!`,
-      });
-      if (!itensParaCriar) {
-        setItensLoteSelecionados([]);
-      } else {
-        const idsCriados = itensParaCriar.map((i) => i.id);
-        setItensLoteSelecionados((prev) =>
-          prev.filter((id) => !idsCriados.includes(id)),
-        );
-      }
+      return;
     }
+
+    let tituloComum = itensAlvo[0]?.nome ? `Executar ${itensAlvo[0].nome}` : "Tarefas em Lote";
+    if (itensAlvo.every((i) => i.tipo === "tubulacao_cabo")) {
+      const circuito = itensAlvo[0]?.metadadosCabo?.circuito;
+      tituloComum = `Passagem de Cabo - ${circuito ? `Circuito ${circuito}` : "Elétrica"}`;
+    }
+
+    const params = new URLSearchParams({
+      lote: res.id,
+      titulo: tituloComum,
+    });
+    if (levantamentoId) {
+      params.set("levantamento", levantamentoId);
+    }
+
+    router.push(`/tarefas/nova-em-lote?${params.toString()}`);
   }
 
   function criarTarefaAPartirDeItem(item: ItemLevantamento) {
@@ -888,7 +913,7 @@ export function VisualizadorLevantamento({
         categoria: "Tubulações e Cabos",
         subtipo: "cabo_circuito",
         nome: `Circuito ${metadadosCaboAtivo.circuito} (${condsTexto})`,
-        cor: "#eab308",
+        cor: metadadosCaboAtivo.cor || "#eab308",
         pontos: pontosEmDesenho,
         altura: altura || 2.8,
         nivelId,
@@ -1373,7 +1398,7 @@ export function VisualizadorLevantamento({
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40 space-y-2">
+                <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
                       <Zap className="h-4 w-4 text-amber-600" />
@@ -1382,15 +1407,21 @@ export function VisualizadorLevantamento({
                     <button
                       type="button"
                       onClick={() => setModalCaboAberto(true)}
-                      className="text-[11px] font-semibold text-amber-700 hover:underline"
+                      className="text-[11px] font-semibold text-amber-700 hover:underline cursor-pointer"
                     >
                       Configurar
                     </button>
                   </div>
-                  <div className="text-[11px] text-amber-800">
-                    <div>
-                      Circuito: <strong>{metadadosCaboAtivo.circuito}</strong> (
-                      {metadadosCaboAtivo.tipoCabo})
+                  <div className="text-[11px] text-amber-800 space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span>
+                        Circuito: <strong>{metadadosCaboAtivo.circuito}</strong> ({metadadosCaboAtivo.tipoCabo})
+                      </span>
+                      <span
+                        className="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0"
+                        style={{ backgroundColor: metadadosCaboAtivo.cor || "#eab308" }}
+                        title="Cor atual do traço do circuito"
+                      />
                     </div>
                     <div className="text-[10px] text-amber-700">
                       {metadadosCaboAtivo.condutores
@@ -1398,6 +1429,52 @@ export function VisualizadorLevantamento({
                         .join(", ")}
                     </div>
                   </div>
+
+                  <div>
+                    <div className="text-[10px] font-semibold text-amber-900 mb-1">
+                      Cor do traço na planta:
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {CORES_CIRCUITO_SUGERIDAS.slice(0, 7).map((c) => (
+                        <button
+                          key={c.cor}
+                          type="button"
+                          onClick={() =>
+                            setMetadadosCaboAtivo((prev) => ({
+                              ...prev,
+                              cor: c.cor,
+                            }))
+                          }
+                          title={c.nome}
+                          className={`w-5 h-5 rounded-full transition-transform hover:scale-110 border ${
+                            (metadadosCaboAtivo.cor || "#eab308").toLowerCase() ===
+                            c.cor.toLowerCase()
+                              ? "ring-2 ring-azul-600 ring-offset-1 border-white scale-110"
+                              : "border-black/20"
+                          }`}
+                          style={{ backgroundColor: c.cor }}
+                        />
+                      ))}
+                      <label
+                        className="w-5 h-5 rounded-full border border-dashed border-amber-600 flex items-center justify-center cursor-pointer hover:bg-amber-100/60"
+                        title="Escolher cor personalizada"
+                      >
+                        <span className="text-[10px] text-amber-800 font-bold">+</span>
+                        <input
+                          type="color"
+                          value={metadadosCaboAtivo.cor || "#eab308"}
+                          onChange={(e) =>
+                            setMetadadosCaboAtivo((prev) => ({
+                              ...prev,
+                              cor: e.target.value,
+                            }))
+                          }
+                          className="sr-only"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
                   <Botao
                     variante={
                       ferramenta === "tubulacao_cabo" ? "primario" : "contorno"
@@ -2106,21 +2183,37 @@ export function VisualizadorLevantamento({
                             : null;
 
                           const ativo = itemSelecionado?.id === item.id;
+                          const isCabo = item.tipo === "tubulacao_cabo";
 
                           return (
                             <g key={item.id}>
+                              {ativo && isCabo && (
+                                <path
+                                  d={d}
+                                  fill="none"
+                                  stroke="#ffffff"
+                                  strokeWidth={3}
+                                  strokeOpacity={0.4}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="pointer-events-none"
+                                />
+                              )}
                               <path
                                 d={d}
                                 fill="none"
                                 stroke={item.cor}
                                 strokeWidth={
-                                  ativo
-                                    ? configMarcador.espessura * 2.2
-                                    : configMarcador.espessura * 1.5
+                                  isCabo
+                                    ? (ativo ? 2.0 : 1.2)
+                                    : (ativo
+                                        ? configMarcador.espessura * 2.2
+                                        : configMarcador.espessura * 1.5)
                                 }
+                                strokeOpacity={isCabo ? (ativo ? 0.95 : 0.65) : 0.85}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
-                                className="cursor-pointer pointer-events-auto hover:opacity-80 transition-all"
+                                className="cursor-pointer pointer-events-auto hover:opacity-100 transition-all"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setItemSelecionado(item);
@@ -2315,8 +2408,13 @@ export function VisualizadorLevantamento({
                             })
                             .join(" ")}
                           fill="none"
-                          stroke="#38bdf8"
-                          strokeWidth="2.5"
+                          stroke={
+                            ferramenta === "tubulacao_cabo"
+                              ? (metadadosCaboAtivo.cor || "#eab308")
+                              : "#38bdf8"
+                          }
+                          strokeWidth={ferramenta === "tubulacao_cabo" ? "1.5" : "2.5"}
+                          strokeOpacity={ferramenta === "tubulacao_cabo" ? 0.75 : 1}
                           strokeDasharray="4 4"
                         />
                       )}
@@ -2451,10 +2549,45 @@ export function VisualizadorLevantamento({
               {itemSelecionado && (
                 <div className="sticky bottom-4 left-1/2 -translate-x-1/2 z-30 mx-auto w-fit max-w-[92%] flex flex-wrap items-center gap-3 px-4 py-2.5 rounded-2xl bg-superficie-900/95 text-white shadow-2xl border border-superficie-700/80 backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className="w-3.5 h-3.5 rounded-full border border-white/40 shrink-0"
-                      style={{ backgroundColor: itemSelecionado.cor }}
-                    />
+                    <label
+                      className="relative flex items-center cursor-pointer group"
+                      title="Clique para alterar a cor deste item"
+                    >
+                      <span
+                        className="w-4 h-4 rounded-full border border-white/60 shadow-xs inline-block group-hover:scale-125 transition-transform"
+                        style={{ backgroundColor: itemSelecionado.cor }}
+                      />
+                      <input
+                        type="color"
+                        value={itemSelecionado.cor}
+                        onChange={(e) => {
+                          const novaCor = e.target.value;
+                          const atualizados = itens.map((it) =>
+                            it.id === itemSelecionado.id
+                              ? {
+                                  ...it,
+                                  cor: novaCor,
+                                  metadadosCabo: it.metadadosCabo
+                                    ? { ...it.metadadosCabo, cor: novaCor }
+                                    : undefined,
+                                }
+                              : it,
+                          );
+                          registrarEstado(atualizados);
+                          setItemSelecionado({
+                            ...itemSelecionado,
+                            cor: novaCor,
+                            metadadosCabo: itemSelecionado.metadadosCabo
+                              ? {
+                                  ...itemSelecionado.metadadosCabo,
+                                  cor: novaCor,
+                                }
+                              : undefined,
+                          });
+                        }}
+                        className="sr-only"
+                      />
+                    </label>
                     <div className="text-xs truncate">
                       <span className="font-bold text-white">
                         {itemSelecionado.nome}
