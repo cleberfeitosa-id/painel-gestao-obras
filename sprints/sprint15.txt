@@ -1,0 +1,8 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Exportação de planta iluminada:
+    - As cores devem ser coerentes com o status atual da tarefa, exatamente igual ao que se observa na planta colorida da página de tarefas.
+
+2. Navegação e seleção de tarefas:
+    - Para o caso de circuitos, areas, distancias lineares e demais geometrias, deve ser possível ao clicar em uma localizacação com tarefas sobrepostas ou muito próximas, escolher também qual se quer abrir, como já é feito com pinos e regiões.
+    

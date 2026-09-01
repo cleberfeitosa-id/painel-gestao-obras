@@ -153,6 +153,10 @@ function obterLinhasCondutoresCircuito(detalhe?: Record<string, unknown> | null)
     cor?: string;
   }>) || [];
 
+  const fases = detalhe?.fases as
+    | Array<{ nome: string; cor: string; quantidade: number }>
+    | undefined;
+
   const corFaseR =
     (detalhe?.corFaseR as string) ||
     (detalhe?.corFase as string) ||
@@ -168,43 +172,59 @@ function obterLinhasCondutoresCircuito(detalhe?: Record<string, unknown> | null)
     strokeContrast?: boolean;
   }[] = [];
 
-  const itemFase = condutores.find((c) => c.tipo === "fase");
+  if (fases && Array.isArray(fases) && fases.length > 0) {
+    for (const f of fases) {
+      const qtd = f.quantidade ?? 1;
+      for (let i = 0; i < qtd; i++) {
+        const cor = f.cor || "#FFFFFF";
+        linhas.push({
+          cor,
+          largura: 2,
+          rotulo: qtd > 1 ? `Fase ${f.nome} (${i + 1})` : `Fase ${f.nome}`,
+          strokeContrast: cor.toUpperCase() === "#FFFFFF",
+        });
+      }
+    }
+  } else {
+    const itemFase = condutores.find((c) => c.tipo === "fase");
+    const qtdFase =
+      itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+
+    if (qtdFase >= 1) {
+      linhas.push({
+        cor: corFaseR,
+        largura: 2,
+        rotulo: "Fase R",
+        strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
+      });
+    }
+    if (qtdFase >= 2) {
+      linhas.push({
+        cor: corFaseS,
+        largura: 2,
+        rotulo: "Fase S",
+        strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
+      });
+    }
+    if (qtdFase >= 3) {
+      linhas.push({
+        cor: corFaseT,
+        largura: 2,
+        rotulo: "Fase T",
+        strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
+      });
+    }
+  }
+
   const itemNeutro = condutores.find((c) => c.tipo === "neutro");
   const itemTerra = condutores.find((c) => c.tipo === "terra");
   const itemRetorno = condutores.find((c) => c.tipo === "retorno");
 
-  const qtdFase =
-    itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
   const qtdNeutro =
     itemNeutro?.quantidade ?? (condutores.length === 0 ? 1 : 0);
   const qtdTerra =
     itemTerra?.quantidade ?? (condutores.length === 0 ? 1 : 0);
   const qtdRetorno = itemRetorno?.quantidade ?? 0;
-
-  if (qtdFase >= 1) {
-    linhas.push({
-      cor: corFaseR,
-      largura: 2,
-      rotulo: "Fase R",
-      strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
-    });
-  }
-  if (qtdFase >= 2) {
-    linhas.push({
-      cor: corFaseS,
-      largura: 2,
-      rotulo: "Fase S",
-      strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
-    });
-  }
-  if (qtdFase >= 3) {
-    linhas.push({
-      cor: corFaseT,
-      largura: 2,
-      rotulo: "Fase T",
-      strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
-    });
-  }
 
   for (let i = 0; i < qtdNeutro; i++) {
     linhas.push({
@@ -613,6 +633,13 @@ export function VisualizadorPlanta({
       if (!el) return;
       el.scrollLeft = panRef.current.sl - (e.clientX - panRef.current.x);
       el.scrollTop = panRef.current.st - (e.clientY - panRef.current.y);
+    } else if (ferramenta === "navegar" && !arrastando) {
+      const tarefasHover = identificarTarefasNoPonto(e.clientX, e.clientY);
+      if (tarefasHover.length > 0) {
+        setDicaTarefa(tarefasHover[0].id);
+      } else if (dicaTarefa) {
+        setDicaTarefa(null);
+      }
     } else if (modoDesenho === "regiao" && regiaoRef.current) {
       const ponto = pontoDoEvento(e);
       if (!ponto) return;
@@ -1499,22 +1526,13 @@ export function VisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute -translate-x-1/2 -translate-y-1/2",
+                            "absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none",
                             tarefaDestaque === tarefa.id &&
                               "rounded-lg border-2 border-dashed border-azul-600 bg-azul-600/30 p-1",
-                            !modoInterativo && "pointer-events-none"
                           )}
                           style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
-                          onPointerDown={(e) => e.stopPropagation()}
                         >
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              aoClicar(e);
-                            }}
-                            onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                            onMouseLeave={aoSairPino}
+                          <div
                             className="rounded-full p-2"
                             aria-label={`Tarefa: ${tarefa.titulo}`}
                           >
@@ -1524,7 +1542,7 @@ export function VisualizadorPlanta({
                                 SITUACAO_TAREFA[sit].pino,
                               )}
                             />
-                          </button>
+                          </div>
                           {dicaTarefa === tarefa.id && (
                             <div className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2">
                               <DicaTarefa tarefa={tarefa} />
@@ -1556,11 +1574,10 @@ export function VisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute cursor-pointer rounded-sm border-2 opacity-[0.45]",
+                            "absolute pointer-events-none rounded-sm border-2 opacity-[0.45]",
                             SITUACAO_TAREFA[sit].regiao,
                             tarefaDestaque === tarefa.id &&
                               "!border-dashed !border-azul-600 bg-azul-500/30",
-                            !modoInterativo && "pointer-events-none"
                           )}
                           style={{
                             left: `${Math.min(canto1.esquerda, canto2.esquerda)}%`,
@@ -1568,13 +1585,6 @@ export function VisualizadorPlanta({
                             width: `${Math.abs(canto2.esquerda - canto1.esquerda)}%`,
                             height: `${Math.abs(canto2.topo - canto1.topo)}%`,
                           }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            aoClicar(e);
-                          }}
-                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                          onMouseLeave={aoSairPino}
                         >
                           {dicaTarefa === tarefa.id && (
                             <div className="pointer-events-none absolute z-30 -translate-y-full pb-2">
@@ -1598,17 +1608,8 @@ export function VisualizadorPlanta({
                         8,
                       );
                       if (corredor.length < 3) return null;
-                      const pontosPct = corredor
-                        .map((p) =>
-                          pdfParaPercentual(
-                            p,
-                            dimensoes.largura,
-                            dimensoes.altura,
-                          ),
-                        )
-                        .map((p) => `${p.esquerda.toFixed(3)}% ${p.topo.toFixed(3)}%`)
-                        .join(",");
-                      const p0 = tarefa.localizacao_detalhe!.pontos![0];
+                      const pontos = tarefa.localizacao_detalhe!.pontos!;
+                      const p0 = pontos[0];
                       const p0Pct = pdfParaPercentual(
                         p0,
                         dimensoes.largura,
@@ -1618,31 +1619,62 @@ export function VisualizadorPlanta({
                         status: tarefa.status,
                         aprovacao: tarefa.aprovacao,
                       });
+                      const emDestaque = tarefaDestaque === tarefa.id;
+                      const corredorSvg = corredor
+                        .map((p) => {
+                          const pct = pdfParaPercentual(
+                            p,
+                            dimensoes.largura,
+                            dimensoes.altura,
+                          );
+                          return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
+                        })
+                        .join(" ");
+                      const polylineSvg = pontos
+                        .map((p) => {
+                          const pct = pdfParaPercentual(
+                            p,
+                            dimensoes.largura,
+                            dimensoes.altura,
+                          );
+                          return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
+                        })
+                        .join(" ");
+
                       return (
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute inset-0 cursor-pointer",
-                            !modoInterativo && "pointer-events-none",
+                            "absolute inset-0 pointer-events-none",
+                            emDestaque && "z-30",
                           )}
-                          style={{
-                            clipPath: `polygon(${pontosPct})`,
-                            backgroundColor: CORES_CORREDOR[sit],
-                            opacity: 0.4,
-                          }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (ferramenta === "navegar") {
-                              setMenuSobreposicao(null);
-                              router.push(`/tarefas/${tarefa.id}`);
-                            } else {
-                              aoClicar(e);
-                            }
-                          }}
-                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                          onMouseLeave={aoSairPino}
                         >
+                          <svg
+                            viewBox="0 0 100 100"
+                            preserveAspectRatio="none"
+                            className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+                          >
+                            <polygon
+                              points={corredorSvg}
+                              fill={CORES_CORREDOR[sit]}
+                              fillOpacity={emDestaque ? 0.75 : 0.4}
+                              stroke={emDestaque ? "#2563EB" : CORES_CORREDOR[sit]}
+                              strokeWidth={emDestaque ? 2.5 : 0.5}
+                              vectorEffect="non-scaling-stroke"
+                            />
+                            {emDestaque && (
+                              <polyline
+                                points={polylineSvg}
+                                fill="none"
+                                stroke="#1D4ED8"
+                                strokeWidth={2.5}
+                                strokeDasharray="5 3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                vectorEffect="non-scaling-stroke"
+                              />
+                            )}
+                          </svg>
                           {dicaTarefa === tarefa.id && (
                             <div
                               className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2"
@@ -1680,6 +1712,7 @@ export function VisualizadorPlanta({
                         status: tarefa.status,
                         aprovacao: tarefa.aprovacao,
                       });
+                      const emDestaque = tarefaDestaque === tarefa.id;
 
                       const p0 = pontos[0];
                       const p0Pct = pdfParaPercentual(
@@ -1692,21 +1725,9 @@ export function VisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute inset-0 cursor-pointer pointer-events-auto",
-                            !modoInterativo && "pointer-events-none",
+                            "absolute inset-0 pointer-events-none",
+                            emDestaque && "z-30",
                           )}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (ferramenta === "navegar") {
-                              setMenuSobreposicao(null);
-                              router.push(`/tarefas/${tarefa.id}`);
-                            } else {
-                              aoClicar(e);
-                            }
-                          }}
-                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                          onMouseLeave={aoSairPino}
                         >
                           <svg
                             viewBox="0 0 100 100"
@@ -1725,9 +1746,9 @@ export function VisualizadorPlanta({
                                 })
                                 .join(" ")}
                               fill={CORES_CORREDOR[sit]}
-                              fillOpacity={0.6}
-                              stroke={CORES_CORREDOR[sit]}
-                              strokeWidth={0.5}
+                              fillOpacity={emDestaque ? 0.8 : 0.6}
+                              stroke={emDestaque ? "#2563EB" : CORES_CORREDOR[sit]}
+                              strokeWidth={emDestaque ? 2.5 : 0.5}
                               vectorEffect="non-scaling-stroke"
                             />
                             {linhas.map((linha, idx) => {
@@ -1751,7 +1772,7 @@ export function VisualizadorPlanta({
                                       d={pathData}
                                       fill="none"
                                       stroke="#0f172a"
-                                      strokeWidth={3}
+                                      strokeWidth={emDestaque ? 4 : 3}
                                       strokeLinecap="round"
                                       strokeLinejoin="round"
                                       opacity={0.7}
@@ -1762,7 +1783,7 @@ export function VisualizadorPlanta({
                                     d={pathData}
                                     fill="none"
                                     stroke={linha.cor}
-                                    strokeWidth={linha.largura}
+                                    strokeWidth={emDestaque ? linha.largura + 0.8 : linha.largura}
                                     strokeDasharray={linha.dash}
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
@@ -1800,6 +1821,7 @@ export function VisualizadorPlanta({
                         status: tarefa.status,
                         aprovacao: tarefa.aprovacao,
                       });
+                      const emDestaque = tarefaDestaque === tarefa.id;
                       const p0 = pontos[0];
                       const p0Pct = pdfParaPercentual(
                         p0,
@@ -1821,21 +1843,9 @@ export function VisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute inset-0 cursor-pointer pointer-events-auto",
-                            !modoInterativo && "pointer-events-none",
+                            "absolute inset-0 pointer-events-none",
+                            emDestaque && "z-30",
                           )}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (ferramenta === "navegar") {
-                              setMenuSobreposicao(null);
-                              router.push(`/tarefas/${tarefa.id}`);
-                            } else {
-                              aoClicar(e);
-                            }
-                          }}
-                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                          onMouseLeave={aoSairPino}
                         >
                           <svg
                             viewBox="0 0 100 100"
@@ -1844,11 +1854,11 @@ export function VisualizadorPlanta({
                           >
                             <polygon
                               points={pontosSvg}
-                              fill={CORES_CORREDOR[sit]}
-                              fillOpacity={0.35}
-                              stroke={CORES_CORREDOR[sit]}
-                              strokeWidth={2}
-                              strokeDasharray="4 2"
+                              fill={emDestaque ? "#3B82F6" : CORES_CORREDOR[sit]}
+                              fillOpacity={emDestaque ? 0.55 : 0.35}
+                              stroke={emDestaque ? "#2563EB" : CORES_CORREDOR[sit]}
+                              strokeWidth={emDestaque ? 3 : 2}
+                              strokeDasharray={emDestaque ? undefined : "4 2"}
                               vectorEffect="non-scaling-stroke"
                             />
                           </svg>
@@ -1888,22 +1898,13 @@ export function VisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute -translate-x-1/2 -translate-y-1/2",
+                            "absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none",
                             tarefaDestaque === tarefa.id &&
                               "rounded-lg border-2 border-dashed border-azul-600 bg-azul-600/30 p-1",
-                            !modoInterativo && "pointer-events-none",
                           )}
                           style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
-                          onPointerDown={(e) => e.stopPropagation()}
                         >
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              aoClicar(e);
-                            }}
-                            onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                            onMouseLeave={aoSairPino}
+                          <div
                             className="flex items-center justify-center rounded-full p-1.5 shadow ring-2 ring-white"
                             aria-label={`Tarefa: ${tarefa.titulo}`}
                           >
@@ -1915,7 +1916,7 @@ export function VisualizadorPlanta({
                             >
                               <ArrowDownUp className="h-3 w-3 text-white" />
                             </span>
-                          </button>
+                          </div>
                           {dicaTarefa === tarefa.id && (
                             <div className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2">
                               <DicaTarefa tarefa={tarefa} />

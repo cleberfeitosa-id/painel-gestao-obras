@@ -343,10 +343,11 @@ export function VisualizadorLevantamento({
     cor: "#eab308",
     tipoCabo: "Cabo Flexível 750V 2.5mm²",
     tipoCondutor: "Cobre",
+    fases: [{ nome: "R", cor: "#FFFFFF", quantidade: 1 }],
     condutores: [
       { tipo: "fase", quantidade: 1 },
-      { tipo: "neutro", quantidade: 1 },
-      { tipo: "terra", quantidade: 1 },
+      { tipo: "neutro", quantidade: 1, cor: "#2563EB" },
+      { tipo: "terra", quantidade: 1, cor: "#16A34A" },
     ],
   });
 
@@ -485,6 +486,7 @@ export function VisualizadorLevantamento({
       detalhe.circuito = item.metadadosCabo?.circuito;
       detalhe.comprimento = item.comprimentoReal;
       detalhe.condutores = item.metadadosCabo?.condutores;
+      detalhe.fases = item.metadadosCabo?.fases;
       detalhe.tipoCabo = item.metadadosCabo?.tipoCabo;
       detalhe.tipoCondutor = item.metadadosCabo?.tipoCondutor;
       detalhe.cor = item.cor || item.metadadosCabo?.cor;
@@ -493,7 +495,20 @@ export function VisualizadorLevantamento({
       detalhe.corFaseT = item.metadadosCabo?.corFaseT;
       detalhe.corFase = item.metadadosCabo?.corFase;
       tituloSugerido = `Passagem de Cabo - Circuito ${item.metadadosCabo?.circuito ?? ""}`;
-      descSugerida += `Trecho de Circuito ${item.metadadosCabo?.circuito ?? ""}: ${item.comprimentoReal ? `${item.comprimentoReal.toFixed(2)}m` : ""}.\nTipo de cabo: ${item.metadadosCabo?.tipoCabo ?? ""}.\nCondutores: ${item.metadadosCabo?.condutores?.map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`).join(", ") ?? ""}.`;
+      const condutoresDescricao =
+        item.metadadosCabo?.fases && item.metadadosCabo.fases.length > 0
+          ? [
+              ...item.metadadosCabo.fases.map(
+                (f) => `${f.quantidade}x Fase ${f.nome}`,
+              ),
+              ...(item.metadadosCabo.condutores ?? [])
+                .filter((c) => c.tipo !== "fase")
+                .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`),
+            ].join(", ")
+          : item.metadadosCabo?.condutores
+              ?.map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`)
+              .join(", ") ?? "";
+      descSugerida += `Trecho de Circuito ${item.metadadosCabo?.circuito ?? ""}: ${item.comprimentoReal ? `${item.comprimentoReal.toFixed(2)}m` : ""}.\nTipo de cabo: ${item.metadadosCabo?.tipoCabo ?? ""}.\nCondutores: ${condutoresDescricao}.`;
     } else if (item.tipo === "area") {
       detalhe.area = item.areaReal;
       detalhe.perimetro = item.perimetroReal;
@@ -902,9 +917,19 @@ export function VisualizadorLevantamento({
     let novoItem: ItemLevantamento | null = null;
 
     if (ferramenta === "tubulacao_cabo") {
-      const condsTexto = metadadosCaboAtivo.condutores
-        .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`)
-        .join("+");
+      const condsTexto =
+        metadadosCaboAtivo.fases && metadadosCaboAtivo.fases.length > 0
+          ? [
+              ...metadadosCaboAtivo.fases.map(
+                (f) => `${f.quantidade > 1 ? `${f.quantidade}x` : ""}${f.nome}`,
+              ),
+              ...metadadosCaboAtivo.condutores
+                .filter((c) => c.tipo !== "fase")
+                .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`),
+            ].join("+")
+          : metadadosCaboAtivo.condutores
+              .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`)
+              .join("+");
       const { altura, nivelId } = obterAlturaENivelElemento(elementoAtivo);
       novoItem = {
         id: `cabo_${Date.now()}`,
@@ -1424,9 +1449,25 @@ export function VisualizadorLevantamento({
                       />
                     </div>
                     <div className="text-[10px] text-amber-700">
-                      {metadadosCaboAtivo.condutores
-                        .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`)
-                        .join(", ")}
+                      {metadadosCaboAtivo.fases &&
+                      metadadosCaboAtivo.fases.length > 0
+                        ? [
+                            ...metadadosCaboAtivo.fases.map(
+                              (f) => `${f.quantidade}x Fase ${f.nome}`,
+                            ),
+                            ...metadadosCaboAtivo.condutores
+                              .filter((c) => c.tipo !== "fase")
+                              .map(
+                                (c) =>
+                                  `${c.quantidade}x ${rotuloCondutor(c.tipo)}`,
+                              ),
+                          ].join(", ")
+                        : metadadosCaboAtivo.condutores
+                            .map(
+                              (c) =>
+                                `${c.quantidade}x ${rotuloCondutor(c.tipo)}`,
+                            )
+                            .join(", ")}
                     </div>
                   </div>
 

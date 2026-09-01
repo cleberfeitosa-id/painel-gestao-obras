@@ -9,6 +9,12 @@ import type {
   TipoLocalizacao,
 } from "@/lib/supabase/database.types";
 
+export type FaseDetalheLocalizacao = {
+  nome: string;
+  cor: string;
+  quantidade: number;
+};
+
 export type DetalheLocalizacaoLevantamento = {
   elemento?: string;
   subtipo?: string;
@@ -22,7 +28,9 @@ export type DetalheLocalizacaoLevantamento = {
   circuito?: string;
   tipoCabo?: string;
   tipoCondutor?: string;
-  condutores?: { tipo: string; quantidade: number; cor?: string }[];
+  condutores?: { tipo: string; quantidade: number; cor?: string; fase?: string }[];
+  fases?: FaseDetalheLocalizacao[];
+  cor?: string;
   corFase?: string;
   corFaseR?: string;
   corFaseS?: string;

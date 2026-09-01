@@ -1,0 +1,5 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Gestão de fases no formulário de gestão de cabos e circuitos na tela de levantamentos:
+    - Que seja possível escolher não só a cor associada a cada fase, mas também qual fase é. No caso de uma unica fase, ela não necessáriamente será R, pode ser T ou pode até que sejam dois condutores por fase.
+    

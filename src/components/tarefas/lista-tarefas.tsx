@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { BotaoExcluirTarefa } from "./botao-excluir-tarefa";
 import { BotaoDuplicarTarefa } from "./botao-duplicar-tarefa";
 import { BotaoEdicaoEmLote } from "./botao-edicao-em-lote";
+import { BotaoExcluirEmLote } from "./botao-excluir-em-lote";
 import type { TarefaComDados } from "@/app/(protegido)/tarefas/page";
 import type { PerfilRow, ExecutorRow } from "@/lib/supabase/database.types";
 
@@ -382,6 +383,12 @@ export function ListaTarefas({
               catalogoPrecos={catalogoPrecos}
               aoConcluir={limparSelecao}
             />
+            {podeExcluir && (
+              <BotaoExcluirEmLote
+                tarefasSelecionadas={Array.from(selecionadas)}
+                aoConcluir={limparSelecao}
+              />
+            )}
           </div>
         </div>
       )}

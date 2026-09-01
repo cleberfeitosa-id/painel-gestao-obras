@@ -82,6 +82,10 @@ function obterLinhasCondutoresCircuito(detalhe?: Record<string, unknown> | null)
     cor?: string;
   }>) || [];
 
+  const fases = detalhe?.fases as
+    | Array<{ nome: string; cor: string; quantidade: number }>
+    | undefined;
+
   const corFaseR =
     (detalhe?.corFaseR as string) ||
     (detalhe?.corFase as string) ||
@@ -97,43 +101,59 @@ function obterLinhasCondutoresCircuito(detalhe?: Record<string, unknown> | null)
     strokeContrast?: boolean;
   }[] = [];
 
-  const itemFase = condutores.find((c) => c.tipo === "fase");
+  if (fases && Array.isArray(fases) && fases.length > 0) {
+    for (const f of fases) {
+      const qtd = f.quantidade ?? 1;
+      for (let i = 0; i < qtd; i++) {
+        const cor = f.cor || "#FFFFFF";
+        linhas.push({
+          cor,
+          largura: 2,
+          rotulo: qtd > 1 ? `Fase ${f.nome} (${i + 1})` : `Fase ${f.nome}`,
+          strokeContrast: cor.toUpperCase() === "#FFFFFF",
+        });
+      }
+    }
+  } else {
+    const itemFase = condutores.find((c) => c.tipo === "fase");
+    const qtdFase =
+      itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+
+    if (qtdFase >= 1) {
+      linhas.push({
+        cor: corFaseR,
+        largura: 2,
+        rotulo: "Fase R",
+        strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
+      });
+    }
+    if (qtdFase >= 2) {
+      linhas.push({
+        cor: corFaseS,
+        largura: 2,
+        rotulo: "Fase S",
+        strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
+      });
+    }
+    if (qtdFase >= 3) {
+      linhas.push({
+        cor: corFaseT,
+        largura: 2,
+        rotulo: "Fase T",
+        strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
+      });
+    }
+  }
+
   const itemNeutro = condutores.find((c) => c.tipo === "neutro");
   const itemTerra = condutores.find((c) => c.tipo === "terra");
   const itemRetorno = condutores.find((c) => c.tipo === "retorno");
 
-  const qtdFase =
-    itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
   const qtdNeutro =
     itemNeutro?.quantidade ?? (condutores.length === 0 ? 1 : 0);
   const qtdTerra =
     itemTerra?.quantidade ?? (condutores.length === 0 ? 1 : 0);
   const qtdRetorno = itemRetorno?.quantidade ?? 0;
-
-  if (qtdFase >= 1) {
-    linhas.push({
-      cor: corFaseR,
-      largura: 2,
-      rotulo: "Fase R",
-      strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
-    });
-  }
-  if (qtdFase >= 2) {
-    linhas.push({
-      cor: corFaseS,
-      largura: 2,
-      rotulo: "Fase S",
-      strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
-    });
-  }
-  if (qtdFase >= 3) {
-    linhas.push({
-      cor: corFaseT,
-      largura: 2,
-      rotulo: "Fase T",
-      strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
-    });
-  }
 
   for (let i = 0; i < qtdNeutro; i++) {
     linhas.push({
@@ -602,6 +622,8 @@ export function MiniVisualizadorPlanta({
 
     const el = containerRef.current;
     if (!el) return;
+    setMenuSobreposicao(null);
+    setDicaTarefa(null);
     panRef.current = {
       x: e.clientX,
       y: e.clientY,
@@ -675,6 +697,13 @@ export function MiniVisualizadorPlanta({
       if (!el) return;
       el.scrollLeft = panRef.current.sl - dx;
       el.scrollTop = panRef.current.st - dy;
+    } else if (!modoEdicao && !arrastando) {
+      const tarefasHover = identificarTarefasNoPonto(e.clientX, e.clientY);
+      if (tarefasHover.length > 0) {
+        setDicaTarefa(tarefasHover[0].id);
+      } else if (dicaTarefa) {
+        setDicaTarefa(null);
+      }
     }
   }
 
@@ -1082,40 +1111,29 @@ export function MiniVisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute -translate-x-1/2 -translate-y-1/2 transition-transform",
+                            "absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-transform",
                             eAtual ? "z-30 scale-110" : "z-20",
                             modoEdicao && "opacity-40",
                             tarefaDestaque === tarefa.id &&
                               "rounded-full ring-4 ring-azul-400/80 scale-125 z-40",
                           )}
                           style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
-                          onPointerDown={(e) => !modoEdicao && e.stopPropagation()}
                         >
                           {eAtual && !modoEdicao && (
                             <span className="absolute -inset-2 rounded-full bg-azul-500/30 animate-ping pointer-events-none" />
                           )}
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              if (!modoEdicao) {
-                                e.stopPropagation();
-                                aoClicar(e);
-                              }
-                            }}
-                            onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                            onMouseLeave={aoSairPino}
+                          <div
                             className={cn(
-                              "group relative flex items-center justify-center rounded-full p-2 focus:outline-none",
+                              "group relative flex items-center justify-center rounded-full p-2",
                             )}
-                            aria-label={`Tarefa: ${tarefa.titulo}`}
                           >
                             <span
                               className={cn(
                                 "block rounded-full shadow-md ring-2",
                                 eAtual
                                   ? "h-5 w-5 ring-white bg-azul-600 ring-offset-2 ring-offset-azul-600 shadow-lg"
-                                  : cn("h-4 w-4 opacity-80 ring-white hover:opacity-100", SITUACAO_TAREFA[sit].pino),
+                                  : cn("h-4 w-4 opacity-85 ring-white", SITUACAO_TAREFA[sit].pino),
                               )}
                             />
 
@@ -1124,7 +1142,7 @@ export function MiniVisualizadorPlanta({
                                 Atual
                               </span>
                             )}
-                          </button>
+                          </div>
 
                           {dicaTarefa === tarefa.id && !modoEdicao && (
                             <div className="pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-full pb-2">
@@ -1168,11 +1186,11 @@ export function MiniVisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute cursor-pointer rounded-sm border-2 transition-colors",
+                            "absolute pointer-events-none rounded-sm border-2 transition-colors",
                             eAtual
                               ? "z-30 border-azul-600 bg-azul-500/30 ring-2 ring-azul-400 shadow-md"
-                              : cn("z-20 opacity-70 hover:opacity-100", SITUACAO_TAREFA[sit].regiao),
-                            modoEdicao && "opacity-40 pointer-events-none",
+                              : cn("z-20 opacity-70", SITUACAO_TAREFA[sit].regiao),
+                            modoEdicao && "opacity-40",
                             tarefaDestaque === tarefa.id &&
                               "!border-dashed !border-azul-600 bg-azul-500/40 ring-4 ring-azul-300",
                           )}
@@ -1182,15 +1200,6 @@ export function MiniVisualizadorPlanta({
                             width: `${Math.abs(canto2.esquerda - canto1.esquerda)}%`,
                             height: `${Math.abs(canto2.topo - canto1.topo)}%`,
                           }}
-                          onPointerDown={(e) => !modoEdicao && e.stopPropagation()}
-                          onClick={(e) => {
-                            if (!modoEdicao) {
-                              e.stopPropagation();
-                              aoClicar(e);
-                            }
-                          }}
-                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                          onMouseLeave={aoSairPino}
                         >
                           {eAtual && !modoEdicao && (
                             <span className="absolute -top-3 left-1 rounded bg-azul-600 px-1 py-0.5 text-[8px] font-bold text-white shadow-xs">
@@ -1216,24 +1225,22 @@ export function MiniVisualizadorPlanta({
                         (!modoEdicao || t.id !== tarefaAtualId),
                     )
                     .map((tarefa) => {
+                      const pontos = tarefa.localizacao_detalhe!.pontos!;
                       const corredor = corredorDaPolilinha(
-                        tarefa.localizacao_detalhe!.pontos!,
+                        pontos,
                         8,
                       );
                       if (corredor.length < 3) return null;
-                      const pontosPct = corredor
-                        .map((p) =>
-                          pdfParaPercentual(
-                            p,
-                            dimensoes.largura,
-                            dimensoes.altura,
-                          ),
-                        )
-                        .map((p) => `${p.esquerda.toFixed(3)}% ${p.topo.toFixed(3)}%`)
-                        .join(",");
-                      const p0 = tarefa.localizacao_detalhe!.pontos![0];
+                      const p0 = pontos[0];
                       const p0Pct = pdfParaPercentual(
                         p0,
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
+                      const sumX = pontos.reduce((acc, p) => acc + p.x, 0);
+                      const sumY = pontos.reduce((acc, p) => acc + p.y, 0);
+                      const centroPct = pdfParaPercentual(
+                        { x: sumX / pontos.length, y: sumY / pontos.length },
                         dimensoes.largura,
                         dimensoes.altura,
                       );
@@ -1243,29 +1250,79 @@ export function MiniVisualizadorPlanta({
                         aprovacao: tarefa.aprovacao,
                       });
 
+                      const corredorSvg = corredor
+                        .map((p) => {
+                          const pct = pdfParaPercentual(
+                            p,
+                            dimensoes.largura,
+                            dimensoes.altura,
+                          );
+                          return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
+                        })
+                        .join(" ");
+
+                      const polylineSvg = pontos
+                        .map((p) => {
+                          const pct = pdfParaPercentual(
+                            p,
+                            dimensoes.largura,
+                            dimensoes.altura,
+                          );
+                          return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
+                        })
+                        .join(" ");
+
                       return (
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute inset-0 cursor-pointer transition-opacity",
-                            eAtual ? "z-30 opacity-90 ring-2 ring-azul-400" : "z-20 opacity-50 hover:opacity-90",
-                            modoEdicao && "opacity-40 pointer-events-none",
+                            "absolute inset-0 pointer-events-none",
+                            eAtual ? "z-30" : "z-20",
+                            modoEdicao && "opacity-40",
                           )}
-                          style={{
-                            clipPath: `polygon(${pontosPct})`,
-                            backgroundColor: CORES_CORREDOR[sit],
-                          }}
-                          onPointerDown={(e) => !modoEdicao && e.stopPropagation()}
-                          onClick={(e) => {
-                            if (!modoEdicao) {
-                              e.stopPropagation();
-                              setTarefaSelecionada(tarefa);
-                              setMenuSobreposicao(null);
-                            }
-                          }}
-                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                          onMouseLeave={aoSairPino}
                         >
+                          <svg
+                            viewBox="0 0 100 100"
+                            preserveAspectRatio="none"
+                            className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+                          >
+                            <polygon
+                              points={corredorSvg}
+                              fill={CORES_CORREDOR[sit]}
+                              fillOpacity={eAtual ? 0.75 : 0.45}
+                              stroke={eAtual ? "#2563EB" : CORES_CORREDOR[sit]}
+                              strokeWidth={eAtual ? 2.5 : 0.5}
+                              vectorEffect="non-scaling-stroke"
+                            />
+                            {eAtual && (
+                              <polyline
+                                points={polylineSvg}
+                                fill="none"
+                                stroke="#1D4ED8"
+                                strokeWidth={2.5}
+                                strokeDasharray="5 3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                vectorEffect="non-scaling-stroke"
+                              />
+                            )}
+                          </svg>
+
+                          {eAtual && !modoEdicao && (
+                            <div
+                              className="pointer-events-none absolute z-35 -translate-x-1/2 -translate-y-1/2"
+                              style={{
+                                left: `${centroPct.esquerda}%`,
+                                top: `${centroPct.topo}%`,
+                              }}
+                            >
+                              <span className="inline-flex items-center gap-1 rounded bg-azul-600 px-1.5 py-0.5 text-[8px] font-bold text-white shadow-md ring-1 ring-white">
+                                <MapPin className="h-2.5 w-2.5" />
+                                Tarefa atual
+                              </span>
+                            </div>
+                          )}
+
                           {dicaTarefa === tarefa.id && !modoEdicao && (
                             <div
                               className="pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-full pb-2"
@@ -1312,25 +1369,22 @@ export function MiniVisualizadorPlanta({
                         dimensoes.largura,
                         dimensoes.altura,
                       );
+                      const sumX = pontos.reduce((acc, p) => acc + p.x, 0);
+                      const sumY = pontos.reduce((acc, p) => acc + p.y, 0);
+                      const centroPct = pdfParaPercentual(
+                        { x: sumX / pontos.length, y: sumY / pontos.length },
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
 
                       return (
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute inset-0 cursor-pointer pointer-events-auto",
-                            eAtual ? "z-30 ring-2 ring-azul-400" : "z-20",
-                            modoEdicao && "opacity-40 pointer-events-none",
+                            "absolute inset-0 pointer-events-none",
+                            eAtual ? "z-30" : "z-20",
+                            modoEdicao && "opacity-40",
                           )}
-                          onPointerDown={(e) => !modoEdicao && e.stopPropagation()}
-                          onClick={(e) => {
-                            if (!modoEdicao) {
-                              e.stopPropagation();
-                              setTarefaSelecionada(tarefa);
-                              setMenuSobreposicao(null);
-                            }
-                          }}
-                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                          onMouseLeave={aoSairPino}
                         >
                           <svg
                             viewBox="0 0 100 100"
@@ -1349,9 +1403,9 @@ export function MiniVisualizadorPlanta({
                                 })
                                 .join(" ")}
                               fill={CORES_CORREDOR[sit]}
-                              fillOpacity={eAtual ? 0.75 : 0.55}
-                              stroke={CORES_CORREDOR[sit]}
-                              strokeWidth={0.5}
+                              fillOpacity={eAtual ? 0.8 : 0.55}
+                              stroke={eAtual ? "#2563EB" : CORES_CORREDOR[sit]}
+                              strokeWidth={eAtual ? 2.5 : 0.5}
                               vectorEffect="non-scaling-stroke"
                             />
                             {linhas.map((linha, idx) => {
@@ -1375,7 +1429,7 @@ export function MiniVisualizadorPlanta({
                                       d={pathData}
                                       fill="none"
                                       stroke="#0f172a"
-                                      strokeWidth={3}
+                                      strokeWidth={eAtual ? 4 : 3}
                                       strokeLinecap="round"
                                       strokeLinejoin="round"
                                       opacity={0.7}
@@ -1386,7 +1440,7 @@ export function MiniVisualizadorPlanta({
                                     d={pathData}
                                     fill="none"
                                     stroke={linha.cor}
-                                    strokeWidth={linha.largura}
+                                    strokeWidth={eAtual ? linha.largura + 0.8 : linha.largura}
                                     strokeDasharray={linha.dash}
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
@@ -1396,6 +1450,22 @@ export function MiniVisualizadorPlanta({
                               );
                             })}
                           </svg>
+
+                          {eAtual && !modoEdicao && (
+                            <div
+                              className="pointer-events-none absolute z-35 -translate-x-1/2 -translate-y-1/2"
+                              style={{
+                                left: `${centroPct.esquerda}%`,
+                                top: `${centroPct.topo}%`,
+                              }}
+                            >
+                              <span className="inline-flex items-center gap-1 rounded bg-azul-600 px-1.5 py-0.5 text-[8px] font-bold text-white shadow-md ring-1 ring-white">
+                                <MapPin className="h-2.5 w-2.5" />
+                                Tarefa atual
+                              </span>
+                            </div>
+                          )}
+
                           {dicaTarefa === tarefa.id && !modoEdicao && (
                             <div
                               className="pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-full pb-2"
@@ -1432,6 +1502,13 @@ export function MiniVisualizadorPlanta({
                         dimensoes.largura,
                         dimensoes.altura,
                       );
+                      const sumX = pontos.reduce((acc, p) => acc + p.x, 0);
+                      const sumY = pontos.reduce((acc, p) => acc + p.y, 0);
+                      const centroPct = pdfParaPercentual(
+                        { x: sumX / pontos.length, y: sumY / pontos.length },
+                        dimensoes.largura,
+                        dimensoes.altura,
+                      );
                       const pontosSvg = pontos
                         .map((p) => {
                           const pct = pdfParaPercentual(
@@ -1447,20 +1524,10 @@ export function MiniVisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute inset-0 cursor-pointer pointer-events-auto",
-                            eAtual ? "z-30 ring-2 ring-azul-400" : "z-20",
-                            modoEdicao && "opacity-40 pointer-events-none",
+                            "absolute inset-0 pointer-events-none",
+                            eAtual ? "z-30" : "z-20",
+                            modoEdicao && "opacity-40",
                           )}
-                          onPointerDown={(e) => !modoEdicao && e.stopPropagation()}
-                          onClick={(e) => {
-                            if (!modoEdicao) {
-                              e.stopPropagation();
-                              setTarefaSelecionada(tarefa);
-                              setMenuSobreposicao(null);
-                            }
-                          }}
-                          onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                          onMouseLeave={aoSairPino}
                         >
                           <svg
                             viewBox="0 0 100 100"
@@ -1469,14 +1536,30 @@ export function MiniVisualizadorPlanta({
                           >
                             <polygon
                               points={pontosSvg}
-                              fill={CORES_CORREDOR[sit]}
+                              fill={eAtual ? "#3B82F6" : CORES_CORREDOR[sit]}
                               fillOpacity={eAtual ? 0.5 : 0.35}
-                              stroke={CORES_CORREDOR[sit]}
-                              strokeWidth={2}
-                              strokeDasharray="4 2"
+                              stroke={eAtual ? "#2563EB" : CORES_CORREDOR[sit]}
+                              strokeWidth={eAtual ? 3 : 2}
+                              strokeDasharray={eAtual ? undefined : "4 2"}
                               vectorEffect="non-scaling-stroke"
                             />
                           </svg>
+
+                          {eAtual && !modoEdicao && (
+                            <div
+                              className="pointer-events-none absolute z-35 -translate-x-1/2 -translate-y-1/2"
+                              style={{
+                                left: `${centroPct.esquerda}%`,
+                                top: `${centroPct.topo}%`,
+                              }}
+                            >
+                              <span className="inline-flex items-center gap-1 rounded bg-azul-600 px-1.5 py-0.5 text-[8px] font-bold text-white shadow-md ring-1 ring-white">
+                                <MapPin className="h-2.5 w-2.5" />
+                                Tarefa atual
+                              </span>
+                            </div>
+                          )}
+
                           {dicaTarefa === tarefa.id && !modoEdicao && (
                             <div
                               className="pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-full pb-2"
@@ -1516,41 +1599,30 @@ export function MiniVisualizadorPlanta({
                         <div
                           key={tarefa.id}
                           className={cn(
-                            "absolute -translate-x-1/2 -translate-y-1/2 transition-transform",
+                            "absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-transform",
                             eAtual ? "z-30 scale-110" : "z-20",
                             modoEdicao && "opacity-40",
                             tarefaDestaque === tarefa.id &&
                               "rounded-full ring-4 ring-azul-400/80 scale-125 z-40",
                           )}
                           style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
-                          onPointerDown={(e) => !modoEdicao && e.stopPropagation()}
                         >
                           {eAtual && !modoEdicao && (
                             <span className="absolute -inset-2 rounded-full bg-azul-500/30 animate-ping pointer-events-none" />
                           )}
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              if (!modoEdicao) {
-                                e.stopPropagation();
-                                aoClicar(e);
-                              }
-                            }}
-                            onMouseEnter={() => aoEntrarPino(tarefa.id)}
-                            onMouseLeave={aoSairPino}
+                          <div
                             className={cn(
-                              "group relative flex items-center justify-center rounded-full p-1.5 focus:outline-none shadow-md ring-2 ring-white",
+                              "group relative flex items-center justify-center rounded-full p-1.5 shadow-md ring-2 ring-white",
                               eAtual && "ring-offset-2 ring-offset-azul-600 shadow-lg",
                             )}
-                            aria-label={`Tarefa: ${tarefa.titulo}`}
                           >
                             <span
                               className={cn(
                                 "flex items-center justify-center rounded-full",
                                 eAtual
                                   ? "h-5 w-5 bg-azul-600"
-                                  : cn("h-4 w-4 opacity-80 hover:opacity-100", SITUACAO_TAREFA[sit].pino),
+                                  : cn("h-4 w-4 opacity-85", SITUACAO_TAREFA[sit].pino),
                               )}
                             >
                               <ArrowDownUp className="h-3 w-3 text-white" />
@@ -1561,7 +1633,7 @@ export function MiniVisualizadorPlanta({
                                 Atual
                               </span>
                             )}
-                          </button>
+                          </div>
 
                           {dicaTarefa === tarefa.id && !modoEdicao && (
                             <div className="pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-full pb-2">

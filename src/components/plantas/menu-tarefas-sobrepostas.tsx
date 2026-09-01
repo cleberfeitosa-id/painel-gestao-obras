@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { MapPin, Square, X, Calendar, User } from "lucide-react";
+import {
+  MapPin,
+  Square,
+  X,
+  Calendar,
+  User,
+  Zap,
+  Ruler,
+  Boxes,
+  ArrowDownUp,
+} from "lucide-react";
 import { Etiqueta } from "@/components/ui";
 import {
   PRIORIDADE_TAREFA,
@@ -104,7 +114,7 @@ export function MenuTarefasSobrepostas({
               tarefa.prazo,
               tarefa.status === "concluido",
             );
-            const isPonto = tarefa.localizacao_tipo === "ponto";
+            const tipo = tarefa.localizacao_tipo;
 
             return (
               <button
@@ -117,17 +127,47 @@ export function MenuTarefasSobrepostas({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    {isPonto ? (
+                    {tipo === "circuito" ? (
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white shadow-xs",
+                          opcaoSituacao.pino,
+                        )}
+                        title="Circuito na planta"
+                      >
+                        <Zap className="h-3 w-3" />
+                      </span>
+                    ) : tipo === "distancia" ? (
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white shadow-xs",
+                          opcaoSituacao.pino,
+                        )}
+                        title="Distância linear na planta"
+                      >
+                        <Ruler className="h-3 w-3" />
+                      </span>
+                    ) : tipo === "area" ? (
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white shadow-xs",
+                          opcaoSituacao.pino,
+                        )}
+                        title="Área na planta"
+                      >
+                        <Boxes className="h-3 w-3" />
+                      </span>
+                    ) : tipo === "descida" ? (
                       <span
                         className={cn(
                           "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white shadow-xs",
                           opcaoSituacao.pino,
                         )}
-                        title="Pino na planta"
+                        title="Descida vertical na planta"
                       >
-                        <MapPin className="h-3 w-3" />
+                        <ArrowDownUp className="h-3 w-3" />
                       </span>
-                    ) : (
+                    ) : tipo === "regiao" ? (
                       <span
                         className={cn(
                           "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-white shadow-xs",
@@ -136,6 +176,16 @@ export function MenuTarefasSobrepostas({
                         title="Região na planta"
                       >
                         <Square className="h-3 w-3" />
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white shadow-xs",
+                          opcaoSituacao.pino,
+                        )}
+                        title="Pino na planta"
+                      >
+                        <MapPin className="h-3 w-3" />
                       </span>
                     )}
                     <span className="truncate text-xs font-semibold text-superficie-900 group-hover:text-azul-700">

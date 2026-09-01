@@ -35,11 +35,18 @@ export interface CategoriaPredefinicao {
 
 export type FuncaoCondutor = "fase" | "neutro" | "terra" | "retorno";
 
+export interface FaseCabo {
+  nome: string;
+  cor: string;
+  quantidade: number;
+}
+
 export interface CondutorCabo {
   tipo: FuncaoCondutor;
   quantidade: number;
   secaoMm2?: string;
   cor?: string;
+  fase?: string;
 }
 
 export const CORES_PADRAO_CONDUTOR = {
@@ -56,6 +63,7 @@ export interface MetadadosCabo {
   tipoCabo: string;
   tipoCondutor: string;
   condutores: CondutorCabo[];
+  fases?: FaseCabo[];
   observacao?: string;
   cor?: string;
   corFase?: string;

@@ -1390,6 +1390,45 @@ export async function excluirTarefa(tarefaId: string): Promise<Resultado> {
   return {};
 }
 
+export async function excluirTarefasEmLote(ids: string[]): Promise<Resultado> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  const papel = await papelDoUsuario(user.id);
+  if (!eGestor(papel)) {
+    return { erro: "Voce nao tem permissao para excluir tarefas." };
+  }
+
+  if (!ids || ids.length === 0) {
+    return { erro: "Nenhuma tarefa selecionada." };
+  }
+
+  const supabase = await createClient();
+  const { data: anexos } = await supabase
+    .from("tarefa_anexos")
+    .select("caminho")
+    .in("tarefa_id", ids);
+
+  for (const anexo of anexos ?? []) {
+    try {
+      await removerArquivo(BUCKET_ANEXOS, anexo.caminho);
+    } catch (erro) {
+      console.error("[tarefas] falha ao remover arquivo do storage:", erro);
+    }
+  }
+
+  const { error } = await supabase.from("tarefas").delete().in("id", ids);
+  if (error) {
+    console.error("[tarefas] erro ao excluir tarefas em lote:", error);
+    return { erro: "Nao foi possivel excluir as tarefas selecionadas. Tente novamente." };
+  }
+
+  revalidatePath("/tarefas");
+  revalidatePath("/painel");
+  revalidatePath("/calendario");
+  return {};
+}
+
 const esquemaComentario = z.object({
   texto: z.string().trim().min(1, "Escreva um comentario.").max(2000),
 });

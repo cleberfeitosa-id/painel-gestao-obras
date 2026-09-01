@@ -737,10 +737,10 @@ export async function exportarPlantaIluminadaPdf(
           tipo: string;
           quantidade: number;
         }>) || [];
-      const itemFase = condutores.find((c) => c.tipo === "fase");
-      const itemNeutro = condutores.find((c) => c.tipo === "neutro");
-      const itemTerra = condutores.find((c) => c.tipo === "terra");
-      const itemRetorno = condutores.find((c) => c.tipo === "retorno");
+
+      const fases = t.localizacao_detalhe.fases as
+        | Array<{ nome: string; cor: string; quantidade: number }>
+        | undefined;
 
       const corFaseR =
         (t.localizacao_detalhe.corFaseR as string) ||
@@ -756,29 +756,48 @@ export async function exportarPlantaIluminadaPdf(
         dash?: number[];
         strokeContrast?: boolean;
       }[] = [];
-      const qtdFase =
-        itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+
+      if (fases && Array.isArray(fases) && fases.length > 0) {
+        for (const f of fases) {
+          const qtd = f.quantidade ?? 1;
+          const cor = f.cor || "#FFFFFF";
+          for (let i = 0; i < qtd; i++) {
+            linhas.push({
+              cor,
+              strokeContrast: cor.toUpperCase() === "#FFFFFF",
+            });
+          }
+        }
+      } else {
+        const itemFase = condutores.find((c) => c.tipo === "fase");
+        const qtdFase =
+          itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+
+        if (qtdFase >= 1)
+          linhas.push({
+            cor: corFaseR,
+            strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
+          });
+        if (qtdFase >= 2)
+          linhas.push({
+            cor: corFaseS,
+            strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
+          });
+        if (qtdFase >= 3)
+          linhas.push({
+            cor: corFaseT,
+            strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
+          });
+      }
+
+      const itemNeutro = condutores.find((c) => c.tipo === "neutro");
+      const itemTerra = condutores.find((c) => c.tipo === "terra");
+      const itemRetorno = condutores.find((c) => c.tipo === "retorno");
       const qtdNeutro =
         itemNeutro?.quantidade ?? (condutores.length === 0 ? 1 : 0);
       const qtdTerra =
         itemTerra?.quantidade ?? (condutores.length === 0 ? 1 : 0);
       const qtdRetorno = itemRetorno?.quantidade ?? 0;
-
-      if (qtdFase >= 1)
-        linhas.push({
-          cor: corFaseR,
-          strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
-        });
-      if (qtdFase >= 2)
-        linhas.push({
-          cor: corFaseS,
-          strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
-        });
-      if (qtdFase >= 3)
-        linhas.push({
-          cor: corFaseT,
-          strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
-        });
       for (let i = 0; i < qtdNeutro; i++)
         linhas.push({ cor: "#2563EB", dash: [10, 5] });
       for (let i = 0; i < qtdTerra; i++)

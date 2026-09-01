@@ -222,9 +222,19 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
   for (const item of dados.itens) {
     let detalhe = "";
     if (item.metadadosCabo) {
-      const conds = item.metadadosCabo.condutores
-        .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`)
-        .join(", ");
+      const conds =
+        item.metadadosCabo.fases && item.metadadosCabo.fases.length > 0
+          ? [
+              ...item.metadadosCabo.fases.map(
+                (f) => `${f.quantidade}x Fase ${f.nome}`,
+              ),
+              ...item.metadadosCabo.condutores
+                .filter((c) => c.tipo !== "fase")
+                .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`),
+            ].join(", ")
+          : item.metadadosCabo.condutores
+              .map((c) => `${c.quantidade}x ${rotuloCondutor(c.tipo)}`)
+              .join(", ");
       detalhe = `Circuito: ${item.metadadosCabo.circuito} | Cabo: ${item.metadadosCabo.tipoCabo} (${conds})`;
     } else if (item.tipo === "descida_subida") {
       detalhe = `De ${item.alturaOrigem ?? 2.8}m até ${item.alturaDestino ?? 0.3}m (Δ=${Math.abs((item.alturaOrigem ?? 2.8) - (item.alturaDestino ?? 0.3)).toFixed(2)}m)`;
