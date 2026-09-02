@@ -71,6 +71,16 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
   const [modalNovoItemAberto, setModalNovoItemAberto] = useState(false);
   const [novoItemForm, setNovoItemForm] = useState({ nome: "", valorUnitario: "", unidade: "" });
 
+  function obterPreco(item: ItemMedicao) {
+    return (
+      precos[item.catalogoId] ?? {
+        nome: item.nome,
+        valorUnitario: String(item.valorUnitario),
+        unidade: item.unidade === "—" ? "" : item.unidade,
+      }
+    );
+  }
+
   function alternar(catalogoId: string) {
     setExpandidos((atual) => {
       const novo = new Set(atual);
@@ -81,7 +91,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
   }
 
   function salvarPreco(item: ItemMedicao) {
-    const bruto = precos[item.catalogoId];
+    const bruto = obterPreco(item);
     const valorUnitario = parsearNumero(bruto.valorUnitario);
     if (!bruto.nome.trim()) {
       setErro("Informe o nome do item.");
@@ -106,7 +116,10 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
 
   function salvarQuantidade(tarefa: TarefaMedicao) {
     const chave = `${tarefa.id}-${tarefa.catalogoId}`;
-    const quantidade = parsearNumero(quantidades[chave] ?? "");
+    const valorBruto =
+      quantidades[chave] ??
+      (tarefa.quantidade == null ? "" : String(tarefa.quantidade));
+    const quantidade = parsearNumero(valorBruto);
     setErro(null);
     iniciarTransicao(async () => {
       const resultado = await salvarMedicaoTarefa({
@@ -216,7 +229,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
         <Corpo>
           {itens.map((item) => {
             const expandido = expandidos.has(item.catalogoId);
-            const preco = precos[item.catalogoId];
+            const preco = obterPreco(item);
             return (
               <Fragment key={item.catalogoId}>
                 <Linha>
@@ -239,10 +252,13 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                     <input
                       value={preco.nome}
                       onChange={(e) =>
-                        setPrecos((atual) => ({
-                          ...atual,
-                          [item.catalogoId]: { ...atual[item.catalogoId], nome: e.target.value },
-                        }))
+                        setPrecos((atual) => {
+                          const itemPreco = atual[item.catalogoId] ?? obterPreco(item);
+                          return {
+                            ...atual,
+                            [item.catalogoId]: { ...itemPreco, nome: e.target.value },
+                          };
+                        })
                       }
                       placeholder="Nome do item"
                       className="w-full min-w-[150px] rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-superficie-900 focus:border-azul-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-azul-500 hover:border-borda"
@@ -252,10 +268,13 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                     <input
                       value={preco.unidade}
                       onChange={(e) =>
-                        setPrecos((atual) => ({
-                          ...atual,
-                          [item.catalogoId]: { ...atual[item.catalogoId], unidade: e.target.value },
-                        }))
+                        setPrecos((atual) => {
+                          const itemPreco = atual[item.catalogoId] ?? obterPreco(item);
+                          return {
+                            ...atual,
+                            [item.catalogoId]: { ...itemPreco, unidade: e.target.value },
+                          };
+                        })
                       }
                       placeholder="m"
                       className="w-20 rounded-lg border border-borda px-3 py-1.5 text-sm text-superficie-900 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
@@ -265,10 +284,13 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                     <input
                       value={preco.valorUnitario}
                       onChange={(e) =>
-                        setPrecos((atual) => ({
-                          ...atual,
-                          [item.catalogoId]: { ...atual[item.catalogoId], valorUnitario: e.target.value },
-                        }))
+                        setPrecos((atual) => {
+                          const itemPreco = atual[item.catalogoId] ?? obterPreco(item);
+                          return {
+                            ...atual,
+                            [item.catalogoId]: { ...itemPreco, valorUnitario: e.target.value },
+                          };
+                        })
                       }
                       placeholder="0,00"
                       inputMode="decimal"
@@ -334,7 +356,12 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <input
-                                      value={quantidades[chave] ?? ""}
+                                      value={
+                                        quantidades[chave] ??
+                                        (tarefa.quantidade == null
+                                          ? ""
+                                          : String(tarefa.quantidade))
+                                      }
                                       onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                                         setQuantidades((atual) => ({
                                           ...atual,
@@ -433,7 +460,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
           <Botao variante="contorno" onClick={fecharModalNovoItem}>
             Cancelar
           </Botao>
-          <Botao onClick={salvarNovoItem} disabled={pendente}>
+          <Botao onClick={salvarNovoItem} disabled={pendente} carregando={pendente}>
             <Save className="h-3.5 w-3.5" />
             Criar
           </Botao>
