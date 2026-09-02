@@ -21,6 +21,7 @@ export type DetalheLocalizacaoLevantamento = {
   categoria?: string;
   altura?: number;
   pontos?: { x: number; y: number }[];
+  segmentos?: Array<{ pontos: { x: number; y: number }[]; comprimento?: number }>;
   comprimento?: number;
   area?: number;
   perimetro?: number;

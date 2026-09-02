@@ -7,14 +7,14 @@ import { Document, Page, pdfjs } from "react-pdf";
 import {
   ArrowDownUp,
   Box,
-  Check,
   CheckCircle2,
-  CheckSquare,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Edit2,
+  Eye,
+  EyeOff,
   FileDown,
   FileSpreadsheet,
   FileText,
@@ -109,6 +109,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 type ModoVisualizacao = "2d" | "3d" | "tabelas";
+
+type ModoExibicaoMedidas = "todas" | "sem_circuitos" | "nenhuma";
 
 type FerramentaLevantamento =
   | "navegar"
@@ -420,6 +422,34 @@ export function VisualizadorLevantamento({
     texto: string;
   } | null>(null);
   const [gruposRecolhidos, setGruposRecolhidos] = useState<string[]>([]);
+  const [modoExibicaoMedidas, setModoExibicaoMedidas] =
+    useState<ModoExibicaoMedidas>(() => {
+      if (typeof window !== "undefined") {
+        try {
+          const salvo = localStorage.getItem(
+            "painel_levantamento_exibicao_medidas",
+          );
+          if (
+            salvo === "todas" ||
+            salvo === "sem_circuitos" ||
+            salvo === "nenhuma"
+          ) {
+            return salvo;
+          }
+        } catch {}
+      }
+      return "sem_circuitos";
+    });
+
+  function alternarExibicaoMedidas(novoModo: ModoExibicaoMedidas) {
+    setModoExibicaoMedidas(novoModo);
+    try {
+      localStorage.setItem(
+        "painel_levantamento_exibicao_medidas",
+        novoModo,
+      );
+    } catch {}
+  }
 
   const registrarEstado = useCallback((novosItens: ItemLevantamento[]) => {
     setHistoricoDesfazer((prev) => [...prev.slice(-30), itens]);
@@ -631,9 +661,119 @@ export function VisualizadorLevantamento({
       setLevantamentoId(resSalvar.id);
     }
 
-    const localizacoes = itensAlvo.map((it) => {
+    const mapaCircuitos = new Map<string, ItemLevantamento[]>();
+    const outrosItens: ItemLevantamento[] = [];
+
+    for (const it of itensAlvo) {
+      if (it.tipo === "tubulacao_cabo") {
+        const nomeCirc =
+          it.metadadosCabo?.circuito?.trim() ||
+          it.circuito?.trim() ||
+          it.nome.trim();
+        const lista = mapaCircuitos.get(nomeCirc) || [];
+        lista.push(it);
+        mapaCircuitos.set(nomeCirc, lista);
+      } else {
+        outrosItens.push(it);
+      }
+    }
+
+    const localizacoes: Array<{
+      localizacao_tipo:
+        | "ponto"
+        | "regiao"
+        | "distancia"
+        | "circuito"
+        | "area"
+        | "descida"
+        | "nenhuma";
+      planta_id: string;
+      pagina: number;
+      ponto_x?: number | null;
+      ponto_y?: number | null;
+      localizacao_detalhe?: Record<string, unknown>;
+      levantamento_id?: string | null;
+      descricao_especifica?: string;
+      comprimento?: number;
+      area?: number;
+      quantidade?: number;
+    }> = [];
+
+    for (const [nomeCirc, itensCirc] of mapaCircuitos.entries()) {
+      const primeiro = itensCirc[0];
+      const totalComprimento = itensCirc.reduce(
+        (acc, i) => acc + (i.comprimentoReal ?? 0),
+        0,
+      );
+      const segmentos = itensCirc.map((i) => ({
+        pontos: i.pontos,
+        comprimento: i.comprimentoReal,
+      }));
+
+      const nivelNome = primeiro.nivelId
+        ? niveis.find((n) => n.id === primeiro.nivelId)?.nome
+        : undefined;
+
+      const descSugerida = formatarDescricaoTarefaCircuito({
+        nomeLevantamento,
+        circuito: nomeCirc,
+        tipoCabo: primeiro.metadadosCabo?.tipoCabo,
+        tipoCondutor: primeiro.metadadosCabo?.tipoCondutor,
+        comprimento: totalComprimento,
+        quantidadeTrechos: itensCirc.length,
+        altura: primeiro.altura,
+        nivelNome,
+        condutores: primeiro.metadadosCabo?.condutores,
+        fases: primeiro.metadadosCabo?.fases,
+        corFase: primeiro.metadadosCabo?.corFase,
+        corFaseR: primeiro.metadadosCabo?.corFaseR,
+        corFaseS: primeiro.metadadosCabo?.corFaseS,
+        corFaseT: primeiro.metadadosCabo?.corFaseT,
+        observacao: primeiro.metadadosCabo?.observacao || primeiro.observacao,
+      });
+
+      const p0 = primeiro.pontos[0] ?? { x: 0, y: 0 };
+
+      const detalhe: Record<string, unknown> = {
+        elemento: primeiro.nome,
+        subtipo: primeiro.subtipo,
+        categoria: primeiro.categoria,
+        circuito: nomeCirc,
+        comprimento: totalComprimento,
+        quantidade: itensCirc.length,
+        pontos: primeiro.pontos,
+        segmentos,
+        condutores: primeiro.metadadosCabo?.condutores,
+        fases: primeiro.metadadosCabo?.fases,
+        tipoCabo: primeiro.metadadosCabo?.tipoCabo,
+        tipoCondutor: primeiro.metadadosCabo?.tipoCondutor,
+        nivelId: primeiro.nivelId,
+        altura: primeiro.altura,
+        cor: primeiro.cor || primeiro.metadadosCabo?.cor,
+        corFaseR: primeiro.metadadosCabo?.corFaseR,
+        corFaseS: primeiro.metadadosCabo?.corFaseS,
+        corFaseT: primeiro.metadadosCabo?.corFaseT,
+        corFase: primeiro.metadadosCabo?.corFase,
+        observacao: primeiro.metadadosCabo?.observacao || primeiro.observacao,
+      };
+
+      localizacoes.push({
+        localizacao_tipo: "circuito",
+        planta_id: plantaSelecionadaId,
+        pagina,
+        ponto_x: p0.x,
+        ponto_y: p0.y,
+        localizacao_detalhe: detalhe,
+        levantamento_id: idLevantamentoAtual ?? null,
+        descricao_especifica: descSugerida,
+        comprimento: totalComprimento,
+        quantidade: itensCirc.length,
+      });
+    }
+
+    for (const it of outrosItens) {
       const dados = gerarDadosTarefaDeItem(it, nomeLevantamento);
-      return {
+      localizacoes.push({
         localizacao_tipo: dados.tipo,
         planta_id: plantaSelecionadaId,
         pagina,
@@ -645,8 +785,8 @@ export function VisualizadorLevantamento({
         comprimento: it.comprimentoReal,
         area: it.areaReal,
         quantidade: 1,
-      };
-    });
+      });
+    }
 
     const res = await salvarRascunhoLote({
       obra_id: obraSelecionadaId,
@@ -1902,6 +2042,21 @@ export function VisualizadorLevantamento({
                       itensLoteSelecionados.includes(i.id) &&
                       i.tipo === "tubulacao_cabo",
                   );
+                  const outrosLote = itens.filter(
+                    (i) =>
+                      itensLoteSelecionados.includes(i.id) &&
+                      i.tipo !== "tubulacao_cabo",
+                  );
+                  const nomesCircuitosUnicos = new Set(
+                    circuitosLote.map(
+                      (c) =>
+                        c.metadadosCabo?.circuito?.trim() ||
+                        c.circuito?.trim() ||
+                        c.nome.trim(),
+                    ),
+                  );
+                  const totalTarefasLote =
+                    outrosLote.length + nomesCircuitosUnicos.size;
                   const pontosLote = itens.filter(
                     (i) =>
                       itensLoteSelecionados.includes(i.id) &&
@@ -1916,6 +2071,13 @@ export function VisualizadorLevantamento({
                             {itensLoteSelecionados.length}
                           </span>{" "}
                           de {itens.length} selecionado(s)
+                          {circuitosLote.length >
+                            nomesCircuitosUnicos.size && (
+                            <span className="block text-[11px] text-azul-700">
+                              {circuitosLote.length} trechos agrupados em{" "}
+                              {nomesCircuitosUnicos.size} circuito(s)
+                            </span>
+                          )}
                         </div>
                         <Botao
                           tamanho="sm"
@@ -1924,7 +2086,8 @@ export function VisualizadorLevantamento({
                           className="bg-azul-600 hover:bg-azul-700 text-white font-semibold text-xs py-1 px-2.5 shrink-0"
                         >
                           <Layers className="h-3.5 w-3.5 mr-1" />
-                          Gerar {itensLoteSelecionados.length} Tarefas
+                          Gerar {totalTarefasLote}{" "}
+                          {totalTarefasLote === 1 ? "Tarefa" : "Tarefas"}
                         </Botao>
                       </div>
 
@@ -2280,8 +2443,49 @@ export function VisualizadorLevantamento({
                 </button>
               </div>
 
-              {/* Controles de Zoom e Paginação */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-superficie-100 p-1 rounded-xl border border-superficie-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const proximo: Record<ModoExibicaoMedidas, ModoExibicaoMedidas> = {
+                        todas: "sem_circuitos",
+                        sem_circuitos: "nenhuma",
+                        nenhuma: "todas",
+                      };
+                      alternarExibicaoMedidas(proximo[modoExibicaoMedidas]);
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                      modoExibicaoMedidas === "todas"
+                        ? "bg-white text-superficie-800 shadow-xs border border-superficie-200"
+                        : modoExibicaoMedidas === "sem_circuitos"
+                          ? "bg-amber-100 text-amber-900 border border-amber-300 shadow-xs"
+                          : "bg-superficie-200 text-superficie-600"
+                    }`}
+                    title={
+                      modoExibicaoMedidas === "todas"
+                        ? "Exibindo todas as medidas na planta (clique para ocultar circuitos)"
+                        : modoExibicaoMedidas === "sem_circuitos"
+                          ? "Medidas de circuitos ocultas para reduzir poluição (clique para ocultar todas)"
+                          : "Todas as medidas ocultas na planta (clique para exibir todas)"
+                    }
+                  >
+                    {modoExibicaoMedidas === "nenhuma" ? (
+                      <EyeOff className="h-3.5 w-3.5 text-superficie-500" />
+                    ) : modoExibicaoMedidas === "sem_circuitos" ? (
+                      <Eye className="h-3.5 w-3.5 text-amber-700" />
+                    ) : (
+                      <Ruler className="h-3.5 w-3.5 text-superficie-700" />
+                    )}
+                    <span className="hidden md:inline">
+                      {modoExibicaoMedidas === "todas"
+                        ? "Medidas: Todas"
+                        : modoExibicaoMedidas === "sem_circuitos"
+                          ? "Medidas: Sem Circuitos"
+                          : "Medidas: Ocultas"}
+                    </span>
+                  </button>
+                </div>
                 {totalPaginas > 1 && (
                   <div className="flex items-center gap-1 bg-superficie-100 px-2 py-1 rounded-lg text-xs">
                     <button
@@ -2582,14 +2786,19 @@ export function VisualizadorLevantamento({
                                   setItemSelecionado(item);
                                 }}
                               />
-                              {pctMeio && item.comprimentoReal !== undefined && (
-                                <g
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setItemSelecionado(item);
-                                  }}
-                                  className="cursor-pointer pointer-events-auto"
-                                >
+                              {pctMeio &&
+                                item.comprimentoReal !== undefined &&
+                                (ativo ||
+                                  (isCabo
+                                    ? modoExibicaoMedidas === "todas"
+                                    : modoExibicaoMedidas !== "nenhuma")) && (
+                                  <g
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setItemSelecionado(item);
+                                    }}
+                                    className="cursor-pointer pointer-events-auto"
+                                  >
                                   {(() => {
                                     const texto = formatarMetros(item.comprimentoReal);
                                     const pxX =
@@ -2690,7 +2899,8 @@ export function VisualizadorLevantamento({
                                   setItemSelecionado(item);
                                 }}
                               />
-                              {item.areaReal !== undefined && (
+                              {item.areaReal !== undefined &&
+                                (ativo || modoExibicaoMedidas !== "nenhuma") && (
                                 <g
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -2859,9 +3069,11 @@ export function VisualizadorLevantamento({
                             >
                               <ArrowDownUp className="h-3.5 w-3.5" />
                             </div>
-                            <span className="bg-purple-900/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow mt-0.5 font-mono">
-                              {item.comprimentoReal?.toFixed(2)}m
-                            </span>
+                            {(ativo || modoExibicaoMedidas !== "nenhuma") && (
+                              <span className="bg-purple-900/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow mt-0.5 font-mono">
+                                {item.comprimentoReal?.toFixed(2)}m
+                              </span>
+                            )}
                           </div>
                         );
                       }

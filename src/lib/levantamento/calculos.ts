@@ -427,6 +427,7 @@ export interface DadosDescricaoCircuito {
   tipoCabo?: string;
   tipoCondutor?: string;
   comprimento?: number;
+  quantidadeTrechos?: number;
   altura?: number;
   nivelNome?: string;
   condutores?: {
@@ -603,8 +604,13 @@ export function formatarDescricaoTarefaCircuito(
     ? `${dados.nivelNome} (${formatarMetros(alturaTrecho)})`
     : formatarMetros(alturaTrecho);
 
+  const trechoTexto =
+    dados.quantidadeTrechos && dados.quantidadeTrechos > 1
+      ? `Total (${dados.quantidadeTrechos} trechos agrupados): ${formatarMetros(compLinear)}`
+      : `Trecho: ${formatarMetros(compLinear)}`;
+
   linhas.push(
-    `${circuitoId} (${tipoCabo}${tipoCondutor ? `, ${tipoCondutor}` : ""}) — Trecho: ${formatarMetros(compLinear)} — Cota: ${cotaTexto}`,
+    `${circuitoId} (${tipoCabo}${tipoCondutor ? `, ${tipoCondutor}` : ""}) — ${trechoTexto} — Cota: ${cotaTexto}`,
   );
 
   linhas.push("Cabos a passar:");

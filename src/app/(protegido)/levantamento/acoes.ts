@@ -308,7 +308,53 @@ export async function criarTarefasEmLoteLevantamento(
 
   const { obraId, plantaId, pagina, levantamentoId, itens } = resultado.data;
 
-  const linhas = itens.map((item) => ({
+  const itensProcessados: typeof itens = [];
+  const mapaCircuitos = new Map<string, (typeof itens)[number][]>();
+
+  for (const item of itens) {
+    if (item.tipo === "circuito") {
+      const nomeCirc =
+        (item.detalhe?.circuito as string)?.trim() || item.nome.trim();
+      const lista = mapaCircuitos.get(nomeCirc) || [];
+      lista.push(item);
+      mapaCircuitos.set(nomeCirc, lista);
+    } else {
+      itensProcessados.push(item);
+    }
+  }
+
+  for (const [nomeCirc, itensCirc] of mapaCircuitos.entries()) {
+    if (itensCirc.length === 1) {
+      itensProcessados.push(itensCirc[0]);
+    } else {
+      const primeiro = itensCirc[0];
+      const totalComp = itensCirc.reduce(
+        (acc, i) =>
+          acc +
+          (typeof i.detalhe?.comprimento === "number"
+            ? i.detalhe.comprimento
+            : 0),
+        0,
+      );
+      const segmentos = itensCirc.map((i) => ({
+        pontos: i.detalhe?.pontos || [],
+        comprimento: i.detalhe?.comprimento,
+      }));
+      const detalheFundido = {
+        ...primeiro.detalhe,
+        circuito: nomeCirc,
+        comprimento: totalComp,
+        quantidade: itensCirc.length,
+        segmentos,
+      };
+      itensProcessados.push({
+        ...primeiro,
+        detalhe: detalheFundido,
+      });
+    }
+  }
+
+  const linhas = itensProcessados.map((item) => ({
     titulo: item.titulo,
     descricao: item.descricao || null,
     obra_id: obraId,
