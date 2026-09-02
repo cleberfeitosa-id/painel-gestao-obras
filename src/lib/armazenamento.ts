@@ -29,36 +29,48 @@ export async function assinarUpload(bucket: string, caminho: string) {
 export async function urlAssinada(
   bucket: string,
   caminho: string,
-  segundos = 3600,
+  segundos = 86400,
 ) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(caminho, segundos);
+  if (!caminho) return null;
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(caminho, segundos);
 
-  if (error || !data) return null;
-  return data.signedUrl;
+    if (error || !data) return null;
+    return data.signedUrl;
+  } catch (err) {
+    console.error(`Erro ao gerar URL assinada para ${caminho}:`, err);
+    return null;
+  }
 }
 
 export async function urlsAssinadas(
   bucket: string,
   caminhos: string[],
-  segundos = 3600,
+  segundos = 86400,
 ) {
-  if (caminhos.length === 0) return new Map<string, string>();
+  const caminhosValidos = caminhos.filter((c) => Boolean(c && typeof c === "string"));
+  if (caminhosValidos.length === 0) return new Map<string, string>();
 
-  const supabase = createAdminClient();
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrls(caminhos, segundos);
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrls(caminhosValidos, segundos);
 
-  const mapa = new Map<string, string>();
-  if (error || !data) return mapa;
+    const mapa = new Map<string, string>();
+    if (error || !data) return mapa;
 
-  for (const item of data) {
-    if (item.path && item.signedUrl) mapa.set(item.path, item.signedUrl);
+    for (const item of data) {
+      if (item.path && item.signedUrl) mapa.set(item.path, item.signedUrl);
+    }
+    return mapa;
+  } catch (err) {
+    console.error("Erro ao gerar URLs assinadas em lote:", err);
+    return new Map<string, string>();
   }
-  return mapa;
 }
 
 export async function removerArquivo(bucket: string, caminho: string) {

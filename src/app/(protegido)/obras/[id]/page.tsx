@@ -12,10 +12,14 @@ import {
   Hammer,
   Users,
   Ruler,
+  Layers,
+  ArrowRight,
+  TrendingUp,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_OBRA, STATUS_TAREFA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
 import { formatarData, situacaoPrazo, hojeChave } from "@/lib/datas";
+import { formatarMoeda } from "@/lib/utils";
 import {
   Cartao,
   CartaoCabecalho,
@@ -32,6 +36,7 @@ import type {
   PlantaRow,
   TarefaRow,
   PapelUsuario,
+  MedicaoRow,
 } from "@/lib/supabase/database.types";
 
 interface ObraComResponsavel extends ObraRow {
@@ -69,8 +74,19 @@ async function buscarPapel(): Promise<PapelUsuario | null> {
 
 async function buscarDados(id: string) {
   const supabase = await createClient();
+  const hoje = hojeChave();
 
-  const [{ data: plantas }, { data: tarefas }] = await Promise.all([
+  const [
+    { data: plantas },
+    { data: tarefasRecentes },
+    { count: countTotalTarefas },
+    { count: countTarefasConcluidas },
+    { count: countTarefasExecucao },
+    { count: countTarefasPendentes },
+    { count: countTarefasAtrasadas },
+    { data: medicoes },
+    { count: countLevantamentos },
+  ] = await Promise.all([
     supabase
       .from("plantas")
       .select("*")
@@ -82,11 +98,87 @@ async function buscarDados(id: string) {
       .eq("obra_id", id)
       .order("criado_em", { ascending: false })
       .limit(8),
+    supabase
+      .from("tarefas")
+      .select("*", { count: "exact", head: true })
+      .eq("obra_id", id),
+    supabase
+      .from("tarefas")
+      .select("*", { count: "exact", head: true })
+      .eq("obra_id", id)
+      .eq("status", "concluido"),
+    supabase
+      .from("tarefas")
+      .select("*", { count: "exact", head: true })
+      .eq("obra_id", id)
+      .eq("status", "em_execucao"),
+    supabase
+      .from("tarefas")
+      .select("*", { count: "exact", head: true })
+      .eq("obra_id", id)
+      .eq("status", "pendente"),
+    supabase
+      .from("tarefas")
+      .select("*", { count: "exact", head: true })
+      .eq("obra_id", id)
+      .neq("status", "concluido")
+      .lt("prazo", hoje),
+    supabase
+      .from("medicoes")
+      .select("id, titulo, valor_contrato")
+      .eq("obra_id", id)
+      .order("criado_em", { ascending: true }),
+    supabase
+      .from("levantamentos")
+      .select("*", { count: "exact", head: true })
+      .eq("obra_id", id),
   ]);
+
+  let totalContratoMedicoes = 0;
+  let totalExecutadoMedicoes = 0;
+  let totalPagoMedicoes = 0;
+
+  const medicoesLista = (medicoes ?? []) as MedicaoRow[];
+  if (medicoesLista.length > 0) {
+    const valoresCalculados = await Promise.all(
+      medicoesLista.map(async (m) => {
+        const [{ data: vExec }, { data: vPago }] = await Promise.all([
+          supabase.rpc("valor_executado_medicao", { p_medicao_id: m.id }),
+          supabase.rpc("valor_pago_medicao", { p_medicao_id: m.id }),
+        ]);
+        return {
+          contrato: Number(m.valor_contrato) || 0,
+          executado: Number(vExec) || 0,
+          pago: Number(vPago) || 0,
+        };
+      }),
+    );
+
+    for (const v of valoresCalculados) {
+      totalContratoMedicoes += v.contrato;
+      totalExecutadoMedicoes += v.executado;
+      totalPagoMedicoes += v.pago;
+    }
+  }
 
   return {
     plantas: (plantas ?? []) as PlantaRow[],
-    tarefas: (tarefas ?? []) as TarefaComObra[],
+    tarefas: (tarefasRecentes ?? []) as TarefaComObra[],
+    estatisticasTarefas: {
+      total: countTotalTarefas ?? 0,
+      concluidas: countTarefasConcluidas ?? 0,
+      emExecucao: countTarefasExecucao ?? 0,
+      pendentes: countTarefasPendentes ?? 0,
+      atrasadas: countTarefasAtrasadas ?? 0,
+    },
+    resumoFinanceiro: {
+      quantidadeMedicoes: medicoesLista.length,
+      totalContrato: totalContratoMedicoes,
+      totalExecutado: totalExecutadoMedicoes,
+      totalPago: totalPagoMedicoes,
+      saldo: totalContratoMedicoes - totalPagoMedicoes,
+    },
+    totalLevantamentos: countLevantamentos ?? 0,
   };
 }
 
@@ -100,35 +192,32 @@ export default async function DetalheObraPage({
 
   if (!obra) notFound();
 
-  const [papel, { plantas, tarefas }] = await Promise.all([
+  const [papel, dadosObra] = await Promise.all([
     buscarPapel(),
     buscarDados(id),
   ]);
 
+  const { plantas, tarefas, estatisticasTarefas, resumoFinanceiro, totalLevantamentos } =
+    dadosObra;
+
   const podeMedir = papel === "admin" || papel === "gestor";
 
-  const porStatus = {
-    pendente: 0,
-    em_execucao: 0,
-    concluido: 0,
-  };
-  let atrasadas = 0;
-  const hoje = hojeChave();
-  for (const tarefa of tarefas) {
-    porStatus[tarefa.status] += 1;
-    if (
-      tarefa.status !== "concluido" &&
-      tarefa.prazo &&
-      tarefa.prazo < hoje
-    ) {
-      atrasadas += 1;
-    }
-  }
-  const totalTarefas = tarefas.length;
+  const totalTarefas = estatisticasTarefas.total;
   const percentualConcluido =
     totalTarefas > 0
-      ? Math.round((porStatus.concluido / totalTarefas) * 100)
+      ? Math.round((estatisticasTarefas.concluidas / totalTarefas) * 100)
       : 0;
+
+  const percentualFinanceiro =
+    resumoFinanceiro.totalContrato > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (resumoFinanceiro.totalExecutado / resumoFinanceiro.totalContrato) *
+              100,
+          ),
+        )
+      : null;
 
   const statusInfo = STATUS_OBRA[obra.status];
 
@@ -156,7 +245,7 @@ export default async function DetalheObraPage({
               <p className="mt-1 text-sm text-superficie-500">{obra.codigo}</p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link href={`/tarefas/nova?obra=${obra.id}`}>
               <Botao variante="primario">
                 <Plus className="h-4 w-4" />
@@ -171,6 +260,12 @@ export default async function DetalheObraPage({
                 </Botao>
               </Link>
             )}
+            <Link href={`/obras/${obra.id}/quadros`}>
+              <Botao variante="contorno">
+                <Layers className="h-4 w-4" />
+                Quadros
+              </Botao>
+            </Link>
             <Link href={`/obras/${obra.id}/executores`}>
               <Botao variante="contorno">
                 <Users className="h-4 w-4" />
@@ -191,7 +286,7 @@ export default async function DetalheObraPage({
         <div className="space-y-6 lg:col-span-2">
           <Cartao>
             <CartaoCabecalho>
-              <CartaoTitulo>Informacoes</CartaoTitulo>
+              <CartaoTitulo>Informações</CartaoTitulo>
             </CartaoCabecalho>
             <CartaoConteudo>
               <dl className="grid gap-4 sm:grid-cols-2">
@@ -205,7 +300,7 @@ export default async function DetalheObraPage({
                 </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
-                    Responsavel
+                    Responsável
                   </dt>
                   <dd className="mt-1 flex items-center gap-2">
                     {obra.responsavel ? (
@@ -222,10 +317,10 @@ export default async function DetalheObraPage({
                 </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
-                    Localizacao
+                    Localização
                   </dt>
                   <dd className="mt-1 flex items-center gap-1.5 text-sm text-superficie-900">
-                    <MapPin className="h-4 w-4 text-superficie-400" />
+                    <MapPin className="h-4 w-4 text-superficie-400 shrink-0" />
                     {[obra.endereco, obra.cidade, obra.estado]
                       .filter(Boolean)
                       .join(", ") || "—"}
@@ -233,10 +328,10 @@ export default async function DetalheObraPage({
                 </div>
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
-                    Periodo
+                    Período
                   </dt>
                   <dd className="mt-1 text-sm text-superficie-900">
-                    {formatarData(obra.data_inicio)} ate{" "}
+                    {formatarData(obra.data_inicio)} até{" "}
                     {formatarData(obra.data_prevista_fim)}
                   </dd>
                 </div>
@@ -244,9 +339,9 @@ export default async function DetalheObraPage({
               {obra.descricao && (
                 <div className="mt-4 border-t border-borda pt-4">
                   <dt className="text-xs font-medium uppercase tracking-wider text-superficie-500">
-                    Descricao
+                    Descrição
                   </dt>
-                  <dd className="mt-1 text-sm leading-relaxed text-superficie-700">
+                  <dd className="mt-1 text-sm leading-relaxed text-superficie-700 whitespace-pre-wrap">
                     {obra.descricao}
                   </dd>
                 </div>
@@ -287,7 +382,7 @@ export default async function DetalheObraPage({
                     <li key={planta.id}>
                       <Link
                         href={`/obras/${obra.id}/plantas/${planta.id}`}
-                        className="flex items-center justify-between gap-3 py-3 hover:bg-superficie-50"
+                        className="flex items-center justify-between gap-3 py-3 hover:bg-superficie-50 transition-colors"
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-superficie-900">
@@ -301,7 +396,7 @@ export default async function DetalheObraPage({
                         </div>
                         <span className="text-xs text-superficie-400">
                           {planta.total_paginas}{" "}
-                          {planta.total_paginas === 1 ? "pagina" : "paginas"}
+                          {planta.total_paginas === 1 ? "página" : "páginas"}
                         </span>
                       </Link>
                     </li>
@@ -315,51 +410,130 @@ export default async function DetalheObraPage({
         <div className="space-y-6">
           <Cartao>
             <CartaoCabecalho>
-              <CartaoTitulo>Progresso</CartaoTitulo>
+              <div className="flex items-center justify-between">
+                <CartaoTitulo>Progresso da Obra</CartaoTitulo>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                  {percentualConcluido}% concluído
+                </span>
+              </div>
             </CartaoCabecalho>
-            <CartaoConteudo>
-              <div className="mb-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-superficie-600">Concluido</span>
+            <CartaoConteudo className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between text-xs text-superficie-600 mb-1.5">
+                  <span>Avanço Físico (Tarefas)</span>
                   <span className="font-semibold text-superficie-900">
-                    {percentualConcluido}%
+                    {estatisticasTarefas.concluidas} de {totalTarefas} tarefas
                   </span>
                 </div>
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-superficie-100">
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-superficie-100">
                   <div
-                    className="h-full rounded-full bg-emerald-500 transition-all"
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
                     style={{ width: `${percentualConcluido}%` }}
                   />
                 </div>
               </div>
 
-              <ul className="space-y-2">
-                {Object.entries(porStatus).map(([status, quantidade]) => {
-                  const info = STATUS_TAREFA[status as keyof typeof STATUS_TAREFA];
-                  return (
-                    <li
-                      key={status}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span className="flex items-center gap-2 text-superficie-600">
-                        <CheckSquare className="h-4 w-4 text-superficie-400" />
-                        {info.rotulo}
-                      </span>
-                      <span className="font-medium text-superficie-900">
-                        {quantidade}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-
-              <div className="mt-4 flex items-center gap-2 border-t border-borda pt-4 text-sm">
-                <AlertTriangle className="h-4 w-4 text-red-600" />
-                <span className="text-superficie-600">Atrasadas</span>
-                <span className="ml-auto font-semibold text-red-600">
-                  {atrasadas}
-                </span>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <Link
+                  href={`/tarefas?obra=${obra.id}&status=concluido`}
+                  className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 hover:bg-emerald-50 transition-colors"
+                >
+                  <p className="text-xs text-emerald-700 font-medium">Concluídas</p>
+                  <p className="text-lg font-bold text-emerald-900">
+                    {estatisticasTarefas.concluidas}
+                  </p>
+                </Link>
+                <Link
+                  href={`/tarefas?obra=${obra.id}&status=em_execucao`}
+                  className="rounded-lg border border-blue-100 bg-blue-50/50 p-2.5 hover:bg-blue-50 transition-colors"
+                >
+                  <p className="text-xs text-blue-700 font-medium">Em execução</p>
+                  <p className="text-lg font-bold text-blue-900">
+                    {estatisticasTarefas.emExecucao}
+                  </p>
+                </Link>
+                <Link
+                  href={`/tarefas?obra=${obra.id}&status=pendente`}
+                  className="rounded-lg border border-superficie-200 bg-superficie-50 p-2.5 hover:bg-superficie-100 transition-colors"
+                >
+                  <p className="text-xs text-superficie-600 font-medium">Pendentes</p>
+                  <p className="text-lg font-bold text-superficie-900">
+                    {estatisticasTarefas.pendentes}
+                  </p>
+                </Link>
+                <Link
+                  href={`/tarefas?obra=${obra.id}`}
+                  className="rounded-lg border border-red-100 bg-red-50/50 p-2.5 hover:bg-red-50 transition-colors"
+                >
+                  <p className="text-xs text-red-700 font-medium flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Atrasadas
+                  </p>
+                  <p className="text-lg font-bold text-red-900">
+                    {estatisticasTarefas.atrasadas}
+                  </p>
+                </Link>
               </div>
+
+              {resumoFinanceiro.quantidadeMedicoes > 0 && (
+                <div className="border-t border-borda pt-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-superficie-600 flex items-center gap-1.5">
+                      <TrendingUp className="h-3.5 w-3.5 text-azul-600" />
+                      Medições Financeiras
+                    </span>
+                    <Link
+                      href={`/obras/${obra.id}/medicoes`}
+                      className="text-xs text-azul-600 hover:text-azul-700 flex items-center gap-0.5"
+                    >
+                      Ver medições <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+
+                  {percentualFinanceiro !== null && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs text-superficie-600 mb-1">
+                        <span>Executado vs Contrato</span>
+                        <span className="font-semibold text-superficie-900">
+                          {percentualFinanceiro}%
+                        </span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-superficie-100">
+                        <div
+                          className="h-full rounded-full bg-azul-600 transition-all duration-500"
+                          style={{ width: `${percentualFinanceiro}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg bg-superficie-50 p-2">
+                      <span className="text-superficie-500 block">Contratado</span>
+                      <span className="font-semibold text-superficie-900">
+                        {formatarMoeda(resumoFinanceiro.totalContrato)}
+                      </span>
+                    </div>
+                    <div className="rounded-lg bg-superficie-50 p-2">
+                      <span className="text-superficie-500 block">Executado</span>
+                      <span className="font-semibold text-azul-600">
+                        {formatarMoeda(resumoFinanceiro.totalExecutado)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {totalLevantamentos > 0 && (
+                <div className="border-t border-borda pt-3 flex items-center justify-between text-xs text-superficie-600">
+                  <span>Levantamentos quantitativos</span>
+                  <Link
+                    href={`/levantamento?obra=${obra.id}`}
+                    className="font-medium text-azul-600 hover:text-azul-700 inline-flex items-center gap-1"
+                  >
+                    {totalLevantamentos} cadastrados <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              )}
             </CartaoConteudo>
           </Cartao>
 
@@ -408,7 +582,7 @@ export default async function DetalheObraPage({
                       <li key={tarefa.id}>
                         <Link
                           href={`/tarefas/${tarefa.id}`}
-                          className="flex items-center justify-between gap-3 px-6 py-3 hover:bg-superficie-50"
+                          className="flex items-center justify-between gap-3 px-6 py-3 hover:bg-superficie-50 transition-colors"
                         >
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium text-superficie-900">

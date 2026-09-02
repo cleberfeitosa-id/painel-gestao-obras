@@ -13,6 +13,7 @@ import {
   Building2,
   Ruler,
   Boxes,
+  Layers,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,12 @@ export function BarraLateral({ papel }: BarraLateralProps) {
       rotulo: "Levantamento",
       icone: Boxes,
     },
+    {
+      href: obraId ? `/obras/${obraId}/quadros` : "/obras",
+      chave: "quadros",
+      rotulo: "Quadros",
+      icone: Layers,
+    },
     { href: "/plantas", rotulo: "Plantas", icone: FileText },
     { href: "/tarefas", rotulo: "Tarefas", icone: CheckSquare },
     { href: "/calendario", rotulo: "Calendário", icone: Calendar },
@@ -53,7 +60,7 @@ export function BarraLateral({ papel }: BarraLateralProps) {
   function estaAtivo(href: string) {
     if (
       href === "/obras" &&
-      (pathname.includes("/medicoes") || pathname.includes("/levantamento"))
+      (pathname.includes("/medicoes") || pathname.includes("/levantamento") || pathname.includes("/quadros"))
     )
       return false;
     if (href.startsWith("/levantamento") && pathname.startsWith("/levantamento"))

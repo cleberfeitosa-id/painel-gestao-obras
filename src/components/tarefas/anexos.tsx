@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, useCallback } from "react";
 import {
   Upload,
   Camera,
@@ -8,13 +8,13 @@ import {
   Video,
   FileText,
   Trash2,
-  ExternalLink,
 } from "lucide-react";
 import { Botao, Modal, EstadoVazio } from "@/components/ui";
 import { formatarTamanho } from "@/lib/utils";
 import { MOMENTO_ANEXO } from "@/lib/domain/rotulos";
 import { comprimirImagem, eImagemComprimivel } from "@/lib/compressao-imagem";
 import { CameraModal } from "@/components/tarefas/camera-modal";
+import { GaleriaImagensModal } from "@/components/tarefas/galeria-imagens-modal";
 import {
   assinarUploadAnexo,
   registrarAnexo,
@@ -33,7 +33,7 @@ interface AnexoComAutor extends TarefaAnexoRow {
 interface AnexosProps {
   tarefaId: string;
   anexos: AnexoComAutor[];
-  urls: Map<string, string>;
+  urls: Map<string, string> | Record<string, string>;
   usuarioId: string;
   podeEscrever: boolean;
 }
@@ -68,13 +68,27 @@ export function Anexos({
   const [cameraAberta, setCameraAberta] = useState(false);
   const [uploads, setUploads] = useState<ArquivoEmUpload[]>([]);
   const [momento, setMomento] = useState<MomentoAnexo>("andamento");
-  const [imagemAberta, setImagemAberta] = useState<{ url: string; anexo: AnexoComAutor } | null>(null);
+  const [indiceGaleria, setIndiceGaleria] = useState<number | null>(null);
   const [excluirId, setExcluirId] = useState<string | null>(null);
   const [pendente, iniciarTransicao] = useTransition();
 
   const imagens = anexos.filter((a) => a.tipo === "imagem");
   const videos = anexos.filter((a) => a.tipo === "video");
   const arquivos = anexos.filter((a) => a.tipo === "arquivo");
+
+  const obterUrl = useCallback(
+    (caminho: string): string | undefined => {
+      if (!caminho) return undefined;
+      if (urls instanceof Map) {
+        return urls.get(caminho);
+      }
+      if (typeof urls === "object" && urls !== null) {
+        return (urls as Record<string, string>)[caminho];
+      }
+      return undefined;
+    },
+    [urls],
+  );
 
   function atualizarUpload(id: string, mudancas: Partial<ArquivoEmUpload>) {
     setUploads((atual) =>
@@ -322,14 +336,14 @@ export function Anexos({
                 Imagens
               </h4>
               <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                {imagens.map((anexo) => {
-                  const url = urls.get(anexo.caminho);
+                {imagens.map((anexo, idx) => {
+                  const url = obterUrl(anexo.caminho);
                   return (
                     <div key={anexo.id} className="group relative">
                       {url ? (
                         <button
                           type="button"
-                          onClick={() => setImagemAberta({ url, anexo })}
+                          onClick={() => setIndiceGaleria(idx)}
                           className="block aspect-square w-full overflow-hidden rounded-lg border border-borda bg-superficie-100 focus:outline-none focus:ring-2 focus:ring-azul-500 cursor-pointer"
                           aria-label={`Ampliar ${anexo.nome_arquivo}`}
                         >
@@ -350,7 +364,7 @@ export function Anexos({
                         <button
                           type="button"
                           onClick={() => setExcluirId(anexo.id)}
-                          className="absolute right-1 top-1 rounded-lg bg-superficie-900/80 p-1.5 text-white shadow transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-perigo focus:opacity-100"
+                          className="absolute right-1 top-1 rounded-lg bg-superficie-900/80 p-1.5 text-white shadow transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-perigo focus:opacity-100 cursor-pointer"
                           aria-label="Excluir imagem"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -370,7 +384,7 @@ export function Anexos({
               </h4>
               <div className="grid gap-3 sm:grid-cols-2">
                 {videos.map((anexo) => {
-                  const url = urls.get(anexo.caminho);
+                  const url = obterUrl(anexo.caminho);
                   return (
                     <div key={anexo.id} className="relative">
                       {url ? (
@@ -389,7 +403,7 @@ export function Anexos({
                         <button
                           type="button"
                           onClick={() => setExcluirId(anexo.id)}
-                          className="absolute right-1 top-1 rounded-lg bg-superficie-900/70 p-1.5 text-white"
+                          className="absolute right-1 top-1 rounded-lg bg-superficie-900/70 p-1.5 text-white cursor-pointer"
                           aria-label="Excluir video"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -409,7 +423,7 @@ export function Anexos({
               </h4>
               <ul className="divide-y divide-superficie-100 rounded-lg border border-borda">
                 {arquivos.map((anexo) => {
-                  const url = urls.get(anexo.caminho);
+                  const url = obterUrl(anexo.caminho);
                   return (
                     <li
                       key={anexo.id}
@@ -441,7 +455,7 @@ export function Anexos({
                         <button
                           type="button"
                           onClick={() => setExcluirId(anexo.id)}
-                          className="rounded-lg p-1.5 text-superficie-400 hover:text-perigo hover:bg-superficie-100 transition-colors"
+                          className="rounded-lg p-1.5 text-superficie-400 hover:text-perigo hover:bg-superficie-100 transition-colors cursor-pointer"
                           aria-label="Excluir arquivo"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -456,59 +470,18 @@ export function Anexos({
         </div>
       )}
 
-      <Modal
-        aberto={imagemAberta !== null}
-        aoFechar={() => setImagemAberta(null)}
-        titulo={imagemAberta?.anexo.nome_arquivo ?? "Imagem"}
-        tamanho="xl"
-      >
-        {imagemAberta && (
-          <div className="space-y-4">
-            <div className="flex max-h-[70vh] items-center justify-center overflow-hidden rounded-lg bg-superficie-900/5">
-              <img
-                src={imagemAberta.url}
-                alt={imagemAberta.anexo.nome_arquivo}
-                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
-              />
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-borda pt-3 text-xs text-superficie-500">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span>{formatarTamanho(imagemAberta.anexo.tamanho_bytes)}</span>
-                <span>·</span>
-                <span>{MOMENTO_ANEXO[imagemAberta.anexo.momento].rotulo}</span>
-                <span>·</span>
-                <span>{imagemAberta.anexo.enviado_por_nome ?? "Usuário"}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href={imagemAberta.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-borda bg-white px-3 py-1.5 text-xs font-medium text-superficie-700 hover:bg-superficie-50 hover:text-azul-600 transition-colors"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Abrir original
-                </a>
-                {podeExcluirAnexo(imagemAberta.anexo) && (
-                  <Botao
-                    type="button"
-                    variante="perigo"
-                    tamanho="sm"
-                    onClick={() => {
-                      const id = imagemAberta.anexo.id;
-                      setImagemAberta(null);
-                      setExcluirId(id);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Excluir imagem
-                  </Botao>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <GaleriaImagensModal
+        aberto={indiceGaleria !== null}
+        indiceInicial={indiceGaleria ?? 0}
+        imagens={imagens}
+        obterUrl={obterUrl}
+        aoFechar={() => setIndiceGaleria(null)}
+        aoExcluir={(anexo) => {
+          setIndiceGaleria(null);
+          setExcluirId(anexo.id);
+        }}
+        podeExcluir={podeExcluirAnexo}
+      />
 
       <Modal
         aberto={excluirId !== null}

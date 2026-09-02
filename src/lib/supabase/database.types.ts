@@ -998,6 +998,196 @@ export type Database = {
           },
         ]
       }
+      quadro_templates: {
+        Row: {
+          altura_mm: number
+          altura_util_mm: number
+          corrente_nominal: number | null
+          criado_em: string
+          criado_por: string | null
+          descricao: string | null
+          grau_protecao: string | null
+          id: string
+          largura_mm: number
+          largura_util_mm: number
+          layout: Json
+          margem_lateral_mm: number
+          margem_topo_mm: number
+          material_caixa: string | null
+          nome: string
+          profundidade_mm: number
+          publico: boolean
+          tensao_nominal: string | null
+          tipo_quadro: string
+          atualizado_em: string
+        }
+        Insert: {
+          altura_mm?: number
+          altura_util_mm?: number
+          corrente_nominal?: number | null
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          grau_protecao?: string | null
+          id?: string
+          largura_mm?: number
+          largura_util_mm?: number
+          layout?: Json
+          margem_lateral_mm?: number
+          margem_topo_mm?: number
+          material_caixa?: string | null
+          nome: string
+          profundidade_mm?: number
+          publico?: boolean
+          tensao_nominal?: string | null
+          tipo_quadro?: string
+          atualizado_em?: string
+        }
+        Update: {
+          altura_mm?: number
+          altura_util_mm?: number
+          corrente_nominal?: number | null
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          grau_protecao?: string | null
+          id?: string
+          largura_mm?: number
+          largura_util_mm?: number
+          layout?: Json
+          margem_lateral_mm?: number
+          margem_topo_mm?: number
+          material_caixa?: string | null
+          nome?: string
+          profundidade_mm?: number
+          publico?: boolean
+          tensao_nominal?: string | null
+          tipo_quadro?: string
+          atualizado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quadro_templates_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quadros_eletricos: {
+        Row: {
+          altura_mm: number
+          altura_util_mm: number
+          circuitos_vinculados: Json
+          corrente_curto_ka: number | null
+          corrente_nominal: number | null
+          criado_em: string
+          criado_por: string | null
+          grau_protecao: string | null
+          id: string
+          largura_mm: number
+          largura_util_mm: number
+          layout: Json
+          levantamento_id: string | null
+          margem_lateral_mm: number
+          margem_topo_mm: number
+          material_caixa: string | null
+          nome: string | null
+          obra_id: string
+          planta_id: string | null
+          profundidade_mm: number
+          tag: string
+          template_id: string | null
+          tensao_nominal: string | null
+          tipo_quadro: string
+          atualizado_em: string
+        }
+        Insert: {
+          altura_mm?: number
+          altura_util_mm?: number
+          circuitos_vinculados?: Json
+          corrente_curto_ka?: number | null
+          corrente_nominal?: number | null
+          criado_em?: string
+          criado_por?: string | null
+          grau_protecao?: string | null
+          id?: string
+          largura_mm?: number
+          largura_util_mm?: number
+          layout?: Json
+          levantamento_id?: string | null
+          margem_lateral_mm?: number
+          margem_topo_mm?: number
+          material_caixa?: string | null
+          nome?: string | null
+          obra_id: string
+          planta_id?: string | null
+          profundidade_mm?: number
+          tag: string
+          template_id?: string | null
+          tensao_nominal?: string | null
+          tipo_quadro?: string
+          atualizado_em?: string
+        }
+        Update: {
+          altura_mm?: number
+          altura_util_mm?: number
+          circuitos_vinculados?: Json
+          corrente_curto_ka?: number | null
+          corrente_nominal?: number | null
+          criado_em?: string
+          criado_por?: string | null
+          grau_protecao?: string | null
+          id?: string
+          largura_mm?: number
+          largura_util_mm?: number
+          layout?: Json
+          levantamento_id?: string | null
+          margem_lateral_mm?: number
+          margem_topo_mm?: number
+          material_caixa?: string | null
+          nome?: string | null
+          obra_id?: string
+          planta_id?: string | null
+          profundidade_mm?: number
+          tag?: string
+          template_id?: string | null
+          tensao_nominal?: string | null
+          tipo_quadro?: string
+          atualizado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quadros_eletricos_obra_id_fkey"
+            columns: ["obra_id"]
+            isOneToOne: false
+            referencedRelation: "obras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quadros_eletricos_planta_id_fkey"
+            columns: ["planta_id"]
+            isOneToOne: false
+            referencedRelation: "plantas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quadros_eletricos_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "quadro_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quadros_eletricos_levantamento_id_fkey"
+            columns: ["levantamento_id"]
+            isOneToOne: false
+            referencedRelation: "levantamentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1207,6 +1397,8 @@ export type TagsTarefaRow = Tabelas<"tags_tarefa">;
 export type TarefaDependenciaRow = Tabelas<"tarefa_dependencias">;
 export type MedicaoPagamentoRow = Tabelas<"medicao_pagamentos">;
 export type LevantamentoRow = Tabelas<"levantamentos">;
+export type QuadroTemplateRow = Tabelas<"quadro_templates">;
+export type QuadroEletricoRow = Tabelas<"quadros_eletricos">;
 
 // As colunas jsonb chegam como `Json`. Reafirmamos a forma concreta na camada
 // de dominio para que a matematica de coordenadas continue tipada.

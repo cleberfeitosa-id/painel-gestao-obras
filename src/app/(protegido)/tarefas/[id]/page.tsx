@@ -95,15 +95,19 @@ async function buscarComplementos(id: string) {
   ]);
 
   const anexosLista = (anexos ?? []) as AnexoComAutor[];
-  const urls = await urlsAssinadas(
-    BUCKET_ANEXOS,
-    anexosLista.map((a) => a.caminho),
+  const caminhosAnexos = anexosLista.map((a) => a.caminho).filter(Boolean);
+  const urlsMap = await urlsAssinadas(BUCKET_ANEXOS, caminhosAnexos).catch(
+    () => new Map<string, string>(),
   );
+  const urlsRecord: Record<string, string> = {};
+  urlsMap.forEach((v, k) => {
+    urlsRecord[k] = v;
+  });
 
   return {
     comentarios: (comentarios ?? []) as ComentarioComAutor[],
     anexos: anexosLista,
-    urls,
+    urls: urlsRecord,
   };
 }
 
