@@ -27,7 +27,17 @@ import type {
 } from "@/lib/supabase/database.types";
 
 interface AnexoComAutor extends TarefaAnexoRow {
-  enviado_por_nome: string | null;
+  enviado_por_nome: string | { nome?: string | null } | null;
+}
+
+function extrairNomeAutor(
+  enviadoPorNome: string | { nome?: string | null } | null | undefined,
+): string {
+  if (!enviadoPorNome) return "Usuário";
+  if (typeof enviadoPorNome === "object") {
+    return enviadoPorNome.nome || "Usuário";
+  }
+  return String(enviadoPorNome);
 }
 
 interface AnexosProps {
@@ -447,8 +457,8 @@ export function Anexos({
                         )}
                         <p className="text-xs text-superficie-500">
                           {formatarTamanho(anexo.tamanho_bytes)} ·{" "}
-                          {MOMENTO_ANEXO[anexo.momento].rotulo} ·{" "}
-                          {anexo.enviado_por_nome ?? "Usuario"}
+                          {MOMENTO_ANEXO[anexo.momento]?.rotulo ?? anexo.momento} ·{" "}
+                          {extrairNomeAutor(anexo.enviado_por_nome)}
                         </p>
                       </div>
                       {podeExcluirAnexo(anexo) && (

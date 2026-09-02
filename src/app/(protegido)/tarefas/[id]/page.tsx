@@ -94,7 +94,23 @@ async function buscarComplementos(id: string) {
       .order("criado_em", { ascending: true }),
   ]);
 
-  const anexosLista = (anexos ?? []) as AnexoComAutor[];
+  const anexosLista: AnexoComAutor[] = (anexos ?? []).map((a) => {
+    const anexoItem = a as TarefaAnexoRow & {
+      enviado_por_nome?: { nome?: string | null } | string | null;
+    };
+    let nome: string | null = null;
+    if (anexoItem.enviado_por_nome) {
+      if (typeof anexoItem.enviado_por_nome === "object") {
+        nome = anexoItem.enviado_por_nome.nome ?? null;
+      } else if (typeof anexoItem.enviado_por_nome === "string") {
+        nome = anexoItem.enviado_por_nome;
+      }
+    }
+    return {
+      ...anexoItem,
+      enviado_por_nome: nome,
+    };
+  });
   const caminhosAnexos = anexosLista.map((a) => a.caminho).filter(Boolean);
   const urlsMap = await urlsAssinadas(BUCKET_ANEXOS, caminhosAnexos).catch(
     () => new Map<string, string>(),
