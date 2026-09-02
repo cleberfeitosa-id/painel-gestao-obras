@@ -165,13 +165,30 @@ export function gerarListaMateriaisQuadro(
   }
 
   for (const barramento of layout.barramentos) {
+    const numBarras = barramento.tipo === "trifasico" ? 3 : barramento.tipo === "tetrapolar" ? 4 : barramento.tipo === "bifasico" ? 2 : 1;
+    const larguraBarra = barramento.larguraBarraIndividualMm || Math.round(barramento.larguraTroncoMm / (numBarras || 1));
+    const espacamento = barramento.espacamentoDerivacoesMm || 35;
+    
     itens.push({
-      item: `Barramento Espinha de Peixe ${barramento.tipo === "trifasico" ? "Trifásico" : "Bifásico"}`,
-      especificacao: `Barramento de cobre eletrolítico ${barramento.correnteSuportadaA}A, ${barramento.derivacoes.length} derivações`,
+      item: `Barramento Espinha de Peixe ${barramento.tipo === "trifasico" ? "Trifásico (3 Barras)" : barramento.tipo === "tetrapolar" ? "Tetrapolar (4 Barras)" : barramento.tipo === "bifasico" ? "Bifásico (2 Barras)" : "Monofásico"}`,
+      especificacao: `Barramento em cobre eletrolítico ${barramento.correnteSuportadaA}A (${numBarras}x ${larguraBarra}mm x ${barramento.alturaMm}mm), ${barramento.derivacoes.length} derivações a cada ${espacamento}mm`,
       quantidade: 1,
       unidade: "cj",
       norma: "NBR IEC 61439-1 / DIN 43670",
-      detalhes: `Barramento Tronco ${barramento.alturaMm}mm x ${barramento.larguraTroncoMm}mm com derivações para disjuntores`,
+      detalhes: `Barramento Tronco ${numBarras} barras verticais paralelas com derivações horizontais para disjuntores`,
+    });
+  }
+
+  for (const bar of layout.barramentosNeutroTerra ?? []) {
+    const rotuloTipo = bar.tipo === "terra" ? "Barramento de Proteção Terra (PE)" : "Barramento de Neutro Isolado (N)";
+    const circuitosConectados = bar.furos.filter((f) => f.circuitoConectadoNome).length;
+    itens.push({
+      item: rotuloTipo,
+      especificacao: `Barramento em ${bar.material === "latao" ? "latão" : "cobre eletrolítico"} ${bar.comprimentoMm}x${bar.larguraMm}x${bar.profundidadeMm}mm com ${bar.furos.length} furos (Ø ${bar.diametroFuroPadraoMm}mm), In ${bar.correnteSuportadaA}A`,
+      quantidade: 1,
+      unidade: "un",
+      norma: bar.tipo === "terra" ? "NBR 5410 / IEC 60947-7-2" : "NBR 5410 / IEC 60947-7-1",
+      detalhes: `Tag ${bar.tag} (${circuitosConectados} circuitos conectados)`,
     });
   }
 

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { gerarTemplatesPadrao } from "@/lib/quadros/calculos";
-import type { QuadroEletricoLayout, CircuitoVinculado, QuadroTemplateItem } from "@/lib/quadros/tipos";
+import type { CircuitoVinculado, QuadroTemplateItem } from "@/lib/quadros/tipos";
 import type { Json } from "@/lib/supabase/database.types";
 
 async function verificarGestor(): Promise<{ erro: string; usuarioId?: string } | null> {
