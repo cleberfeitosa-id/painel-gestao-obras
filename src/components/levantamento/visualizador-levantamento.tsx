@@ -318,18 +318,6 @@ export function VisualizadorLevantamento({
     [itens],
   );
 
-  const circuitosDisponiveis = useMemo(() => {
-    const setCircs = new Set<string>();
-    for (const item of itens) {
-      if (item.metadadosCabo?.circuito) {
-        setCircs.add(item.metadadosCabo.circuito);
-      }
-    }
-    return Array.from(setCircs).sort((a, b) =>
-      a.localeCompare(b, undefined, { numeric: true }),
-    );
-  }, [itens]);
-
   const [historicoDesfazer, setHistoricoDesfazer] = useState<
     ItemLevantamento[][]
   >([]);
@@ -368,13 +356,33 @@ export function VisualizadorLevantamento({
     tipoCondutor: "Cobre",
     nivelId: "forro_teto",
     altura: 2.8,
-    fases: [{ nome: "R", cor: "#FFFFFF", quantidade: 1 }],
     condutores: [
       { tipo: "fase", quantidade: 1 },
       { tipo: "neutro", quantidade: 1, cor: "#2563EB" },
       { tipo: "terra", quantidade: 1, cor: "#16A34A" },
     ],
+    fases: [{ nome: "R", cor: "#FFFFFF", quantidade: 1 }],
   });
+
+  const circuitosDisponiveisComCor = useMemo(() => {
+    const mapa = new Map<string, string>();
+    if (metadadosCaboAtivo.circuito) {
+      mapa.set(metadadosCaboAtivo.circuito, metadadosCaboAtivo.cor || "#eab308");
+    }
+    for (const item of itens) {
+      if (item.metadadosCabo?.circuito) {
+        mapa.set(
+          item.metadadosCabo.circuito,
+          item.metadadosCabo.cor || item.cor || "#eab308",
+        );
+      }
+    }
+    return Array.from(mapa.entries())
+      .map(([circuito, cor]) => ({ circuito, cor }))
+      .sort((a, b) =>
+        a.circuito.localeCompare(b.circuito, undefined, { numeric: true }),
+      );
+  }, [itens, metadadosCaboAtivo]);
 
   const [modalDescidaAberto, setModalDescidaAberto] = useState(false);
   const [pontoDescidaPendente, setPontoDescidaPendente] =
@@ -1260,6 +1268,37 @@ export function VisualizadorLevantamento({
     const alturaDelta = Math.abs(dados.alturaOrigem - dados.alturaDestino);
     const agora = new Date().toISOString();
 
+    const metaCircuito = dados.circuito
+      ? itens.find((i) => i.metadadosCabo?.circuito === dados.circuito)?.metadadosCabo ||
+        (metadadosCaboAtivo.circuito === dados.circuito ? metadadosCaboAtivo : undefined)
+      : undefined;
+
+    const corFinal =
+      dados.cor ||
+      metaCircuito?.cor ||
+      (dados.circuito
+        ? circuitosDisponiveisComCor.find((c) => c.circuito === dados.circuito)?.cor
+        : undefined) ||
+      "#a855f7";
+
+    const metadadosCaboDescida: MetadadosCabo | undefined = metaCircuito
+      ? {
+          ...metaCircuito,
+          circuito: dados.circuito!,
+          cor: corFinal,
+          altura: dados.alturaOrigem,
+          nivelId: dados.nivelOrigemId,
+        }
+      : dados.circuito && metadadosCaboAtivo.circuito === dados.circuito
+        ? {
+            ...metadadosCaboAtivo,
+            circuito: dados.circuito,
+            cor: corFinal,
+            altura: dados.alturaOrigem,
+            nivelId: dados.nivelOrigemId,
+          }
+        : undefined;
+
     if (pontosAlvoDescidaLote.length > 0) {
       const novosItens: ItemLevantamento[] = pontosAlvoDescidaLote.map(
         (itemPonto, idx) => {
@@ -1280,8 +1319,9 @@ export function VisualizadorLevantamento({
             categoria: "Tubulações e Cabos",
             subtipo: dados.subtipo,
             nome: nomeItem,
-            cor: dados.cor,
+            cor: corFinal,
             circuito: dados.circuito,
+            metadadosCabo: metadadosCaboDescida,
             pontos: [p],
             nivelOrigemId: dados.nivelOrigemId,
             alturaOrigem: dados.alturaOrigem,
@@ -1309,8 +1349,9 @@ export function VisualizadorLevantamento({
           categoria: "Tubulações e Cabos",
           subtipo: dados.subtipo,
           nome: dados.nome,
-          cor: dados.cor,
+          cor: corFinal,
           circuito: dados.circuito,
+          metadadosCabo: metadadosCaboDescida,
           pontos: [p],
           nivelOrigemId: dados.nivelOrigemId,
           alturaOrigem: dados.alturaOrigem,
@@ -1331,8 +1372,9 @@ export function VisualizadorLevantamento({
         categoria: "Tubulações e Cabos",
         subtipo: dados.subtipo,
         nome: dados.nome,
-        cor: dados.cor,
+        cor: corFinal,
         circuito: dados.circuito,
+        metadadosCabo: metadadosCaboDescida,
         pontos: [pontoDescidaPendente],
         nivelOrigemId: dados.nivelOrigemId,
         alturaOrigem: dados.alturaOrigem,
@@ -3061,16 +3103,25 @@ export function VisualizadorLevantamento({
                             title={`Descida 3D: ${item.nome} (Δ=${item.comprimentoReal?.toFixed(2)}m)`}
                           >
                             <div
-                              className={`p-1 rounded-full bg-purple-600 text-white shadow-lg border ${
+                              className={`p-1 rounded-full text-white shadow-lg border ${
                                 ativo
                                   ? "ring-4 ring-purple-300 border-white"
                                   : "border-white"
                               }`}
+                              style={{ backgroundColor: item.cor || "#a855f7" }}
                             >
                               <ArrowDownUp className="h-3.5 w-3.5" />
                             </div>
                             {(ativo || modoExibicaoMedidas !== "nenhuma") && (
-                              <span className="bg-purple-900/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow mt-0.5 font-mono">
+                              <span
+                                className="text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow mt-0.5 font-mono"
+                                style={{
+                                  backgroundColor: item.cor
+                                    ? `${item.cor}dd`
+                                    : "rgba(88, 28, 135, 0.9)",
+                                }}
+                              >
+                                {item.circuito ? `${item.circuito} · ` : ""}
                                 {item.comprimentoReal?.toFixed(2)}m
                               </span>
                             )}
@@ -3504,7 +3555,7 @@ export function VisualizadorLevantamento({
       <ModalDescidaSubida
         aberto={modalDescidaAberto}
         niveis={niveis}
-        circuitosDisponiveis={circuitosDisponiveis}
+        circuitosDisponiveis={circuitosDisponiveisComCor}
         aoSalvar={salvarDescidaSubida}
         aoFechar={() => {
           setModalDescidaAberto(false);

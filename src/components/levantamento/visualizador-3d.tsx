@@ -54,6 +54,7 @@ export function Visualizador3D({
   const [apenasMarcacoes, setApenasMarcacoes] = useState(false);
   const [mostrarGrid, setMostrarGrid] = useState(true);
   const [escalaVertical, setEscalaVertical] = useState(1.5);
+  const [espessuraTraco, setEspessuraTraco] = useState(1.0);
   const [vistaAtual, setVistaAtual] = useState<string>("iso_ne");
 
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -225,25 +226,86 @@ export function Visualizador3D({
       return new THREE.Vector3(xNorm, y3D, zNorm);
     }
 
+    const mapaCoresCircuito = new Map<string, string>();
+    itens.forEach((it) => {
+      if (it.metadadosCabo?.circuito && it.metadadosCabo.cor) {
+        mapaCoresCircuito.set(it.metadadosCabo.circuito, it.metadadosCabo.cor);
+      } else if (
+        it.circuito &&
+        it.cor &&
+        (it.tipo === "tubulacao_cabo" || it.tipo === "distancia")
+      ) {
+        mapaCoresCircuito.set(it.circuito, it.cor);
+      }
+    });
+
+    function resolverCorItem(it: ItemLevantamento): string {
+      if (it.metadadosCabo?.cor) {
+        return it.metadadosCabo.cor;
+      }
+      if (it.circuito && mapaCoresCircuito.has(it.circuito)) {
+        return mapaCoresCircuito.get(it.circuito)!;
+      }
+      return it.cor;
+    }
+
+    const mapaCorredores = new Map<string, string[]>();
+    const itensLineares = itens.filter(
+      (it) =>
+        (it.tipo === "distancia" || it.tipo === "tubulacao_cabo") &&
+        it.pontos.length >= 2,
+    );
+
+    itensLineares.forEach((itemLin) => {
+      for (let i = 0; i < itemLin.pontos.length - 1; i++) {
+        const p1 = itemLin.pontos[i];
+        const p2 = itemLin.pontos[i + 1];
+        const k1 = `${Math.round(p1.x / 8)},${Math.round(p1.y / 8)}`;
+        const k2 = `${Math.round(p2.x / 8)},${Math.round(p2.y / 8)}`;
+        const chaveSeg = k1 < k2 ? `${k1}_${k2}` : `${k2}_${k1}`;
+        const lista = mapaCorredores.get(chaveSeg) ?? [];
+        if (!lista.includes(itemLin.id)) {
+          lista.push(itemLin.id);
+          mapaCorredores.set(chaveSeg, lista);
+        }
+      }
+    });
+
+    const mapaDescidasPosicao = new Map<string, string[]>();
+    const itensDescida = itens.filter((it) => it.tipo === "descida_subida");
+    itensDescida.forEach((d) => {
+      const p = d.pontos[0] ?? { x: 0, y: 0 };
+      const chaveDesc = `${Math.round(p.x / 6)},${Math.round(p.y / 6)}`;
+      const lista = mapaDescidasPosicao.get(chaveDesc) ?? [];
+      if (!lista.includes(d.id)) {
+        lista.push(d.id);
+        mapaDescidasPosicao.set(chaveDesc, lista);
+      }
+    });
+
     itens.forEach((item) => {
-      const corThree = new THREE.Color(item.cor);
+      const corHex = resolverCorItem(item);
+      const corThree = new THREE.Color(corHex);
 
       if (item.tipo === "ponto") {
         const cota = item.altura ?? 0.3;
         const p1 = item.pontos[0] ?? { x: 0, y: 0 };
         const pos = converterCoords2DPara3D(p1, cota);
 
-        const geo = new THREE.BoxGeometry(10, 8, 10);
+        const tamBox = 7 * espessuraTraco;
+        const altBox = 6 * espessuraTraco;
+        const geo = new THREE.BoxGeometry(tamBox, altBox, tamBox);
         const mat = new THREE.MeshStandardMaterial({
           color: corThree,
-          metalness: 0.2,
+          metalness: 0.3,
           roughness: 0.3,
         });
         const boxMesh = new THREE.Mesh(geo, mat);
         boxMesh.position.copy(pos);
         scene.add(boxMesh);
 
-        const stemGeo = new THREE.CylinderGeometry(0.8, 0.8, pos.y, 8);
+        const raioStem = 0.5 * espessuraTraco;
+        const stemGeo = new THREE.CylinderGeometry(raioStem, raioStem, pos.y, 8);
         const stemMat = new THREE.MeshBasicMaterial({
           color: corThree,
           transparent: true,
@@ -255,27 +317,102 @@ export function Visualizador3D({
       } else if (item.tipo === "distancia" || item.tipo === "tubulacao_cabo") {
         const cota = item.altura ?? 2.8;
         if (item.pontos.length >= 2) {
-          const pontos3D = item.pontos.map((pt) =>
+          const pontos3DBase = item.pontos.map((pt) =>
             converterCoords2DPara3D(pt, cota),
           );
+
+          const pontos3DDeslocados: THREE.Vector3[] = [];
+
+          for (let i = 0; i < item.pontos.length; i++) {
+            const ptAtual = item.pontos[i];
+            const p3D = pontos3DBase[i].clone();
+
+            const vetoresOffset: THREE.Vector3[] = [];
+
+            if (i > 0) {
+              const pAnt = item.pontos[i - 1];
+              const k1 = `${Math.round(pAnt.x / 8)},${Math.round(pAnt.y / 8)}`;
+              const k2 = `${Math.round(ptAtual.x / 8)},${Math.round(ptAtual.y / 8)}`;
+              const chaveSeg = k1 < k2 ? `${k1}_${k2}` : `${k2}_${k1}`;
+              const lista = mapaCorredores.get(chaveSeg) ?? [item.id];
+              if (lista.length > 1) {
+                const laneIdx = lista.indexOf(item.id);
+                const totalLanes = lista.length;
+                const dir = new THREE.Vector3().subVectors(
+                  pontos3DBase[i],
+                  pontos3DBase[i - 1],
+                );
+                dir.y = 0;
+                if (dir.lengthSq() > 0.0001) {
+                  dir.normalize();
+                  const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+                  const distOffset =
+                    (laneIdx - (totalLanes - 1) / 2) * (2.5 * espessuraTraco);
+                  vetoresOffset.push(perp.multiplyScalar(distOffset));
+                }
+              }
+            }
+
+            if (i < item.pontos.length - 1) {
+              const pProx = item.pontos[i + 1];
+              const k1 = `${Math.round(ptAtual.x / 8)},${Math.round(ptAtual.y / 8)}`;
+              const k2 = `${Math.round(pProx.x / 8)},${Math.round(pProx.y / 8)}`;
+              const chaveSeg = k1 < k2 ? `${k1}_${k2}` : `${k2}_${k1}`;
+              const lista = mapaCorredores.get(chaveSeg) ?? [item.id];
+              if (lista.length > 1) {
+                const laneIdx = lista.indexOf(item.id);
+                const totalLanes = lista.length;
+                const dir = new THREE.Vector3().subVectors(
+                  pontos3DBase[i + 1],
+                  pontos3DBase[i],
+                );
+                dir.y = 0;
+                if (dir.lengthSq() > 0.0001) {
+                  dir.normalize();
+                  const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+                  const distOffset =
+                    (laneIdx - (totalLanes - 1) / 2) * (2.5 * espessuraTraco);
+                  vetoresOffset.push(perp.multiplyScalar(distOffset));
+                }
+              }
+            }
+
+            if (vetoresOffset.length > 0) {
+              const mediaOffset = new THREE.Vector3();
+              vetoresOffset.forEach((v) => mediaOffset.add(v));
+              mediaOffset.divideScalar(vetoresOffset.length);
+              p3D.add(mediaOffset);
+            }
+
+            pontos3DDeslocados.push(p3D);
+          }
+
           const curva = new THREE.CatmullRomCurve3(
-            pontos3D,
+            pontos3DDeslocados,
             false,
             "catmullrom",
             0.0,
           );
-          const tubeGeo = new THREE.TubeGeometry(curva, 32, 2.5, 8, false);
+          const raioTubo = 0.95 * espessuraTraco;
+          const tubeGeo = new THREE.TubeGeometry(curva, 32, raioTubo, 8, false);
           const tubeMat = new THREE.MeshStandardMaterial({
             color: corThree,
-            metalness: 0.4,
-            roughness: 0.2,
+            metalness: 0.45,
+            roughness: 0.25,
+            emissive: corThree,
+            emissiveIntensity: 0.15,
           });
           const tube = new THREE.Mesh(tubeGeo, tubeMat);
           scene.add(tube);
 
-          pontos3D.forEach((p) => {
-            const jGeo = new THREE.SphereGeometry(3.5, 8, 8);
-            const jMat = new THREE.MeshStandardMaterial({ color: corThree });
+          const raioJuncao = 1.3 * espessuraTraco;
+          pontos3DDeslocados.forEach((p) => {
+            const jGeo = new THREE.SphereGeometry(raioJuncao, 8, 8);
+            const jMat = new THREE.MeshStandardMaterial({
+              color: corThree,
+              metalness: 0.45,
+              roughness: 0.25,
+            });
             const jMesh = new THREE.Mesh(jGeo, jMat);
             jMesh.position.copy(p);
             scene.add(jMesh);
@@ -294,13 +431,34 @@ export function Visualizador3D({
           p1,
           Math.min(altOrigem, altDestino),
         );
-        const altCilindro = Math.abs(posAlta.y - posBaixa.y);
 
-        const geoDesc = new THREE.CylinderGeometry(3.5, 3.5, altCilindro, 16);
+        const chaveDesc = `${Math.round(p1.x / 6)},${Math.round(p1.y / 6)}`;
+        const listaDescidas = mapaDescidasPosicao.get(chaveDesc) ?? [item.id];
+        if (listaDescidas.length > 1) {
+          const idx = listaDescidas.indexOf(item.id);
+          const total = listaDescidas.length;
+          const angulo = (2 * Math.PI * idx) / total;
+          const raioBundle = 2.4 * espessuraTraco;
+          const offX = raioBundle * Math.cos(angulo);
+          const offZ = raioBundle * Math.sin(angulo);
+          posAlta.x += offX;
+          posAlta.z += offZ;
+          posBaixa.x += offX;
+          posBaixa.z += offZ;
+        }
+
+        const altCilindro = Math.abs(posAlta.y - posBaixa.y);
+        const raioDescida = 1.15 * espessuraTraco;
+        const geoDesc = new THREE.CylinderGeometry(
+          raioDescida,
+          raioDescida,
+          altCilindro,
+          16,
+        );
         const matDesc = new THREE.MeshStandardMaterial({
           color: corThree,
-          metalness: 0.6,
-          roughness: 0.2,
+          metalness: 0.5,
+          roughness: 0.25,
           emissive: corThree,
           emissiveIntensity: 0.25,
         });
@@ -312,8 +470,13 @@ export function Visualizador3D({
         );
         scene.add(meshDesc);
 
-        const topoGeo = new THREE.SphereGeometry(4.5, 12, 12);
-        const topoMat = new THREE.MeshStandardMaterial({ color: corThree });
+        const raioCaps = 1.75 * espessuraTraco;
+        const topoGeo = new THREE.SphereGeometry(raioCaps, 12, 12);
+        const topoMat = new THREE.MeshStandardMaterial({
+          color: corThree,
+          metalness: 0.5,
+          roughness: 0.25,
+        });
         const topoMesh = new THREE.Mesh(topoGeo, topoMat);
         topoMesh.position.copy(posAlta);
         scene.add(topoMesh);
@@ -393,6 +556,7 @@ export function Visualizador3D({
     apenasMarcacoes,
     mostrarGrid,
     escalaVertical,
+    espessuraTraco,
     atualizarPosicaoCamera,
   ]);
 
@@ -656,6 +820,23 @@ export function Visualizador3D({
             />
             <span className="text-slate-300 min-w-6 font-mono">
               {escalaVertical}x
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-2 bg-slate-800/80 rounded-lg border border-slate-700 text-xs">
+            <span className="text-slate-400">Traço:</span>
+            <input
+              type="range"
+              min="0.4"
+              max="2.0"
+              step="0.1"
+              value={espessuraTraco}
+              onChange={(e) => setEspessuraTraco(Number(e.target.value))}
+              className="w-16 accent-azul-400 cursor-pointer"
+              title="Ajustar a espessura das tubulações e descidas 3D"
+            />
+            <span className="text-slate-300 min-w-6 font-mono">
+              {espessuraTraco.toFixed(1)}x
             </span>
           </div>
         </div>

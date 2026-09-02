@@ -6,13 +6,19 @@ import { Botao, Campo, Modal, Selecao } from "@/components/ui";
 import { formatarMetros } from "@/lib/levantamento/calculos";
 import type { Nivel3D } from "@/lib/levantamento/tipos";
 
+export interface ItemCircuitoDisponivel {
+  circuito: string;
+  cor?: string;
+}
+
 interface ModalDescidaSubidaProps {
   aberto: boolean;
   niveis: Nivel3D[];
-  circuitosDisponiveis?: string[];
+  circuitosDisponiveis?: (string | ItemCircuitoDisponivel)[];
   dadosIniciais?: {
     nome?: string;
     subtipo?: string;
+    cor?: string;
     circuito?: string;
     nivelOrigemId?: string;
     alturaOrigem?: number;
@@ -40,10 +46,15 @@ export function ModalDescidaSubida({
   aoSalvar,
   aoFechar,
 }: ModalDescidaSubidaProps) {
+  const circuitosNormalizados: ItemCircuitoDisponivel[] = circuitosDisponiveis.map(
+    (c) => (typeof c === "string" ? { circuito: c } : c),
+  );
+
   const [nome, setNome] = useState(
     dadosIniciais?.nome ?? "Descida de Eletroduto (Forro → Tomada Baixa)",
   );
   const [circuito, setCircuito] = useState(dadosIniciais?.circuito ?? "");
+  const [cor, setCor] = useState(dadosIniciais?.cor ?? "#a855f7");
   const [nivelOrigemId, setNivelOrigemId] = useState(
     dadosIniciais?.nivelOrigemId ??
       (niveis.find((n) => n.id === "forro_teto")?.id ?? niveis[niveis.length - 1]?.id ?? "forro_teto"),
@@ -61,6 +72,20 @@ export function ModalDescidaSubida({
     dadosIniciais?.alturaDestino ??
       (niveis.find((n) => n.id === "tomada_baixa")?.cota ?? 0.3),
   );
+
+  function selecionarCircuito(novoCircuito: string) {
+    setCircuito(novoCircuito);
+    if (novoCircuito) {
+      setNome(`Descida Circuito ${novoCircuito}`);
+      const circInfo = circuitosNormalizados.find((c) => c.circuito === novoCircuito);
+      if (circInfo?.cor) {
+        setCor(circInfo.cor);
+      }
+    } else {
+      setNome("Descida de Eletroduto");
+      setCor("#a855f7");
+    }
+  }
 
   function aplicarPresetDescida(origemId: string, destinoId: string, label: string) {
     setNivelOrigemId(origemId);
@@ -100,7 +125,7 @@ export function ModalDescidaSubida({
     aoSalvar({
       nome: nome.trim() || "Descida de Eletroduto",
       subtipo: "descida_eletroduto",
-      cor: "#a855f7",
+      cor: cor || "#a855f7",
       circuito: circuito.trim() || undefined,
       nivelOrigemId,
       alturaOrigem,
@@ -173,21 +198,16 @@ export function ModalDescidaSubida({
             onChange={(e) => setNome(e.target.value)}
           />
 
-          {circuitosDisponiveis.length > 0 ? (
+          {circuitosNormalizados.length > 0 ? (
             <Selecao
               rotulo="Vincular ao Circuito (Opcional)"
               value={circuito}
-              onChange={(e) => {
-                setCircuito(e.target.value);
-                if (e.target.value) {
-                  setNome(`Descida Circuito ${e.target.value}`);
-                }
-              }}
+              onChange={(e) => selecionarCircuito(e.target.value)}
             >
               <option value="">Nenhum (Eletroduto Geral)</option>
-              {circuitosDisponiveis.map((c) => (
-                <option key={c} value={c}>
-                  Circuito {c}
+              {circuitosNormalizados.map((c) => (
+                <option key={c.circuito} value={c.circuito}>
+                  Circuito {c.circuito}
                 </option>
               ))}
             </Selecao>
@@ -196,9 +216,38 @@ export function ModalDescidaSubida({
               rotulo="Circuito Vinculado (Opcional)"
               placeholder="Ex.: C1, C4"
               value={circuito}
-              onChange={(e) => setCircuito(e.target.value)}
+              onChange={(e) => selecionarCircuito(e.target.value)}
             />
           )}
+        </div>
+
+        <div className="flex items-center justify-between p-2.5 rounded-xl border border-superficie-200 bg-superficie-50">
+          <div className="flex items-center gap-2">
+            <span
+              className="w-4 h-4 rounded-full border border-black/20 shadow-xs inline-block shrink-0"
+              style={{ backgroundColor: cor }}
+            />
+            <div>
+              <span className="text-xs font-semibold text-superficie-800 block">
+                Cor da Descida (2D e 3D):
+              </span>
+              <span className="text-[11px] text-superficie-500">
+                {circuito ? `Herdada do Circuito ${circuito}` : "Cor personalizada da descida"}
+              </span>
+            </div>
+          </div>
+          <label
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-superficie-300 bg-white hover:bg-superficie-100 cursor-pointer text-xs text-superficie-700 font-medium"
+            title="Alterar cor da descida"
+          >
+            <span>Alterar</span>
+            <input
+              type="color"
+              value={cor}
+              onChange={(e) => setCor(e.target.value)}
+              className="w-4 h-4 rounded cursor-pointer border-0 p-0 bg-transparent"
+            />
+          </label>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -8,6 +8,7 @@ import {
   CORES_PADRAO_CONDUTOR,
   type FuncaoCondutor,
   type ItemLevantamento,
+  type MetadadosCabo,
   type Nivel3D,
   type ResumoItemArea,
   type ResumoItemCabo,
@@ -47,6 +48,170 @@ export function calcularAreaPoligono(
   return { area, perimetro };
 }
 
+function extrairListaCondutores(meta: MetadadosCabo): {
+  funcao: FuncaoCondutor;
+  fase?: string;
+  corCabo?: string;
+  quantidade: number;
+}[] {
+  const listaCondutores: {
+    funcao: FuncaoCondutor;
+    fase?: string;
+    corCabo?: string;
+    quantidade: number;
+  }[] = [];
+
+  if (meta.fases && meta.fases.length > 0) {
+    for (const f of meta.fases) {
+      if (f.quantidade > 0) {
+        listaCondutores.push({
+          funcao: "fase",
+          fase: f.nome,
+          corCabo: f.cor || CORES_PADRAO_CONDUTOR.faseR,
+          quantidade: f.quantidade,
+        });
+      }
+    }
+    for (const cond of meta.condutores) {
+      if (cond.tipo !== "fase" && cond.quantidade > 0) {
+        const corPadrao =
+          cond.tipo === "neutro"
+            ? CORES_PADRAO_CONDUTOR.neutro
+            : cond.tipo === "terra"
+              ? CORES_PADRAO_CONDUTOR.terra
+              : CORES_PADRAO_CONDUTOR.retorno;
+        listaCondutores.push({
+          funcao: cond.tipo,
+          corCabo: cond.cor || corPadrao,
+          quantidade: cond.quantidade,
+        });
+      }
+    }
+  } else {
+    for (const cond of meta.condutores) {
+      if (cond.quantidade > 0) {
+        if (cond.tipo === "fase") {
+          if (cond.fase) {
+            listaCondutores.push({
+              funcao: "fase",
+              fase: cond.fase,
+              corCabo: cond.cor || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
+              quantidade: cond.quantidade,
+            });
+          } else if (cond.quantidade === 1) {
+            listaCondutores.push({
+              funcao: "fase",
+              fase: "R",
+              corCabo: meta.corFaseR || meta.corFase || cond.cor || CORES_PADRAO_CONDUTOR.faseR,
+              quantidade: 1,
+            });
+          } else if (cond.quantidade === 2) {
+            listaCondutores.push({
+              funcao: "fase",
+              fase: "R",
+              corCabo: meta.corFaseR || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
+              quantidade: 1,
+            });
+            listaCondutores.push({
+              funcao: "fase",
+              fase: "S",
+              corCabo: meta.corFaseS || CORES_PADRAO_CONDUTOR.faseS,
+              quantidade: 1,
+            });
+          } else if (cond.quantidade === 3) {
+            listaCondutores.push({
+              funcao: "fase",
+              fase: "R",
+              corCabo: meta.corFaseR || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
+              quantidade: 1,
+            });
+            listaCondutores.push({
+              funcao: "fase",
+              fase: "S",
+              corCabo: meta.corFaseS || CORES_PADRAO_CONDUTOR.faseS,
+              quantidade: 1,
+            });
+            listaCondutores.push({
+              funcao: "fase",
+              fase: "T",
+              corCabo: meta.corFaseT || CORES_PADRAO_CONDUTOR.faseT,
+              quantidade: 1,
+            });
+          } else {
+            listaCondutores.push({
+              funcao: "fase",
+              corCabo: cond.cor || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
+              quantidade: cond.quantidade,
+            });
+          }
+        } else {
+          const corPadrao =
+            cond.tipo === "neutro"
+              ? CORES_PADRAO_CONDUTOR.neutro
+              : cond.tipo === "terra"
+                ? CORES_PADRAO_CONDUTOR.terra
+                : CORES_PADRAO_CONDUTOR.retorno;
+          listaCondutores.push({
+            funcao: cond.tipo,
+            corCabo: cond.cor || corPadrao,
+            quantidade: cond.quantidade,
+          });
+        }
+      }
+    }
+  }
+  return listaCondutores;
+}
+
+function acumularCabos(
+  meta: MetadadosCabo,
+  compLinear: number,
+  mapaCabosCircuito: Map<string, ResumoItemCabo>,
+  mapaCabosTipo: Map<string, ResumoItemCaboPorTipo>,
+): number {
+  let totalCabosItem = 0;
+  const listaCondutores = extrairListaCondutores(meta);
+
+  for (const itemCabo of listaCondutores) {
+    const compCondutor = compLinear * itemCabo.quantidade;
+    totalCabosItem += compCondutor;
+
+    const chaveCaboCircuito = `${meta.circuito}_${meta.tipoCabo}_${itemCabo.funcao}_${itemCabo.fase ?? ""}_${itemCabo.corCabo ?? ""}`;
+    const existenteCabo = mapaCabosCircuito.get(chaveCaboCircuito);
+    if (existenteCabo) {
+      existenteCabo.quantidadeCondutores += itemCabo.quantidade;
+      existenteCabo.comprimentoTotal += compCondutor;
+    } else {
+      mapaCabosCircuito.set(chaveCaboCircuito, {
+        circuito: meta.circuito,
+        corCircuito: meta.cor,
+        tipoCabo: meta.tipoCabo,
+        tipoCondutor: meta.tipoCondutor,
+        funcao: itemCabo.funcao,
+        fase: itemCabo.fase,
+        corCabo: itemCabo.corCabo,
+        quantidadeCondutores: itemCabo.quantidade,
+        comprimentoTotal: compCondutor,
+      });
+    }
+
+    const chaveCaboTipo = `${meta.tipoCabo}_${itemCabo.funcao}_${itemCabo.corCabo ?? ""}`;
+    const existenteTipo = mapaCabosTipo.get(chaveCaboTipo);
+    if (existenteTipo) {
+      existenteTipo.comprimentoTotal += compCondutor;
+    } else {
+      mapaCabosTipo.set(chaveCaboTipo, {
+        tipoCabo: meta.tipoCabo,
+        funcao: itemCabo.funcao,
+        corCabo: itemCabo.corCabo,
+        comprimentoTotal: compCondutor,
+      });
+    }
+  }
+
+  return totalCabosItem;
+}
+
 export function calcularResumoLevantamento(
   itens: ItemLevantamento[],
   calibracao: Calibracao | null,
@@ -60,6 +225,13 @@ export function calcularResumoLevantamento(
   const mapaCabosTipo = new Map<string, ResumoItemCaboPorTipo>();
   const mapaAreas = new Map<string, ResumoItemArea>();
   const mapaDescidas = new Map<string, ResumoItemDescidaSubida>();
+
+  const mapaMetadadosPorCircuito = new Map<string, MetadadosCabo>();
+  for (const item of itens) {
+    if (item.metadadosCabo?.circuito) {
+      mapaMetadadosPorCircuito.set(item.metadadosCabo.circuito, item.metadadosCabo);
+    }
+  }
 
   let totalGeralElementos = 0;
   let totalGeralDistancias = 0;
@@ -105,156 +277,23 @@ export function calcularResumoLevantamento(
         });
       }
 
-      if (item.metadadosCabo && (item.metadadosCabo.condutores.length > 0 || (item.metadadosCabo.fases && item.metadadosCabo.fases.length > 0))) {
-        const meta = item.metadadosCabo;
-        const listaCondutores: {
-          funcao: FuncaoCondutor;
-          fase?: string;
-          corCabo?: string;
-          quantidade: number;
-        }[] = [];
-
-        if (meta.fases && meta.fases.length > 0) {
-          for (const f of meta.fases) {
-            if (f.quantidade > 0) {
-              listaCondutores.push({
-                funcao: "fase",
-                fase: f.nome,
-                corCabo: f.cor || CORES_PADRAO_CONDUTOR.faseR,
-                quantidade: f.quantidade,
-              });
-            }
-          }
-          for (const cond of meta.condutores) {
-            if (cond.tipo !== "fase" && cond.quantidade > 0) {
-              const corPadrao =
-                cond.tipo === "neutro"
-                  ? CORES_PADRAO_CONDUTOR.neutro
-                  : cond.tipo === "terra"
-                    ? CORES_PADRAO_CONDUTOR.terra
-                    : CORES_PADRAO_CONDUTOR.retorno;
-              listaCondutores.push({
-                funcao: cond.tipo,
-                corCabo: cond.cor || corPadrao,
-                quantidade: cond.quantidade,
-              });
-            }
-          }
-        } else {
-          for (const cond of meta.condutores) {
-            if (cond.quantidade > 0) {
-              if (cond.tipo === "fase") {
-                if (cond.fase) {
-                  listaCondutores.push({
-                    funcao: "fase",
-                    fase: cond.fase,
-                    corCabo: cond.cor || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
-                    quantidade: cond.quantidade,
-                  });
-                } else if (cond.quantidade === 1) {
-                  listaCondutores.push({
-                    funcao: "fase",
-                    fase: "R",
-                    corCabo: meta.corFaseR || meta.corFase || cond.cor || CORES_PADRAO_CONDUTOR.faseR,
-                    quantidade: 1,
-                  });
-                } else if (cond.quantidade === 2) {
-                  listaCondutores.push({
-                    funcao: "fase",
-                    fase: "R",
-                    corCabo: meta.corFaseR || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
-                    quantidade: 1,
-                  });
-                  listaCondutores.push({
-                    funcao: "fase",
-                    fase: "S",
-                    corCabo: meta.corFaseS || CORES_PADRAO_CONDUTOR.faseS,
-                    quantidade: 1,
-                  });
-                } else if (cond.quantidade === 3) {
-                  listaCondutores.push({
-                    funcao: "fase",
-                    fase: "R",
-                    corCabo: meta.corFaseR || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
-                    quantidade: 1,
-                  });
-                  listaCondutores.push({
-                    funcao: "fase",
-                    fase: "S",
-                    corCabo: meta.corFaseS || CORES_PADRAO_CONDUTOR.faseS,
-                    quantidade: 1,
-                  });
-                  listaCondutores.push({
-                    funcao: "fase",
-                    fase: "T",
-                    corCabo: meta.corFaseT || CORES_PADRAO_CONDUTOR.faseT,
-                    quantidade: 1,
-                  });
-                } else {
-                  listaCondutores.push({
-                    funcao: "fase",
-                    corCabo: cond.cor || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
-                    quantidade: cond.quantidade,
-                  });
-                }
-              } else {
-                const corPadrao =
-                  cond.tipo === "neutro"
-                    ? CORES_PADRAO_CONDUTOR.neutro
-                    : cond.tipo === "terra"
-                      ? CORES_PADRAO_CONDUTOR.terra
-                      : CORES_PADRAO_CONDUTOR.retorno;
-                listaCondutores.push({
-                  funcao: cond.tipo,
-                  corCabo: cond.cor || corPadrao,
-                  quantidade: cond.quantidade,
-                });
-              }
-            }
-          }
-        }
-
-        for (const itemCabo of listaCondutores) {
-          const compCondutor = compLinear * itemCabo.quantidade;
-          totalGeralCabos += compCondutor;
-
-          const chaveCaboCircuito = `${meta.circuito}_${meta.tipoCabo}_${itemCabo.funcao}_${itemCabo.fase ?? ""}_${itemCabo.corCabo ?? ""}`;
-          const existenteCabo = mapaCabosCircuito.get(chaveCaboCircuito);
-          if (existenteCabo) {
-            existenteCabo.quantidadeCondutores += itemCabo.quantidade;
-            existenteCabo.comprimentoTotal += compCondutor;
-          } else {
-            mapaCabosCircuito.set(chaveCaboCircuito, {
-              circuito: meta.circuito,
-              corCircuito: meta.cor,
-              tipoCabo: meta.tipoCabo,
-              tipoCondutor: meta.tipoCondutor,
-              funcao: itemCabo.funcao,
-              fase: itemCabo.fase,
-              corCabo: itemCabo.corCabo,
-              quantidadeCondutores: itemCabo.quantidade,
-              comprimentoTotal: compCondutor,
-            });
-          }
-
-          const chaveCaboTipo = `${meta.tipoCabo}_${itemCabo.funcao}_${itemCabo.corCabo ?? ""}`;
-          const existenteTipo = mapaCabosTipo.get(chaveCaboTipo);
-          if (existenteTipo) {
-            existenteTipo.comprimentoTotal += compCondutor;
-          } else {
-            mapaCabosTipo.set(chaveCaboTipo, {
-              tipoCabo: meta.tipoCabo,
-              funcao: itemCabo.funcao,
-              corCabo: itemCabo.corCabo,
-              comprimentoTotal: compCondutor,
-            });
-          }
-        }
+      if (
+        item.metadadosCabo &&
+        (item.metadadosCabo.condutores.length > 0 ||
+          (item.metadadosCabo.fases && item.metadadosCabo.fases.length > 0))
+      ) {
+        totalGeralCabos += acumularCabos(
+          item.metadadosCabo,
+          compLinear,
+          mapaCabosCircuito,
+          mapaCabosTipo,
+        );
       }
     } else if (item.tipo === "descida_subida") {
       const altOrigem = item.alturaOrigem ?? 2.8;
       const altDestino = item.alturaDestino ?? 0.3;
-      const alturaDelta = Math.abs(altOrigem - altDestino);
+      const alturaDelta =
+        item.comprimentoReal ?? Math.abs(altOrigem - altDestino);
       totalGeralDistancias += alturaDelta;
 
       const chaveDesc = item.subtipo;
@@ -270,6 +309,23 @@ export function calcularResumoLevantamento(
           alturaTotal: alturaDelta,
           quantidade: 1,
         });
+      }
+
+      const metaDescida =
+        item.metadadosCabo ||
+        (item.circuito ? mapaMetadadosPorCircuito.get(item.circuito) : undefined);
+
+      if (
+        metaDescida &&
+        (metaDescida.condutores.length > 0 ||
+          (metaDescida.fases && metaDescida.fases.length > 0))
+      ) {
+        totalGeralCabos += acumularCabos(
+          metaDescida,
+          alturaDelta,
+          mapaCabosCircuito,
+          mapaCabosTipo,
+        );
       }
     } else if (item.tipo === "area") {
       let areaValor = item.areaReal ?? 0;
