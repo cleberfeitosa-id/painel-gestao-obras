@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import {
   Download,
   Eye,
   EyeOff,
   FileText,
+  Filter,
   Rotate3d,
+  X,
 } from "lucide-react";
 import { LegendaDinamica } from "./legenda-dinamica";
 import {
@@ -56,6 +58,112 @@ export function Visualizador3D({
   const [escalaVertical, setEscalaVertical] = useState(1.5);
   const [espessuraTraco, setEspessuraTraco] = useState(1.0);
   const [vistaAtual, setVistaAtual] = useState<string>("iso_ne");
+  const [circuitoFiltro, setCircuitoFiltro] = useState<string>("todos");
+
+  const listaCircuitos = useMemo(() => {
+    const mapa = new Map<
+      string,
+      { circuito: string; cor: string; totalMetros: number; qtdTrechos: number }
+    >();
+
+    itens.forEach((it) => {
+      const circ = it.metadadosCabo?.circuito || it.circuito;
+      if (circ) {
+        const cor = it.metadadosCabo?.cor || it.cor || "#eab308";
+        const comp = it.comprimentoReal ?? 0;
+        const exist = mapa.get(circ);
+        if (exist) {
+          exist.totalMetros += comp;
+          exist.qtdTrechos += 1;
+        } else {
+          mapa.set(circ, {
+            circuito: circ,
+            cor,
+            totalMetros: comp,
+            qtdTrechos: 1,
+          });
+        }
+      }
+    });
+
+    return Array.from(mapa.values()).sort((a, b) =>
+      a.circuito.localeCompare(b.circuito, undefined, { numeric: true }),
+    );
+  }, [itens]);
+
+  const circuitoAtivoInfo = useMemo(() => {
+    if (circuitoFiltro === "todos" || circuitoFiltro === "sem_circuito") {
+      return null;
+    }
+    return listaCircuitos.find((c) => c.circuito === circuitoFiltro) ?? null;
+  }, [circuitoFiltro, listaCircuitos]);
+
+  const pontosVerticesCircuito = useMemo(() => {
+    if (circuitoFiltro === "todos" || circuitoFiltro === "sem_circuito") {
+      return null;
+    }
+    const vertices: { x: number; y: number }[] = [];
+    itens.forEach((it) => {
+      const circ = it.metadadosCabo?.circuito || it.circuito;
+      if (circ === circuitoFiltro) {
+        it.pontos.forEach((p) => vertices.push(p));
+      }
+    });
+    return vertices;
+  }, [itens, circuitoFiltro]);
+
+  const resumoExibicao = useMemo(() => {
+    if (circuitoFiltro === "todos") return resumo;
+    if (circuitoFiltro === "sem_circuito") {
+      return {
+        ...resumo,
+        cabos: [],
+        cabosPorTipo: [],
+        totalGeralCabos: 0,
+        descidasSubidas: resumo.descidasSubidas.filter((d) =>
+          itens.some(
+            (it) =>
+              it.subtipo === d.subtipo &&
+              it.tipo === "descida_subida" &&
+              !it.circuito &&
+              !it.metadadosCabo?.circuito,
+          ),
+        ),
+      };
+    }
+
+    const cabosFiltrados = resumo.cabos.filter(
+      (c) => c.circuito === circuitoFiltro,
+    );
+    const totalCabosFiltrados = cabosFiltrados.reduce(
+      (acc, c) => acc + c.comprimentoTotal,
+      0,
+    );
+
+    return {
+      ...resumo,
+      cabos: cabosFiltrados,
+      totalGeralCabos: totalCabosFiltrados,
+      descidasSubidas: resumo.descidasSubidas.filter((d) =>
+        itens.some(
+          (it) =>
+            it.subtipo === d.subtipo &&
+            it.tipo === "descida_subida" &&
+            (it.circuito === circuitoFiltro ||
+              it.metadadosCabo?.circuito === circuitoFiltro),
+        ),
+      ),
+      distancias: resumo.distancias.filter((d) =>
+        itens.some(
+          (it) =>
+            it.subtipo === d.subtipo &&
+            (it.tipo === "distancia" || it.tipo === "tubulacao_cabo") &&
+            (it.circuito === circuitoFiltro ||
+              it.metadadosCabo?.circuito === circuitoFiltro),
+        ),
+      ),
+    };
+  }, [resumo, circuitoFiltro, itens]);
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -249,8 +357,29 @@ export function Visualizador3D({
       return it.cor;
     }
 
+    const itensVisiveis = itens.filter((item) => {
+      const circ = item.metadadosCabo?.circuito || item.circuito;
+      if (circuitoFiltro === "todos") return true;
+      if (circuitoFiltro === "sem_circuito") {
+        return !circ;
+      }
+      if (item.tipo === "tubulacao_cabo" || item.tipo === "distancia") {
+        return circ === circuitoFiltro;
+      }
+      if (item.tipo === "descida_subida") {
+        return circ === circuitoFiltro;
+      }
+      if (item.tipo === "area") {
+        return false;
+      }
+      if (item.tipo === "ponto") {
+        return true;
+      }
+      return false;
+    });
+
     const mapaCorredores = new Map<string, string[]>();
-    const itensLineares = itens.filter(
+    const itensLineares = itensVisiveis.filter(
       (it) =>
         (it.tipo === "distancia" || it.tipo === "tubulacao_cabo") &&
         it.pontos.length >= 2,
@@ -272,7 +401,7 @@ export function Visualizador3D({
     });
 
     const mapaDescidasPosicao = new Map<string, string[]>();
-    const itensDescida = itens.filter((it) => it.tipo === "descida_subida");
+    const itensDescida = itensVisiveis.filter((it) => it.tipo === "descida_subida");
     itensDescida.forEach((d) => {
       const p = d.pontos[0] ?? { x: 0, y: 0 };
       const chaveDesc = `${Math.round(p.x / 6)},${Math.round(p.y / 6)}`;
@@ -283,7 +412,7 @@ export function Visualizador3D({
       }
     });
 
-    itens.forEach((item) => {
+    itensVisiveis.forEach((item) => {
       const corHex = resolverCorItem(item);
       const corThree = new THREE.Color(corHex);
 
@@ -292,6 +421,17 @@ export function Visualizador3D({
         const p1 = item.pontos[0] ?? { x: 0, y: 0 };
         const pos = converterCoords2DPara3D(p1, cota);
 
+        const pertenceAoCircuito =
+          circuitoFiltro === "todos" ||
+          circuitoFiltro === "sem_circuito" ||
+          item.circuito === circuitoFiltro ||
+          (pontosVerticesCircuito &&
+            pontosVerticesCircuito.some(
+              (v) => Math.hypot(v.x - p1.x, v.y - p1.y) < 16,
+            ));
+
+        const opacidadePonto = pertenceAoCircuito ? 1.0 : 0.18;
+
         const tamBox = 7 * espessuraTraco;
         const altBox = 6 * espessuraTraco;
         const geo = new THREE.BoxGeometry(tamBox, altBox, tamBox);
@@ -299,6 +439,8 @@ export function Visualizador3D({
           color: corThree,
           metalness: 0.3,
           roughness: 0.3,
+          transparent: opacidadePonto < 1,
+          opacity: opacidadePonto,
         });
         const boxMesh = new THREE.Mesh(geo, mat);
         boxMesh.position.copy(pos);
@@ -309,7 +451,7 @@ export function Visualizador3D({
         const stemMat = new THREE.MeshBasicMaterial({
           color: corThree,
           transparent: true,
-          opacity: 0.6,
+          opacity: opacidadePonto < 1 ? 0.15 : 0.6,
         });
         const stem = new THREE.Mesh(stemGeo, stemMat);
         stem.position.set(pos.x, pos.y / 2, pos.z);
@@ -557,6 +699,8 @@ export function Visualizador3D({
     mostrarGrid,
     escalaVertical,
     espessuraTraco,
+    circuitoFiltro,
+    pontosVerticesCircuito,
     atualizarPosicaoCamera,
   ]);
 
@@ -628,10 +772,17 @@ export function Visualizador3D({
     rendererRef.current.render(sceneRef.current, cameraRef.current);
     const dataUrl3D = rendererRef.current.domElement.toDataURL("image/png");
 
+    const sufixoFiltro =
+      circuitoFiltro !== "todos"
+        ? circuitoFiltro === "sem_circuito"
+          ? " (Sem Circuito)"
+          : ` (Circuito ${circuitoFiltro})`
+        : "";
+
     const html = `
       <div class="header">
         <div>
-          <h1>Levantamento de Quantidades - Perspectiva Isométrica 3D</h1>
+          <h1>Levantamento de Quantidades - Perspectiva Isométrica 3D${sufixoFiltro}</h1>
           <p>Obra: <strong>${obraNome}</strong> | Planta: <strong>${plantaNome}</strong> (Página ${pagina})</p>
         </div>
         <div style="text-align: right;">
@@ -652,7 +803,7 @@ export function Visualizador3D({
               </tr>
             </thead>
             <tbody>
-              ${resumo.elementos
+              ${resumoExibicao.elementos
                 .map(
                   (el) => `
                 <tr>
@@ -663,7 +814,7 @@ export function Visualizador3D({
               `,
                 )
                 .join("")}
-              ${resumo.descidasSubidas
+              ${resumoExibicao.descidasSubidas
                 .map(
                   (desc) => `
                 <tr>
@@ -688,7 +839,7 @@ export function Visualizador3D({
               </tr>
             </thead>
             <tbody>
-              ${resumo.distancias
+              ${resumoExibicao.distancias
                 .map(
                   (d) => `
                 <tr>
@@ -698,7 +849,7 @@ export function Visualizador3D({
               `,
                 )
                 .join("")}
-              ${resumo.cabos
+              ${resumoExibicao.cabos
                 .map(
                   (c) => `
                 <tr>
@@ -774,6 +925,43 @@ export function Visualizador3D({
             >
               Elevação
             </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/90 rounded-lg border border-slate-700 text-xs">
+            <Filter className="h-3.5 w-3.5 text-azul-400 shrink-0" />
+            <span className="text-slate-300 font-medium">Circuito:</span>
+            {circuitoAtivoInfo && (
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0 border border-white/40"
+                style={{ backgroundColor: circuitoAtivoInfo.cor }}
+                title={`Cor do Circuito ${circuitoAtivoInfo.circuito}`}
+              />
+            )}
+            <select
+              value={circuitoFiltro}
+              onChange={(e) => setCircuitoFiltro(e.target.value)}
+              className="bg-slate-900 border border-slate-600 rounded px-2 py-0.5 text-white font-medium text-xs focus:border-azul-500 focus:outline-none cursor-pointer"
+            >
+              <option value="todos">
+                Todos os Circuitos ({listaCircuitos.length})
+              </option>
+              {listaCircuitos.map((c) => (
+                <option key={c.circuito} value={c.circuito}>
+                  Circuito {c.circuito} ({c.totalMetros.toFixed(1)}m)
+                </option>
+              ))}
+              <option value="sem_circuito">Sem Circuito</option>
+            </select>
+            {circuitoFiltro !== "todos" && (
+              <button
+                type="button"
+                onClick={() => setCircuitoFiltro("todos")}
+                className="p-0.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                title="Mostrar todos os circuitos"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           <button
@@ -876,7 +1064,7 @@ export function Visualizador3D({
         />
 
         <LegendaDinamica
-          resumo={resumo}
+          resumo={resumoExibicao}
           config={configLegenda}
           aoMudarConfig={aoMudarConfigLegenda}
         />
