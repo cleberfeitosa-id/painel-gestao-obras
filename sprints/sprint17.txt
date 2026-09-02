@@ -1,0 +1,34 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Acesso a imagens em anexo:
+    - abrir imagens anexadas está gerando erro e páginas como a https://painel-gestao-obras-one.vercel.app/tarefas/91a053fe-3535-4d52-b222-132c331c00dd não carregam.
+    - Ao clicar na imagem deve abrir um popup de galeria para que seja possível navegar entre as imagens.
+
+2. Módulo de modelagem de quadros elétricos:
+   - O módulo de modelagem de quadros elétricos está desconfigurado, verificar a melhor forma de reconfigurar o módulo para que seja possível realizar a modelagem de quadros elétricos de forma correta, possivelmente em uma nova página.
+   - O módulo deve possuir lista para inclusão de modelagem de novos quadros, tal qual padrão estabelecido nos demais módulos.
+   - Deve existir uma interface de design para que seja possível adicionar elementos interativamente, como quadros elétricos, suas dimensões, inclusive de profundidade, também deve ser possível editar interativamente a área útil, considerando a chapa metálica interna como delimitador de área útil.
+   - Deve ser possível adicionar componentes ao quadro, de diversos tipos, como disjuntores do tipo minidisjuntor e caixa moldada, bornes, DPS, IDR, monofásicos e trifásicos, trilhos DIN, canaletas,  etc.. e posiciona-los interativamente dentro da área útil do quadro. 
+   - Componentes devem ter dimensões padrão segundo normas técnicas, no caso, deve-se pesquisar normas técnicas para que as dimensões dos componentes sejam o mais próximo possível do padrão. Deve ser possível ainda, editar essas dimensões de forma personalizada.
+   - Deve ser possível modelar barramentos bifásicos e trifásicos do tipo espinha de peixe, com segmentos verticais principais e derivações horizontais, cada um com sua especificação de dimensão e corrente nominal suportada.
+   - Deve ser possível associar circuitos cadastrados anteriormente em levantamentos e tarefas a quadros modelados.
+   - Deve ser possível criar um quadro elétrico e salvar suas configurações, para que seja possível reutilizá-lo em outros projetos.
+   - Deve ser possível criar um quadro elétrico com base em um quadro salvo.
+   - Deve ser possível editar um quadro elétrico salvo.
+   - Deve ser possível excluir um quadro elétrico salvo.
+   - Deve ser possível listar os quadros elétricos salvos.
+   - Deve ser possível visualizar um quadro elétrico salvo.
+   - Deve haver uma hierarquia de camadas, de forma que minidisjuntores só possam ser posicionados sobre trilhos DIN, disjuntores possam ser conectados a barramentos espinha de peixe, cabos em treixos longos possam ser posicionados internos a canaletas,etc.
+   - Deve ser possível criar um quadro elétrico vazio, ou baseado em um template de quadro existente.
+   - O quadro deve possuir dimensões de largura, altura e profundidade.
+   - A área útil deve ser uma área retangular delimitada pela profundidade do quadro e pela largura útil, que por sua vez é interna à largura total do quadro.
+   - Deve ser possível criar uma lista de componentes.
+   - O usuário deve poder posicionar componentes na área útil do quadro
+
+3. Remodelagem do painel:
+    - Deve conter um dashboard com informações de completude da obra;
+    - Deve incluir resumo de informações importantes de medições;
+    - Cards e gráficos devem ser clicáveis para que seja possível ver informações mais detalhadas.
+
+4. Progresso de obra:
+    - Revise a lógica do card de progresso de obra na tela de cada obra para garantir que está fornecendo informação correta e útil.
