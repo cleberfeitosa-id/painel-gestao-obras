@@ -19,6 +19,7 @@ import {
   Scale,
   Square,
   X,
+  Zap,
   ZoomIn,
   ZoomOut,
   type LucideIcon,
@@ -265,6 +266,25 @@ function obterLinhasCondutoresCircuito(detalhe?: Record<string, unknown> | null)
   return linhas;
 }
 
+function extrairSegmentosCircuito(
+  detalhe?: TarefaPlanta["localizacao_detalhe"],
+): PontoPdf[][] {
+  if (!detalhe) return [];
+  if (Array.isArray(detalhe.segmentos) && detalhe.segmentos.length > 0) {
+    const lista: PontoPdf[][] = [];
+    for (const seg of detalhe.segmentos) {
+      if (Array.isArray(seg.pontos) && seg.pontos.length >= 2) {
+        lista.push(seg.pontos);
+      }
+    }
+    if (lista.length > 0) return lista;
+  }
+  if (Array.isArray(detalhe.pontos) && detalhe.pontos.length >= 2) {
+    return [detalhe.pontos];
+  }
+  return [];
+}
+
 function DicaTarefa({ tarefa }: { tarefa: TarefaPlanta }) {
   const prazoInfo = situacaoPrazo(tarefa.prazo, tarefa.status === "concluido");
   const situacao = situacaoDaTarefa({
@@ -444,6 +464,7 @@ export function VisualizadorPlanta({
   const [filtroPrioridade, setFiltroPrioridade] = useState<"todas" | PrioridadeTarefa>("todas");
   const [filtroExecutor, setFiltroExecutor] = useState<"todos" | "sem" | string>("todos");
   const [filtroTag, setFiltroTag] = useState<"todas" | "sem" | string>("todas");
+  const [filtroCircuito, setFiltroCircuito] = useState<"todos" | "nenhum" | string>("todos");
 
   const [calibracoesPorPagina, setCalibracoesPorPagina] = useState<
     Map<number, PlantaCalibracaoRow>
@@ -510,6 +531,25 @@ export function VisualizadorPlanta({
     [tarefas, paginaAtual],
   );
 
+  const circuitosDisponiveis = useMemo(() => {
+    const setCircs = new Set<string>();
+    for (const t of tarefasPagina) {
+      if (t.localizacao_tipo === "circuito") {
+        const circ =
+          t.localizacao_detalhe?.circuito?.trim() ||
+          t.titulo
+            .replace(/^Passagem de Cabo - Circuito /, "")
+            .replace(/^Circuito /, "")
+            .trim() ||
+          t.titulo;
+        if (circ) setCircs.add(circ);
+      }
+    }
+    return Array.from(setCircs).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true }),
+    );
+  }, [tarefasPagina]);
+
   const tarefasFiltradas = useMemo(() => {
     return tarefasPagina.filter((t) => {
       if (filtroSituacao !== "todas") {
@@ -521,9 +561,29 @@ export function VisualizadorPlanta({
       if (filtroExecutor !== "todos" && filtroExecutor !== "sem" && t.executor?.id !== filtroExecutor) return false;
       if (filtroTag === "sem" && t.tags_tarefa != null) return false;
       if (filtroTag !== "todas" && filtroTag !== "sem" && t.tags_tarefa?.id !== filtroTag) return false;
+      if (t.localizacao_tipo === "circuito") {
+        if (filtroCircuito === "nenhum") return false;
+        if (filtroCircuito !== "todos") {
+          const circ =
+            t.localizacao_detalhe?.circuito?.trim() ||
+            t.titulo
+              .replace(/^Passagem de Cabo - Circuito /, "")
+              .replace(/^Circuito /, "")
+              .trim() ||
+            t.titulo;
+          if (circ !== filtroCircuito) return false;
+        }
+      }
       return true;
     });
-  }, [tarefasPagina, filtroSituacao, filtroPrioridade, filtroExecutor, filtroTag]);
+  }, [
+    tarefasPagina,
+    filtroSituacao,
+    filtroPrioridade,
+    filtroExecutor,
+    filtroTag,
+    filtroCircuito,
+  ]);
 
   const aplicarAjusteLargura = useCallback(() => {
     if (!ajusteLargura || !dimensoes) return;
@@ -753,9 +813,15 @@ export function VisualizadorPlanta({
       if (t.localizacao_tipo === "regiao" && t.regiao) {
         return pontoEmRegiao(pontoPdf, t.regiao);
       }
+      if (t.localizacao_tipo === "circuito") {
+        const segmentos = extrairSegmentosCircuito(t.localizacao_detalhe);
+        for (const seg of segmentos) {
+          if (distanciaPontoPolilinha(pontoPdf, seg) <= 15) return true;
+        }
+        return false;
+      }
       if (
-        (t.localizacao_tipo === "distancia" ||
-          t.localizacao_tipo === "circuito") &&
+        t.localizacao_tipo === "distancia" &&
         t.localizacao_detalhe?.pontos &&
         t.localizacao_detalhe.pontos.length >= 2
       ) {
@@ -1172,6 +1238,31 @@ export function VisualizadorPlanta({
               <span className="hidden sm:inline">Lote</span>
             </button>
           </div>
+
+          {circuitosDisponiveis.length > 0 && (
+            <>
+              <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
+              <div className="flex items-center gap-1.5 rounded-lg border border-borda bg-superficie-50 px-2 py-1">
+                <Zap className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <select
+                  value={filtroCircuito}
+                  onChange={(e) => setFiltroCircuito(e.target.value)}
+                  className="bg-transparent text-xs font-medium text-superficie-800 focus:outline-none cursor-pointer"
+                  title="Filtrar circuitos visíveis na prancha"
+                >
+                  <option value="todos">
+                    Todos os circuitos ({circuitosDisponiveis.length})
+                  </option>
+                  <option value="nenhum">Ocultar todos os circuitos</option>
+                  {circuitosDisponiveis.map((c) => (
+                    <option key={c} value={c}>
+                      Circuito {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
 
           <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
 
@@ -1691,22 +1782,19 @@ export function VisualizadorPlanta({
                     })}
 
                   {tarefasFiltradas
-                    .filter(
-                      (t) =>
-                        t.localizacao_tipo === "circuito" &&
-                        t.localizacao_detalhe?.pontos &&
-                        t.localizacao_detalhe.pontos.length >= 2,
-                    )
+                    .filter((t) => t.localizacao_tipo === "circuito")
                     .map((tarefa) => {
-                      const pontos = tarefa.localizacao_detalhe!.pontos!;
+                      const segmentos = extrairSegmentosCircuito(
+                        tarefa.localizacao_detalhe,
+                      );
+                      if (segmentos.length === 0) return null;
+
                       const linhas = obterLinhasCondutoresCircuito(
                         tarefa.localizacao_detalhe,
                       );
                       const K = linhas.length;
                       const gap = 2.4;
                       const larguraCorredor = Math.max(14, K * gap + 10);
-                      const corredor = corredorDaPolilinha(pontos, larguraCorredor);
-                      if (corredor.length < 3) return null;
 
                       const sit = situacaoDaTarefa({
                         status: tarefa.status,
@@ -1714,12 +1802,14 @@ export function VisualizadorPlanta({
                       });
                       const emDestaque = tarefaDestaque === tarefa.id;
 
-                      const p0 = pontos[0];
-                      const p0Pct = pdfParaPercentual(
-                        p0,
-                        dimensoes.largura,
-                        dimensoes.altura,
-                      );
+                      const p0 = segmentos[0]?.[0];
+                      const p0Pct = p0
+                        ? pdfParaPercentual(
+                            p0,
+                            dimensoes.largura,
+                            dimensoes.altura,
+                          )
+                        : null;
 
                       return (
                         <div
@@ -1734,66 +1824,89 @@ export function VisualizadorPlanta({
                             preserveAspectRatio="none"
                             className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
                           >
-                            <polygon
-                              points={corredor
-                                .map((p) => {
-                                  const pct = pdfParaPercentual(
-                                    p,
-                                    dimensoes.largura,
-                                    dimensoes.altura,
-                                  );
-                                  return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
-                                })
-                                .join(" ")}
-                              fill={CORES_CORREDOR[sit]}
-                              fillOpacity={emDestaque ? 0.8 : 0.6}
-                              stroke={emDestaque ? "#2563EB" : CORES_CORREDOR[sit]}
-                              strokeWidth={emDestaque ? 2.5 : 0.5}
-                              vectorEffect="non-scaling-stroke"
-                            />
-                            {linhas.map((linha, idx) => {
-                              const offset = (idx - (K - 1) / 2) * gap;
-                              const ptsDeslocados = deslocarPolilinha(pontos, offset);
-                              const pathData = ptsDeslocados
-                                .map((p, pIdx) => {
-                                  const pct = pdfParaPercentual(
-                                    p,
-                                    dimensoes.largura,
-                                    dimensoes.altura,
-                                  );
-                                  return `${pIdx === 0 ? "M" : "L"} ${pct.esquerda.toFixed(3)} ${pct.topo.toFixed(3)}`;
-                                })
-                                .join(" ");
+                            {segmentos.map((pontos, sIdx) => {
+                              const corredor = corredorDaPolilinha(
+                                pontos,
+                                larguraCorredor,
+                              );
+                              if (corredor.length < 3) return null;
 
                               return (
-                                <g key={idx}>
-                                  {linha.strokeContrast && (
-                                    <path
-                                      d={pathData}
-                                      fill="none"
-                                      stroke="#0f172a"
-                                      strokeWidth={emDestaque ? 4 : 3}
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      opacity={0.7}
-                                      vectorEffect="non-scaling-stroke"
-                                    />
-                                  )}
-                                  <path
-                                    d={pathData}
-                                    fill="none"
-                                    stroke={linha.cor}
-                                    strokeWidth={emDestaque ? linha.largura + 0.8 : linha.largura}
-                                    strokeDasharray={linha.dash}
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
+                                <g key={`seg-${sIdx}`}>
+                                  <polygon
+                                    points={corredor
+                                      .map((p) => {
+                                        const pct = pdfParaPercentual(
+                                          p,
+                                          dimensoes.largura,
+                                          dimensoes.altura,
+                                        );
+                                        return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
+                                      })
+                                      .join(" ")}
+                                    fill={CORES_CORREDOR[sit]}
+                                    fillOpacity={emDestaque ? 0.8 : 0.6}
+                                    stroke={
+                                      emDestaque
+                                        ? "#2563EB"
+                                        : CORES_CORREDOR[sit]
+                                    }
+                                    strokeWidth={emDestaque ? 2.5 : 0.5}
                                     vectorEffect="non-scaling-stroke"
                                   />
+                                  {linhas.map((linha, idx) => {
+                                    const offset = (idx - (K - 1) / 2) * gap;
+                                    const ptsDeslocados = deslocarPolilinha(
+                                      pontos,
+                                      offset,
+                                    );
+                                    const pathData = ptsDeslocados
+                                      .map((p, pIdx) => {
+                                        const pct = pdfParaPercentual(
+                                          p,
+                                          dimensoes.largura,
+                                          dimensoes.altura,
+                                        );
+                                        return `${pIdx === 0 ? "M" : "L"} ${pct.esquerda.toFixed(3)} ${pct.topo.toFixed(3)}`;
+                                      })
+                                      .join(" ");
+
+                                    return (
+                                      <g key={idx}>
+                                        {linha.strokeContrast && (
+                                          <path
+                                            d={pathData}
+                                            fill="none"
+                                            stroke="#0f172a"
+                                            strokeWidth={emDestaque ? 4 : 3}
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            opacity={0.7}
+                                            vectorEffect="non-scaling-stroke"
+                                          />
+                                        )}
+                                        <path
+                                          d={pathData}
+                                          fill="none"
+                                          stroke={linha.cor}
+                                          strokeWidth={
+                                            emDestaque
+                                              ? linha.largura + 0.8
+                                              : linha.largura
+                                          }
+                                          strokeDasharray={linha.dash}
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          vectorEffect="non-scaling-stroke"
+                                        />
+                                      </g>
+                                    );
+                                  })}
                                 </g>
                               );
                             })}
                           </svg>
-                          {dicaTarefa === tarefa.id && (
+                          {dicaTarefa === tarefa.id && p0Pct && (
                             <div
                               className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full pb-2"
                               style={{
@@ -2244,6 +2357,9 @@ export function VisualizadorPlanta({
           aoMudarExecutor={setFiltroExecutor}
           filtroTag={filtroTag}
           aoMudarTag={setFiltroTag}
+          circuitosDisponiveis={circuitosDisponiveis}
+          filtroCircuito={filtroCircuito}
+          aoMudarCircuito={setFiltroCircuito}
           tags={tags}
           tarefaDestaque={tarefaDestaque}
           aoDestaque={setTarefaDestaque}

@@ -38,6 +38,9 @@ interface ListaTarefasPlantaProps {
   aoMudarExecutor: (valor: "todos" | "sem" | string) => void;
   filtroTag: "todas" | "sem" | string;
   aoMudarTag: (valor: "todas" | "sem" | string) => void;
+  circuitosDisponiveis?: string[];
+  filtroCircuito?: "todos" | "nenhum" | string;
+  aoMudarCircuito?: (valor: "todos" | "nenhum" | string) => void;
   tags: { id: string; nome: string }[];
   tarefaDestaque: string | null;
   aoDestaque: (id: string | null) => void;
@@ -57,6 +60,9 @@ export function ListaTarefasPlanta({
   aoMudarExecutor,
   filtroTag,
   aoMudarTag,
+  circuitosDisponiveis = [],
+  filtroCircuito = "todos",
+  aoMudarCircuito,
   tags,
   tarefaDestaque,
   aoDestaque,
@@ -66,7 +72,8 @@ export function ListaTarefasPlanta({
     filtroSituacao !== "todas" ||
     filtroPrioridade !== "todas" ||
     filtroExecutor !== "todos" ||
-    filtroTag !== "todas";
+    filtroTag !== "todas" ||
+    filtroCircuito !== "todos";
 
   return (
     <Cartao className="h-fit">
@@ -134,6 +141,24 @@ export function ListaTarefasPlanta({
             ))}
           </Selecao>
         </div>
+
+        {circuitosDisponiveis.length > 0 && (
+          <Selecao
+            rotulo="Circuito"
+            value={filtroCircuito}
+            onChange={(e) =>
+              aoMudarCircuito?.(e.target.value as "todos" | "nenhum" | string)
+            }
+          >
+            <option value="todos">Todos os circuitos ({circuitosDisponiveis.length})</option>
+            <option value="nenhum">Ocultar todos os circuitos</option>
+            {circuitosDisponiveis.map((c) => (
+              <option key={c} value={c}>
+                Circuito {c}
+              </option>
+            ))}
+          </Selecao>
+        )}
 
         {temFiltros && (
           <p className="text-xs text-superficie-500">
