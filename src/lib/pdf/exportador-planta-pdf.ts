@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain/rotulos";
 import { formatarData, formatarDataHora } from "@/lib/datas";
 import { formatarMoeda } from "@/lib/utils";
+import type { PontoPdf } from "@/lib/supabase/database.types";
 import type { TarefaExportacaoCompleta } from "@/app/(protegido)/obras/[id]/plantas/acoes";
 import type {
   ItemLevantamento,
@@ -726,141 +727,165 @@ export async function exportarPlantaIluminadaPdf(
         ctx.fillStyle = hexParaRgba(cor, 0.45);
         ctx.fill();
       }
-    } else if (
-      t.localizacao_tipo === "circuito" &&
-      t.localizacao_detalhe?.pontos &&
-      t.localizacao_detalhe.pontos.length >= 2
-    ) {
-      const pontos = t.localizacao_detalhe.pontos;
-      const condutores =
-        (t.localizacao_detalhe.condutores as Array<{
-          tipo: string;
-          quantidade: number;
-        }>) || [];
-
-      const fases = t.localizacao_detalhe.fases as
-        | Array<{ nome: string; cor: string; quantidade: number }>
+    } else if (t.localizacao_tipo === "circuito") {
+      const segmentos: PontoPdf[][] = [];
+      const detalhe = t.localizacao_detalhe as
+        | {
+            pontos?: PontoPdf[];
+            segmentos?: Array<{ pontos: PontoPdf[] }>;
+            condutores?: unknown;
+            fases?: unknown;
+            corFaseR?: string;
+            corFaseS?: string;
+            corFaseT?: string;
+            corFase?: string;
+          }
         | undefined;
 
-      const corFaseR =
-        (t.localizacao_detalhe.corFaseR as string) ||
-        (t.localizacao_detalhe.corFase as string) ||
-        "#FFFFFF";
-      const corFaseS =
-        (t.localizacao_detalhe.corFaseS as string) || "#000000";
-      const corFaseT =
-        (t.localizacao_detalhe.corFaseT as string) || "#EF4444";
-
-      const linhas: {
-        cor: string;
-        dash?: number[];
-        strokeContrast?: boolean;
-      }[] = [];
-
-      if (fases && Array.isArray(fases) && fases.length > 0) {
-        for (const f of fases) {
-          const qtd = f.quantidade ?? 1;
-          const cor = f.cor || "#FFFFFF";
-          for (let i = 0; i < qtd; i++) {
-            linhas.push({
-              cor,
-              strokeContrast: cor.toUpperCase() === "#FFFFFF",
-            });
+      if (Array.isArray(detalhe?.segmentos) && detalhe.segmentos.length > 0) {
+        for (const seg of detalhe.segmentos) {
+          if (Array.isArray(seg.pontos) && seg.pontos.length >= 2) {
+            segmentos.push(seg.pontos);
           }
         }
-      } else {
-        const itemFase = condutores.find((c) => c.tipo === "fase");
-        const qtdFase =
-          itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+      } else if (Array.isArray(detalhe?.pontos) && detalhe.pontos.length >= 2) {
+        segmentos.push(detalhe.pontos);
+      }
 
-        if (qtdFase >= 1)
+      if (segmentos.length > 0) {
+        const condutores =
+          (t.localizacao_detalhe?.condutores as Array<{
+            tipo: string;
+            quantidade: number;
+          }>) || [];
+
+        const fases = t.localizacao_detalhe?.fases as
+          | Array<{ nome: string; cor: string; quantidade: number }>
+          | undefined;
+
+        const corFaseR =
+          (t.localizacao_detalhe?.corFaseR as string) ||
+          (t.localizacao_detalhe?.corFase as string) ||
+          "#FFFFFF";
+        const corFaseS =
+          (t.localizacao_detalhe?.corFaseS as string) || "#000000";
+        const corFaseT =
+          (t.localizacao_detalhe?.corFaseT as string) || "#EF4444";
+
+        const linhas: {
+          cor: string;
+          dash?: number[];
+          strokeContrast?: boolean;
+        }[] = [];
+
+        if (fases && Array.isArray(fases) && fases.length > 0) {
+          for (const f of fases) {
+            const qtd = f.quantidade ?? 1;
+            const corF = f.cor || "#FFFFFF";
+            for (let i = 0; i < qtd; i++) {
+              linhas.push({
+                cor: corF,
+                strokeContrast: corF.toUpperCase() === "#FFFFFF",
+              });
+            }
+          }
+        } else {
+          const itemFase = condutores.find((c) => c.tipo === "fase");
+          const qtdFase =
+            itemFase?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+
+          if (qtdFase >= 1)
+            linhas.push({
+              cor: corFaseR,
+              strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
+            });
+          if (qtdFase >= 2)
+            linhas.push({
+              cor: corFaseS,
+              strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
+            });
+          if (qtdFase >= 3)
+            linhas.push({
+              cor: corFaseT,
+              strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
+            });
+        }
+
+        const itemNeutro = condutores.find((c) => c.tipo === "neutro");
+        const itemTerra = condutores.find((c) => c.tipo === "terra");
+        const itemRetorno = condutores.find((c) => c.tipo === "retorno");
+        const qtdNeutro =
+          itemNeutro?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+        const qtdTerra =
+          itemTerra?.quantidade ?? (condutores.length === 0 ? 1 : 0);
+        const qtdRetorno = itemRetorno?.quantidade ?? 0;
+        for (let i = 0; i < qtdNeutro; i++)
+          linhas.push({ cor: "#2563EB", dash: [10, 5] });
+        for (let i = 0; i < qtdTerra; i++)
+          linhas.push({ cor: "#16A34A", dash: [4, 4] });
+        for (let i = 0; i < qtdRetorno; i++)
+          linhas.push({ cor: "#F59E0B", dash: [6, 3] });
+        if (linhas.length === 0)
           linhas.push({
             cor: corFaseR,
             strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
           });
-        if (qtdFase >= 2)
-          linhas.push({
-            cor: corFaseS,
-            strokeContrast: corFaseS.toUpperCase() === "#FFFFFF",
-          });
-        if (qtdFase >= 3)
-          linhas.push({
-            cor: corFaseT,
-            strokeContrast: corFaseT.toUpperCase() === "#FFFFFF",
-          });
-      }
 
-      const itemNeutro = condutores.find((c) => c.tipo === "neutro");
-      const itemTerra = condutores.find((c) => c.tipo === "terra");
-      const itemRetorno = condutores.find((c) => c.tipo === "retorno");
-      const qtdNeutro =
-        itemNeutro?.quantidade ?? (condutores.length === 0 ? 1 : 0);
-      const qtdTerra =
-        itemTerra?.quantidade ?? (condutores.length === 0 ? 1 : 0);
-      const qtdRetorno = itemRetorno?.quantidade ?? 0;
-      for (let i = 0; i < qtdNeutro; i++)
-        linhas.push({ cor: "#2563EB", dash: [10, 5] });
-      for (let i = 0; i < qtdTerra; i++)
-        linhas.push({ cor: "#16A34A", dash: [4, 4] });
-      for (let i = 0; i < qtdRetorno; i++)
-        linhas.push({ cor: "#F59E0B", dash: [6, 3] });
-      if (linhas.length === 0)
-        linhas.push({
-          cor: corFaseR,
-          strokeContrast: corFaseR.toUpperCase() === "#FFFFFF",
-        });
+        const K = linhas.length;
+        const gap = 2.4;
+        const larguraCorredor = Math.max(14, K * gap + 10);
 
-      const K = linhas.length;
-      const gap = 2.4;
-      const larguraCorredor = Math.max(14, K * gap + 10);
-      const corredor = corredorDaPolilinha(pontos, larguraCorredor);
-      if (corredor.length >= 3) {
-        ctx.beginPath();
-        corredor.forEach((p, idx) => {
-          const pct = pdfParaPercentual(
-            p,
-            dimensoesPdf.largura,
-            dimensoesPdf.altura,
-          );
-          const px = (pct.esquerda / 100) * compositeCanvas.width;
-          const py = (pct.topo / 100) * compositeCanvas.height;
-          if (idx === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        });
-        ctx.closePath();
-        ctx.fillStyle = hexParaRgba(cor, 0.55);
-        ctx.fill();
-      }
-
-      linhas.forEach((linha, idx) => {
-        const offset = (idx - (K - 1) / 2) * gap;
-        const ptsDeslocados = deslocarPolilinha(pontos, offset);
-        if (ptsDeslocados.length >= 2) {
-          ctx.beginPath();
-          ptsDeslocados.forEach((p, pIdx) => {
-            const pct = pdfParaPercentual(
-              p,
-              dimensoesPdf.largura,
-              dimensoesPdf.altura,
-            );
-            const px = (pct.esquerda / 100) * compositeCanvas.width;
-            const py = (pct.topo / 100) * compositeCanvas.height;
-            if (pIdx === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-          });
-          if (linha.strokeContrast) {
-            ctx.strokeStyle = "rgba(15, 23, 42, 0.7)";
-            ctx.lineWidth = 3;
-            ctx.setLineDash([]);
-            ctx.stroke();
+        for (const pontos of segmentos) {
+          const corredor = corredorDaPolilinha(pontos, larguraCorredor);
+          if (corredor.length >= 3) {
+            ctx.beginPath();
+            corredor.forEach((p, idx) => {
+              const pct = pdfParaPercentual(
+                p,
+                dimensoesPdf.largura,
+                dimensoesPdf.altura,
+              );
+              const px = (pct.esquerda / 100) * compositeCanvas.width;
+              const py = (pct.topo / 100) * compositeCanvas.height;
+              if (idx === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            });
+            ctx.closePath();
+            ctx.fillStyle = hexParaRgba(cor, 0.55);
+            ctx.fill();
           }
-          ctx.strokeStyle = linha.cor;
-          ctx.lineWidth = 2;
-          ctx.setLineDash(linha.dash || []);
-          ctx.stroke();
-          ctx.setLineDash([]);
+
+          linhas.forEach((linha, idx) => {
+            const offset = (idx - (K - 1) / 2) * gap;
+            const ptsDeslocados = deslocarPolilinha(pontos, offset);
+            if (ptsDeslocados.length >= 2) {
+              ctx.beginPath();
+              ptsDeslocados.forEach((p, pIdx) => {
+                const pct = pdfParaPercentual(
+                  p,
+                  dimensoesPdf.largura,
+                  dimensoesPdf.altura,
+                );
+                const px = (pct.esquerda / 100) * compositeCanvas.width;
+                const py = (pct.topo / 100) * compositeCanvas.height;
+                if (pIdx === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+              });
+              if (linha.strokeContrast) {
+                ctx.strokeStyle = "rgba(15, 23, 42, 0.7)";
+                ctx.lineWidth = 3;
+                ctx.setLineDash([]);
+                ctx.stroke();
+              }
+              ctx.strokeStyle = linha.cor;
+              ctx.lineWidth = 2;
+              ctx.setLineDash(linha.dash || []);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+          });
         }
-      });
+      }
     } else if (
       t.localizacao_tipo === "area" &&
       t.localizacao_detalhe?.pontos &&
