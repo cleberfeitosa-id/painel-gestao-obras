@@ -14,7 +14,28 @@ import {
 export const FUSO_HORARIO = "America/Fortaleza";
 
 export function paraData(valor: string | Date): Date {
-  return typeof valor === "string" ? parseISO(valor) : valor;
+  if (typeof valor !== "string") return valor;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    const [ano, mes, dia] = valor.split("-").map(Number);
+    const data = new Date(Date.UTC(ano, mes - 1, dia, 12, 0, 0));
+    if (
+      data.getUTCFullYear() !== ano ||
+      data.getUTCMonth() !== mes - 1 ||
+      data.getUTCDate() !== dia
+    ) {
+      return new Date(NaN);
+    }
+    return data;
+  }
+  return parseISO(valor);
+}
+
+export function dataValida(valor: string | null | undefined): boolean {
+  if (!valor || typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    return false;
+  }
+  const data = paraData(valor);
+  return !Number.isNaN(data.getTime()) && chaveDia(data) === valor;
 }
 
 export function chaveDia(valor: string | Date): string {
@@ -162,9 +183,13 @@ export function gradeDoMes(referencia: Date) {
   const hoje = hojeChave();
 
   return eachDayOfInterval({ start: inicio, end: fim }).map((dia) => {
-    const chave = chaveDia(dia);
+    const ano = dia.getFullYear();
+    const mes = String(dia.getMonth() + 1).padStart(2, "0");
+    const d = String(dia.getDate()).padStart(2, "0");
+    const chave = `${ano}-${mes}-${d}`;
+    const data = paraData(chave);
     return {
-      data: dia,
+      data,
       chave,
       doMesAtual: isSameMonth(dia, referencia),
       hoje: chave === hoje,
