@@ -101,6 +101,11 @@ export default async function MedicoesObraPage({
               medicao.valor_contrato != null
                 ? medicao.valor_contrato - medicao.valor_pago
                 : null;
+            const baseMedida = medicao.valor_executado + medicao.valor_pendente;
+            const percentualExecutado =
+              baseMedida > 0
+                ? Math.round((medicao.valor_executado / baseMedida) * 100)
+                : 0;
             return (
               <Link key={medicao.id} href={`/obras/${obra.id}/medicoes/${medicao.id}`}>
                 <Cartao className="h-full transition-shadow hover:shadow-md">
@@ -140,6 +145,22 @@ export default async function MedicoesObraPage({
                         {formatarMoeda(medicao.valor_pendente)}
                       </span>
                     </div>
+                    {baseMedida > 0 && (
+                      <div className="space-y-1.5 pt-2 border-t border-superficie-100">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-superficie-500">Progresso físico-financeiro</span>
+                          <span className="font-bold text-emerald-600">
+                            {percentualExecutado}%
+                          </span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-superficie-100">
+                          <div
+                            className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${Math.min(percentualExecutado, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </CartaoConteudo>
                 </Cartao>
               </Link>
