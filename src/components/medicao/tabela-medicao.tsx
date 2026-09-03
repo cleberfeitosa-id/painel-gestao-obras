@@ -221,8 +221,11 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
             <CelulaCabecalho>Item</CelulaCabecalho>
             <CelulaCabecalho>Unidade</CelulaCabecalho>
             <CelulaCabecalho>Valor unitário</CelulaCabecalho>
-            <CelulaCabecalho className="text-right">Quantidade total</CelulaCabecalho>
+            <CelulaCabecalho className="text-right">Qtd. total</CelulaCabecalho>
+            <CelulaCabecalho className="text-right">Qtd. executada</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Valor total</CelulaCabecalho>
+            <CelulaCabecalho className="text-right">Valor executado</CelulaCabecalho>
+            <CelulaCabecalho className="text-right">Valor pendente</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Ações</CelulaCabecalho>
           </LinhaCabecalho>
         </Cabecalho>
@@ -297,13 +300,46 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                       className="w-28 rounded-lg border border-borda px-3 py-1.5 text-sm text-superficie-900 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
                     />
                   </Celula>
-                  <Celula className="text-right font-medium text-superficie-900">
+                  <Celula className="text-right font-medium text-superficie-900 whitespace-nowrap">
                     {item.quantidadeTotal}
                   </Celula>
-                  <Celula className="text-right font-medium text-superficie-900">
+                  <Celula className="text-right font-medium whitespace-nowrap">
+                    <span
+                      className={
+                        item.quantidadeExecutada > 0
+                          ? "font-semibold text-emerald-600"
+                          : "text-superficie-500"
+                      }
+                    >
+                      {item.quantidadeExecutada}
+                    </span>
+                  </Celula>
+                  <Celula className="text-right font-medium text-superficie-900 whitespace-nowrap">
                     {formatarMoeda(item.valorTotal)}
                   </Celula>
-                  <Celula className="text-right">
+                  <Celula className="text-right font-medium whitespace-nowrap">
+                    <span
+                      className={
+                        item.valorExecutado > 0
+                          ? "font-semibold text-emerald-600"
+                          : "text-superficie-500"
+                      }
+                    >
+                      {formatarMoeda(item.valorExecutado)}
+                    </span>
+                  </Celula>
+                  <Celula className="text-right font-medium whitespace-nowrap">
+                    <span
+                      className={
+                        item.valorPendente > 0
+                          ? "font-semibold text-amber-600"
+                          : "text-superficie-400"
+                      }
+                    >
+                      {formatarMoeda(item.valorPendente)}
+                    </span>
+                  </Celula>
+                  <Celula className="text-right whitespace-nowrap">
                     <Botao
                       type="button"
                       variante="contorno"
@@ -318,7 +354,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                 </Linha>
                 {expandido && (
                   <Linha className="bg-superficie-50/60 hover:bg-superficie-50/60">
-                    <Celula colSpan={7} className="p-0">
+                    <Celula colSpan={10} className="p-0">
                       <div className="px-6 py-4">
                         {item.tarefas.length === 0 ? (
                           <p className="text-sm text-superficie-500">
@@ -334,9 +370,20 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                                   className="flex flex-wrap items-center gap-3 py-2"
                                 >
                                   <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-medium text-superficie-900">
-                                      {tarefa.titulo}
-                                    </p>
+                                    <div className="flex items-center gap-2">
+                                      <p className="truncate text-sm font-medium text-superficie-900">
+                                        {tarefa.titulo}
+                                      </p>
+                                      {tarefa.status === "concluido" ? (
+                                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                                          Executado
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                                          Pendente
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-superficie-500">
                                       <Etiqueta
                                         className={STATUS_TAREFA[tarefa.status]?.classe}
@@ -352,6 +399,11 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                                           ? `Prazo: ${formatarData(tarefa.prazo)}`
                                           : "Sem prazo"}
                                       </span>
+                                      {tarefa.quantidade != null && tarefa.quantidade > 0 && (
+                                        <span className="font-medium text-superficie-700">
+                                          Subtotal: {formatarMoeda(tarefa.quantidade * item.valorUnitario)}
+                                        </span>
+                                      )}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-2">

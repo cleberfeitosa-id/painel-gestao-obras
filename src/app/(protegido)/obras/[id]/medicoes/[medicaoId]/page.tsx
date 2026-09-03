@@ -9,6 +9,7 @@ import { TabelaMedicao } from "@/components/medicao/tabela-medicao";
 import { ValorContrato } from "@/components/medicao/valor-contrato";
 import { EditarMedicaoModal } from "@/components/medicao/editar-medicao-modal";
 import { ListaPagamentos, type ItemPagamento } from "@/components/medicao/lista-pagamentos";
+import { GraficosProgressoMedicao } from "@/components/medicao/graficos-progresso-medicao";
 import type {
   CatalogoPrecoRow,
   MedicaoRow,
@@ -35,7 +36,14 @@ export interface ItemMedicao {
   unidade: string;
   valorUnitario: number;
   quantidadeTotal: number;
+  quantidadeExecutada: number;
+  quantidadePendente: number;
   valorTotal: number;
+  valorExecutado: number;
+  valorPendente: number;
+  pesoPercentual: number;
+  progressoPercentual: number;
+  contribuicaoProgresso: number;
   tarefas: TarefaMedicao[];
 }
 
@@ -146,7 +154,14 @@ export default async function MedicaoDetalhePage({
       unidade: c.unidade,
       valorUnitario: c.valor_unitario,
       quantidadeTotal: 0,
+      quantidadeExecutada: 0,
+      quantidadePendente: 0,
       valorTotal: 0,
+      valorExecutado: 0,
+      valorPendente: 0,
+      pesoPercentual: 0,
+      progressoPercentual: 0,
+      contribuicaoProgresso: 0,
       tarefas: [],
     });
   }
@@ -166,7 +181,14 @@ export default async function MedicaoDetalhePage({
         unidade: catalogoItem.unidade,
         valorUnitario: catalogoItem.valor_unitario,
         quantidadeTotal: 0,
+        quantidadeExecutada: 0,
+        quantidadePendente: 0,
         valorTotal: 0,
+        valorExecutado: 0,
+        valorPendente: 0,
+        pesoPercentual: 0,
+        progressoPercentual: 0,
+        contribuicaoProgresso: 0,
         tarefas: [],
       };
 
@@ -181,18 +203,33 @@ export default async function MedicaoDetalhePage({
         catalogoId: catalogoItem.id,
       });
 
-      const valor = medicaoTarefa.quantidade * item.valorUnitario;
-      item.quantidadeTotal += medicaoTarefa.quantidade;
+      const qtd = medicaoTarefa.quantidade ?? 0;
+      const valor = qtd * item.valorUnitario;
+      item.quantidadeTotal += qtd;
       item.valorTotal += valor;
       valorTotalCadastrado += valor;
+
       if (tarefa.status === "concluido") {
+        item.quantidadeExecutada += qtd;
+        item.valorExecutado += valor;
         valorExecutado += valor;
       } else {
+        item.quantidadePendente += qtd;
+        item.valorPendente += valor;
         valorPendente += valor;
       }
 
       itens.set(catalogoItem.id, item);
     }
+  }
+
+  for (const item of itens.values()) {
+    item.pesoPercentual =
+      valorTotalCadastrado > 0 ? (item.valorTotal / valorTotalCadastrado) * 100 : 0;
+    item.progressoPercentual =
+      item.valorTotal > 0 ? (item.valorExecutado / item.valorTotal) * 100 : 0;
+    item.contribuicaoProgresso =
+      valorTotalCadastrado > 0 ? (item.valorExecutado / valorTotalCadastrado) * 100 : 0;
   }
 
   const listaItens = [...itens.values()].sort((a, b) =>
@@ -307,6 +344,14 @@ export default async function MedicaoDetalhePage({
           </CartaoConteudo>
         </Cartao>
       </div>
+
+      <GraficosProgressoMedicao
+        itens={listaItens}
+        valorExecutado={valorExecutado}
+        valorPendente={valorPendente}
+        valorTotalCadastrado={valorTotalCadastrado}
+        valorContrato={medicao.valor_contrato}
+      />
 
       <Cartao>
         <CartaoCabecalho>
