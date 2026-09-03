@@ -7,6 +7,7 @@ import {
   CartaoTitulo,
   EstadoVazio,
   Etiqueta,
+  LogoVasconcelos,
 } from "@/components/ui";
 import { PRIORIDADE_TAREFA, STATUS_TAREFA } from "@/lib/domain/rotulos";
 import { formatarDataHora } from "@/lib/datas";
@@ -302,9 +303,14 @@ export function DocumentoRelatorio({
   return (
     <>
       <header className="border-b border-borda pb-4">
-        <p className="text-sm font-semibold uppercase tracking-wide text-azul-700">
-          Vasconcelos Engenharia
-        </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <LogoVasconcelos variante="completa" className="h-14 w-auto" />
+          <div className="text-left sm:text-right">
+            <span className="inline-block rounded-md border border-borda bg-superficie-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-superficie-600">
+              Relatório Gerencial de Obras
+            </span>
+          </div>
+        </div>
         <h1 className="mt-1 text-2xl font-bold text-superficie-900">{titulo}</h1>
         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
           {filtros.map((f) => (

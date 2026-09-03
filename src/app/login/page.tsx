@@ -3,9 +3,9 @@
 import { Suspense, useActionState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Building2, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { entrar } from "./acoes";
-import { Botao, Campo } from "@/components/ui";
+import { Botao, Campo, LogoVasconcelos } from "@/components/ui";
 
 function FormularioLogin() {
   const searchParams = useSearchParams();
@@ -15,7 +15,8 @@ function FormularioLogin() {
 
   return (
     <div className="flex min-h-screen">
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-azul-800">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-grafite-900">
+        <div className="absolute inset-0 bg-radial-[at_top_left] from-marca-500/20 via-transparent to-transparent opacity-80" />
         <div className="absolute inset-0 opacity-10">
           <div
             className="absolute inset-0"
@@ -26,21 +27,17 @@ function FormularioLogin() {
           />
         </div>
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
-              <Building2 className="h-7 w-7" />
-            </div>
-            <div>
-              <p className="text-xl font-bold tracking-tight">
-                Vasconcelos
-              </p>
-              <p className="text-sm text-azul-200 -mt-0.5">Engenharia</p>
-            </div>
+          <div className="mb-10">
+            <LogoVasconcelos
+              variante="completa"
+              tema="negativo"
+              className="h-20 w-auto"
+            />
           </div>
           <h1 className="text-3xl font-bold leading-tight max-w-md">
             Painel de Gestao de Obras
           </h1>
-          <p className="mt-4 text-azul-200 max-w-md leading-relaxed">
+          <p className="mt-4 text-white/80 max-w-md leading-relaxed">
             Gerencie suas obras, tarefas e equipes em tempo real. Acompanhe o
             progresso de cada projeto diretamente do canteiro de obras.
           </p>
@@ -52,7 +49,7 @@ function FormularioLogin() {
             ].map((item) => (
               <div key={item.rotulo} className="text-center">
                 <p className="text-2xl font-bold text-white">{item.valor}</p>
-                <p className="text-xs text-azul-300 mt-1">{item.rotulo}</p>
+                <p className="text-xs text-marca-200 mt-1">{item.rotulo}</p>
               </div>
             ))}
           </div>
@@ -61,11 +58,8 @@ function FormularioLogin() {
 
       <div className="flex flex-1 flex-col justify-center px-6 py-12 sm:px-12 lg:px-16 bg-white">
         <div className="mx-auto w-full max-w-sm">
-          <div className="flex items-center gap-2 lg:hidden mb-8">
-            <Building2 className="h-6 w-6 text-azul-600" />
-            <span className="font-bold text-superficie-900">
-              Vasconcelos Engenharia
-            </span>
+          <div className="flex justify-center lg:hidden mb-8">
+            <LogoVasconcelos variante="completa" className="h-16 w-auto" />
           </div>
 
           <h2 className="text-2xl font-bold text-superficie-900">

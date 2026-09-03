@@ -16,6 +16,13 @@ export const metadata: Metadata = {
   title: "Painel de Gestao | Vasconcelos Engenharia",
   description:
     "Sistema de gestao de obras da Vasconcelos Engenharia. Gerencie projetos, tarefas e equipes em tempo real.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180" }],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

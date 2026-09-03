@@ -2,6 +2,7 @@
 
 import { sair } from "@/app/login/acoes";
 import { Avatar } from "@/components/ui/avatar";
+import { LogoVasconcelos } from "@/components/ui";
 import { PAPEL_USUARIO } from "@/lib/domain/rotulos";
 import type { PerfilRow } from "@/lib/supabase/database.types";
 
@@ -14,7 +15,9 @@ export function Cabecalho({ perfil }: CabecalhoProps) {
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-borda bg-white/80 backdrop-blur-sm px-4 sm:px-6 lg:px-8">
-      <div className="lg:hidden" />
+      <div className="lg:hidden flex items-center pl-12">
+        <LogoVasconcelos variante="horizontal" className="h-6 w-auto" />
+      </div>
 
       <div className="flex items-center gap-3 ml-auto">
         <div className="text-right hidden sm:block">

@@ -10,13 +10,13 @@ import {
   Calendar,
   FileText,
   Users,
-  Building2,
   Ruler,
   Boxes,
   Layers,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LogoVasconcelos } from "@/components/ui";
 import type { PapelUsuario } from "@/lib/supabase/database.types";
 
 interface BarraLateralProps {
@@ -77,16 +77,17 @@ export function BarraLateral({ papel }: BarraLateralProps) {
 
   const conteudoNavegacao = (
     <nav className="flex flex-1 flex-col px-2 py-3">
-      <div className="flex items-center gap-2 px-2 mb-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-azul-600">
-          <Building2 className="h-5 w-5 text-white" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-superficie-900 truncate">
-            Vasconcelos
-          </p>
-          <p className="text-xs text-superficie-500 -mt-0.5">Engenharia</p>
-        </div>
+      <div className="px-1 pt-1 pb-3 mb-3 border-b border-borda/60">
+        <Link
+          href="/painel"
+          className="flex flex-col items-center group transition-opacity hover:opacity-90"
+          onClick={() => setAberto(false)}
+        >
+          <LogoVasconcelos
+            variante="completa"
+            className="h-11 w-auto max-w-[124px]"
+          />
+        </Link>
       </div>
 
       <ul className="flex flex-1 flex-col gap-1">

@@ -2,10 +2,10 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { Building2, ArrowRight, Info } from "lucide-react";
+import { ArrowRight, Info, MailCheck } from "lucide-react";
 import { z } from "zod";
 import { cadastrar } from "../login/acoes";
-import { Botao, Campo } from "@/components/ui";
+import { Botao, Campo, LogoVasconcelos } from "@/components/ui";
 
 const esquemaCadastro = z
   .object({
@@ -62,8 +62,11 @@ export default function CadastroPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-fundo px-6">
         <div className="w-full max-w-md text-center">
+          <div className="flex justify-center mb-6">
+            <LogoVasconcelos variante="completa" className="h-16 w-auto" />
+          </div>
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sucesso-fundo text-sucesso mb-6">
-            <Building2 className="h-8 w-8" />
+            <MailCheck className="h-8 w-8" />
           </div>
           <h1 className="text-2xl font-bold text-superficie-900">
             Confirme seu e-mail
@@ -89,7 +92,8 @@ export default function CadastroPage() {
 
   return (
     <div className="flex min-h-screen">
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-azul-800">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-grafite-900">
+        <div className="absolute inset-0 bg-radial-[at_top_left] from-marca-500/20 via-transparent to-transparent opacity-80" />
         <div className="absolute inset-0 opacity-10">
           <div
             className="absolute inset-0"
@@ -100,19 +104,17 @@ export default function CadastroPage() {
           />
         </div>
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
-              <Building2 className="h-7 w-7" />
-            </div>
-            <div>
-              <p className="text-xl font-bold tracking-tight">Vasconcelos</p>
-              <p className="text-sm text-azul-200 -mt-0.5">Engenharia</p>
-            </div>
+          <div className="mb-10">
+            <LogoVasconcelos
+              variante="completa"
+              tema="negativo"
+              className="h-20 w-auto"
+            />
           </div>
           <h1 className="text-3xl font-bold leading-tight max-w-md">
             Junte-se a equipe
           </h1>
-          <p className="mt-4 text-azul-200 max-w-md leading-relaxed">
+          <p className="mt-4 text-white/80 max-w-md leading-relaxed">
             Crie sua conta para acessar o sistema de gestao de obras. O primeiro
             usuario a se cadastrar sera automaticamente o administrador.
           </p>
@@ -121,11 +123,8 @@ export default function CadastroPage() {
 
       <div className="flex flex-1 flex-col justify-center px-6 py-12 sm:px-12 lg:px-16 bg-white">
         <div className="mx-auto w-full max-w-sm">
-          <div className="flex items-center gap-2 lg:hidden mb-8">
-            <Building2 className="h-6 w-6 text-azul-600" />
-            <span className="font-bold text-superficie-900">
-              Vasconcelos Engenharia
-            </span>
+          <div className="flex justify-center lg:hidden mb-8">
+            <LogoVasconcelos variante="completa" className="h-16 w-auto" />
           </div>
 
           <h2 className="text-2xl font-bold text-superficie-900">
