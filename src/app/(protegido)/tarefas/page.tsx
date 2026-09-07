@@ -9,7 +9,10 @@ import {
   Botao,
 } from "@/components/ui";
 import { FiltrosTarefas } from "@/components/tarefas/filtros-tarefas";
-import { ListaTarefas } from "@/components/tarefas/lista-tarefas";
+import { AreaTarefas } from "@/components/tarefas/area-tarefas";
+import { BUCKET_PLANTAS, urlAssinada } from "@/lib/armazenamento";
+import type { TarefaPlanta } from "@/components/plantas/tipos";
+import type { RegiaoPdf } from "@/lib/supabase/database.types";
 import type {
   ExecutorRow,
   ObraRow,
@@ -18,12 +21,13 @@ import type {
   TarefaRow,
   StatusTarefa,
   PrioridadeTarefa,
+  PlantaCalibracaoRow,
 } from "@/lib/supabase/database.types";
 
 export interface TarefaComDados extends TarefaRow {
   obras: { nome: string };
   plantas: { nome: string } | null;
-  tags_tarefa: { nome: string } | null;
+  tags_tarefa: { id: string; nome: string } | null;
   responsavel: Pick<PerfilRow, "id" | "nome"> | null;
   executor: Pick<ExecutorRow, "id" | "nome"> | null;
   supervisor: Pick<PerfilRow, "id" | "nome"> | null;
@@ -51,7 +55,7 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
   let query = supabase
     .from("tarefas")
     .select(
-      "*, obras!inner(nome), plantas!tarefas_planta_id_fkey(nome), tags_tarefa(nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome), tarefa_medicoes(id, catalogo_id, quantidade, catalogo_precos(id, nome, unidade, valor_unitario, medicao_id, medicoes(id, titulo)))",
+      "*, obras!inner(nome), plantas!tarefas_planta_id_fkey(nome), tags_tarefa(id, nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome), tarefa_medicoes(id, catalogo_id, quantidade, catalogo_precos(id, nome, unidade, valor_unitario, medicao_id, medicoes(id, titulo)))",
     );
 
   const busca = params.busca?.trim();
@@ -189,6 +193,44 @@ async function buscarOpcoes() {
   };
 }
 
+async function buscarPlantaCompleta(plantaId: string) {
+  const supabase = await createClient();
+  const [{ data: planta }, { data: calibracoes }] = await Promise.all([
+    supabase.from("plantas").select("*").eq("id", plantaId).single(),
+    supabase.from("planta_calibracoes").select("*").eq("planta_id", plantaId),
+  ]);
+
+  if (!planta) return null;
+
+  const url = await urlAssinada(BUCKET_PLANTAS, planta.arquivo_path);
+  return {
+    planta: planta as PlantaRow,
+    calibracoes: (calibracoes ?? []) as PlantaCalibracaoRow[],
+    urlPdf: url || "",
+  };
+}
+
+function mapearTarefasParaPlanta(tarefas: TarefaComDados[]): TarefaPlanta[] {
+  return tarefas.map((t) => ({
+    id: t.id,
+    titulo: t.titulo,
+    status: t.status,
+    prioridade: t.prioridade,
+    aprovacao: t.aprovacao,
+    prazo: t.prazo,
+    pagina: t.pagina,
+    localizacao_tipo: t.localizacao_tipo,
+    ponto_x: t.ponto_x,
+    ponto_y: t.ponto_y,
+    regiao: t.regiao as RegiaoPdf | null,
+    localizacao_detalhe: t.localizacao_detalhe as Record<string, unknown> | undefined,
+    planta_id: t.planta_id ?? undefined,
+    responsavel: t.responsavel,
+    executor: t.executor,
+    tags_tarefa: t.tags_tarefa,
+  }));
+}
+
 export default async function TarefasPage({
   searchParams,
 }: {
@@ -226,13 +268,16 @@ export default async function TarefasPage({
       : undefined,
   };
 
-  const [tarefas, opcoes] = await Promise.all([
+  const [tarefas, opcoes, dadosPlanta] = await Promise.all([
     buscarTarefas(filtros),
     buscarOpcoes(),
+    filtros.planta ? buscarPlantaCompleta(filtros.planta) : Promise.resolve(null),
   ]);
   const { obras, responsaveis, supervisores, executores, plantas, tags, catalogoPrecos, medicoes, podeExcluir } = opcoes;
 
   const temFiltros = Object.values(filtros).some(Boolean);
+
+  const tarefasPlanta = dadosPlanta ? mapearTarefasParaPlanta(tarefas) : undefined;
 
   return (
     <div className="space-y-6">
@@ -274,7 +319,7 @@ export default async function TarefasPage({
         </CartaoConteudo>
       </Cartao>
 
-      <ListaTarefas
+      <AreaTarefas
         tarefas={tarefas}
         podeExcluir={podeExcluir}
         temFiltros={temFiltros}
@@ -283,6 +328,9 @@ export default async function TarefasPage({
         executores={executores}
         tags={tags}
         catalogoPrecos={catalogoPrecos}
+        dadosPlanta={dadosPlanta}
+        tarefasPlanta={tarefasPlanta}
+        paginaInicial={filtros.pagina ? Number(filtros.pagina) : undefined}
       />
     </div>
   );

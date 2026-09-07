@@ -42,6 +42,13 @@ interface ListaTarefasProps {
     unidade: string;
     medicoes: { id: string; titulo: string; obra_id: string };
   }[];
+  selecionadas: Set<string>;
+  aoAlternarSelecao: (tarefaId: string) => void;
+  aoAlternarVarias: (tarefasIds: string[], selecionar: boolean) => void;
+  aoAlternarTodas: () => void;
+  aoLimparSelecao: () => void;
+  tarefaDestaque: string | null;
+  aoDestaque: (tarefaId: string | null) => void;
 }
 
 const COR_PRAZO: Record<string, string> = {
@@ -61,15 +68,15 @@ export function ListaTarefas({
   executores,
   tags,
   catalogoPrecos,
+  selecionadas,
+  aoAlternarSelecao,
+  aoAlternarVarias,
+  aoAlternarTodas,
+  aoLimparSelecao,
+  tarefaDestaque,
+  aoDestaque,
 }: ListaTarefasProps) {
-  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [recolhidos, setRecolhidos] = useState<Set<string>>(new Set());
-
-  const tarefasPorTitulo = tarefas.reduce((acc, t) => {
-    if (!acc[t.titulo]) acc[t.titulo] = [];
-    acc[t.titulo].push(t.id);
-    return acc;
-  }, {} as Record<string, string[]>);
 
   const grupos = tarefas.reduce((acc, tarefa) => {
     const grupo = acc.find((g) => g.titulo === tarefa.titulo);
@@ -93,29 +100,11 @@ export function ListaTarefas({
     });
   };
 
-  const toggleSelecao = (tarefa: TarefaComDados) => {
-    const novas = new Set(selecionadas);
-    const grupo = tarefasPorTitulo[tarefa.titulo] || [tarefa.id];
-    
-    const isSelecionada = novas.has(tarefa.id);
-    
-    if (isSelecionada) {
-      grupo.forEach((id) => novas.delete(id));
-    } else {
-      grupo.forEach((id) => novas.add(id));
-    }
-    setSelecionadas(novas);
+  const alternarGrupo = (tarefasDoGrupo: TarefaComDados[]) => {
+    const ids = tarefasDoGrupo.map((t) => t.id);
+    const todasSelecionadas = ids.every((id) => selecionadas.has(id));
+    aoAlternarVarias(ids, !todasSelecionadas);
   };
-
-  const toggleTodas = () => {
-    if (selecionadas.size === tarefas.length) {
-      setSelecionadas(new Set());
-    } else {
-      setSelecionadas(new Set(tarefas.map((t) => t.id)));
-    }
-  };
-
-  const limparSelecao = () => setSelecionadas(new Set());
 
   const renderizarLinhaTarefa = (tarefa: TarefaComDados) => {
     const prazoInfo = situacaoPrazo(
@@ -123,13 +112,19 @@ export function ListaTarefas({
       tarefa.status === "concluido",
     );
     const isSelecionada = selecionadas.has(tarefa.id);
+    const isDestaque = tarefaDestaque === tarefa.id;
     return (
-      <Linha key={tarefa.id} className={cn(isSelecionada && "bg-azul-50/50")}>
+      <Linha 
+        key={tarefa.id} 
+        className={cn(isSelecionada && "bg-azul-50/50", isDestaque && "bg-superficie-50 ring-1 ring-inset ring-azul-200")}
+        onMouseEnter={() => aoDestaque(tarefa.id)}
+        onMouseLeave={() => aoDestaque(null)}
+      >
         <Celula className="text-center">
           <input
             type="checkbox"
             checked={isSelecionada}
-            onChange={() => toggleSelecao(tarefa)}
+            onChange={() => aoAlternarSelecao(tarefa.id)}
             className="h-4 w-4 rounded border-borda text-azul-600 focus:ring-azul-500 cursor-pointer"
           />
         </Celula>
@@ -239,17 +234,23 @@ export function ListaTarefas({
       tarefa.status === "concluido",
     );
     const isSelecionada = selecionadas.has(tarefa.id);
+    const isDestaque = tarefaDestaque === tarefa.id;
     return (
-      <div key={tarefa.id} className="relative">
+      <div 
+        key={tarefa.id} 
+        className="relative"
+        onMouseEnter={() => aoDestaque(tarefa.id)}
+        onMouseLeave={() => aoDestaque(null)}
+      >
         <div className="absolute left-4 top-4 z-10">
           <input
             type="checkbox"
             checked={isSelecionada}
-            onChange={() => toggleSelecao(tarefa)}
+            onChange={() => aoAlternarSelecao(tarefa.id)}
             className="h-5 w-5 rounded border-borda text-azul-600 focus:ring-azul-500 cursor-pointer"
           />
         </div>
-        <Cartao className={cn("transition-shadow group-hover:shadow-md", isSelecionada && "ring-2 ring-azul-500 bg-azul-50/20")}>
+        <Cartao className={cn("transition-shadow group-hover:shadow-md", isSelecionada && "ring-2 ring-azul-500 bg-azul-50/20", isDestaque && !isSelecionada && "ring-1 ring-azul-300 bg-superficie-50")}>
           <Link
             href={`/tarefas/${tarefa.id}`}
             className="group block pl-10"
@@ -369,7 +370,7 @@ export function ListaTarefas({
             <span className="text-sm font-medium text-azul-900">
               {selecionadas.size} {selecionadas.size === 1 ? "selecionada" : "selecionadas"}
             </span>
-            <Botao type="button" variante="fantasma" onClick={limparSelecao}>
+            <Botao type="button" variante="fantasma" onClick={aoLimparSelecao}>
               Desmarcar
             </Botao>
           </div>
@@ -381,12 +382,12 @@ export function ListaTarefas({
               executores={executores}
               tags={tags}
               catalogoPrecos={catalogoPrecos}
-              aoConcluir={limparSelecao}
+              aoConcluir={aoLimparSelecao}
             />
             {podeExcluir && (
               <BotaoExcluirEmLote
                 tarefasSelecionadas={Array.from(selecionadas)}
-                aoConcluir={limparSelecao}
+                aoConcluir={aoLimparSelecao}
               />
             )}
           </div>
@@ -407,7 +408,7 @@ export function ListaTarefas({
                           selecionadas.size > 0 && selecionadas.size < tarefas.length;
                       }
                     }}
-                    onChange={toggleTodas}
+                    onChange={aoAlternarTodas}
                     className="h-4 w-4 rounded border-borda text-azul-600 focus:ring-azul-500 cursor-pointer"
                   />
                 </CelulaCabecalho>
@@ -427,6 +428,9 @@ export function ListaTarefas({
                   return renderizarLinhaTarefa(grupo.tarefas[0]);
                 }
                 const recolhido = recolhidos.has(grupo.titulo);
+                const todasSelecionadas = grupo.tarefas.every(t => selecionadas.has(t.id));
+                const algumasSelecionadas = grupo.tarefas.some(t => selecionadas.has(t.id));
+                
                 return (
                   <Fragment key={grupo.titulo}>
                     <Linha className="bg-superficie-50/60 hover:bg-superficie-50">
@@ -434,22 +438,36 @@ export function ListaTarefas({
                         colSpan={podeExcluir ? 9 : 8}
                         className="px-4 py-2"
                       >
-                        <button
-                          type="button"
-                          onClick={() => alternarRecolhido(grupo.titulo)}
-                          aria-expanded={!recolhido}
-                          aria-controls={`grupo-${grupo.titulo}`}
-                          className="flex w-full items-center gap-2 text-left font-semibold text-superficie-800 hover:text-azul-700"
-                        >
-                          {recolhido ? (
-                            <ChevronRight className="h-4 w-4 text-superficie-400" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-superficie-400" />
-                          )}
-                          <span>
-                            {grupo.titulo} ({grupo.tarefas.length})
-                          </span>
-                        </button>
+                        <div className="flex w-full items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={todasSelecionadas}
+                            ref={(input) => {
+                              if (input) {
+                                input.indeterminate = algumasSelecionadas && !todasSelecionadas;
+                              }
+                            }}
+                            onChange={() => alternarGrupo(grupo.tarefas)}
+                            className="h-4 w-4 rounded border-borda text-azul-600 focus:ring-azul-500 cursor-pointer shrink-0"
+                            title={`Selecionar todas as tarefas de "${grupo.titulo}"`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => alternarRecolhido(grupo.titulo)}
+                            aria-expanded={!recolhido}
+                            aria-controls={`grupo-${grupo.titulo}`}
+                            className="flex flex-1 items-center gap-2 text-left font-semibold text-superficie-800 hover:text-azul-700"
+                          >
+                            {recolhido ? (
+                              <ChevronRight className="h-4 w-4 text-superficie-400" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-superficie-400" />
+                            )}
+                            <span>
+                              {grupo.titulo} ({grupo.tarefas.length})
+                            </span>
+                          </button>
+                        </div>
                       </td>
                     </Linha>
                     {!recolhido && (
@@ -468,24 +486,40 @@ export function ListaTarefas({
             return renderizarCardTarefa(grupo.tarefas[0]);
           }
           const recolhido = recolhidos.has(grupo.titulo);
+          const todasSelecionadas = grupo.tarefas.every(t => selecionadas.has(t.id));
+          const algumasSelecionadas = grupo.tarefas.some(t => selecionadas.has(t.id));
+          
           return (
             <div key={grupo.titulo} className="space-y-3">
-              <button
-                type="button"
-                onClick={() => alternarRecolhido(grupo.titulo)}
-                aria-expanded={!recolhido}
-                aria-controls={`grupo-mobile-${grupo.titulo}`}
-                className="flex w-full items-center gap-2 rounded-lg border border-borda bg-superficie-50 px-4 py-3 text-left font-semibold text-superficie-800 hover:bg-superficie-100"
-              >
-                {recolhido ? (
-                  <ChevronRight className="h-4 w-4 text-superficie-400" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-superficie-400" />
-                )}
-                <span>
-                  {grupo.titulo} ({grupo.tarefas.length})
-                </span>
-              </button>
+              <div className="flex w-full items-center gap-3 rounded-lg border border-borda bg-superficie-50 px-4 py-3 hover:bg-superficie-100">
+                <input
+                  type="checkbox"
+                  checked={todasSelecionadas}
+                  ref={(input) => {
+                    if (input) {
+                      input.indeterminate = algumasSelecionadas && !todasSelecionadas;
+                    }
+                  }}
+                  onChange={() => alternarGrupo(grupo.tarefas)}
+                  className="h-5 w-5 rounded border-borda text-azul-600 focus:ring-azul-500 cursor-pointer shrink-0"
+                />
+                <button
+                  type="button"
+                  onClick={() => alternarRecolhido(grupo.titulo)}
+                  aria-expanded={!recolhido}
+                  aria-controls={`grupo-mobile-${grupo.titulo}`}
+                  className="flex flex-1 items-center gap-2 text-left font-semibold text-superficie-800"
+                >
+                  {recolhido ? (
+                    <ChevronRight className="h-4 w-4 text-superficie-400 shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-superficie-400 shrink-0" />
+                  )}
+                  <span>
+                    {grupo.titulo} ({grupo.tarefas.length})
+                  </span>
+                </button>
+              </div>
               {!recolhido &&
                 grupo.tarefas.map((tarefa) => renderizarCardTarefa(tarefa))}
             </div>
