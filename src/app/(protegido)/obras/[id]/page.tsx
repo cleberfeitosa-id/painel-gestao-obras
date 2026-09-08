@@ -353,12 +353,20 @@ export default async function DetalheObraPage({
             <CartaoCabecalho>
               <div className="flex items-center justify-between">
                 <CartaoTitulo>Plantas</CartaoTitulo>
-                <Link href={`/obras/${obra.id}/plantas/nova`}>
-                  <Botao variante="contorno" tamanho="sm">
-                    <Plus className="h-4 w-4" />
-                    Enviar plantas
-                  </Botao>
-                </Link>
+                <div className="flex gap-2">
+                  <Link href={`/obras/${obra.id}/compatibilizacoes`}>
+                    <Botao variante="contorno" tamanho="sm">
+                      <Layers className="h-4 w-4" />
+                      Compatibilização
+                    </Botao>
+                  </Link>
+                  <Link href={`/obras/${obra.id}/plantas/nova`}>
+                    <Botao variante="contorno" tamanho="sm">
+                      <Plus className="h-4 w-4" />
+                      Enviar plantas
+                    </Botao>
+                  </Link>
+                </div>
               </div>
             </CartaoCabecalho>
             <CartaoConteudo>
