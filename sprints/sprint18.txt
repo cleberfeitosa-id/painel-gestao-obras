@@ -1,0 +1,12 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Modulo de compatibilização de plantas:
+    - Criação de um módulo de compatibilização de plantas, que permita a importação de múltiplas plantas para cada obra. 
+    - Deve ser possível escolher dois pontos comuns em cada planta, esses pontos servirão como referência para a compatibilização das plantas.
+    - As plantas devem ser sobrepostas com uma transparência que permita identificar os elementos presentes em todas as plantas simultaneamente.
+    - O sistema deve ser capaz de detectar automaticamente a presença de tarefas em cada planta, e indicar a presença de tarefas com uma cor ou ícone específico em cada ponto ou região da planta.
+    - Deve ser possível ocultar ou exibir plantas individualmente.
+    - Deve ser possível filtrar as tarefas por executor e por status.
+    - Deve ser possível sinalizar pontos de choque entre as plantas.
+    - Seguindo o padrão em lista, a primeira tela do módulo deve listar as compatibilizações e permitir criar, excluir e editar compatibilizações existentes.
+    
