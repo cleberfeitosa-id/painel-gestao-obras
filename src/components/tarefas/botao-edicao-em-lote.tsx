@@ -159,6 +159,24 @@ export function BotaoEdicaoEmLote({
             </Selecao>
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Selecao rotulo="Foto obrigatoria" name="exige_foto" defaultValue="">
+              <option value="">Nao alterar</option>
+              <option value="true">Exigir</option>
+              <option value="false">Nao exigir</option>
+            </Selecao>
+            <Selecao rotulo="Video obrigatorio" name="exige_video" defaultValue="">
+              <option value="">Nao alterar</option>
+              <option value="true">Exigir</option>
+              <option value="false">Nao exigir</option>
+            </Selecao>
+            <Selecao rotulo="Arquivo obrigatorio" name="exige_arquivo" defaultValue="">
+              <option value="">Nao alterar</option>
+              <option value="true">Exigir</option>
+              <option value="false">Nao exigir</option>
+            </Selecao>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo rotulo="Prazo" name="prazo" type="date" defaultValue="" />
             <Campo rotulo="Data planejada" name="data_planejada" type="date" defaultValue="" />

@@ -25,6 +25,8 @@ import { BotaoExcluirTarefa } from "./botao-excluir-tarefa";
 import { BotaoDuplicarTarefa } from "./botao-duplicar-tarefa";
 import { BotaoEdicaoEmLote } from "./botao-edicao-em-lote";
 import { BotaoExcluirEmLote } from "./botao-excluir-em-lote";
+import { BotaoAprovarEmLote } from "./botao-aprovar-em-lote";
+import { BotaoReverterAprovacaoEmLote } from "./botao-reverter-aprovacao-em-lote";
 import type { TarefaComDados } from "@/app/(protegido)/tarefas/page";
 import type { PerfilRow, ExecutorRow } from "@/lib/supabase/database.types";
 
@@ -375,6 +377,14 @@ export function ListaTarefas({
             </Botao>
           </div>
           <div className="flex items-center gap-2">
+            <BotaoAprovarEmLote
+              tarefasSelecionadas={Array.from(selecionadas)}
+              aoConcluir={aoLimparSelecao}
+            />
+            <BotaoReverterAprovacaoEmLote
+              tarefasSelecionadas={Array.from(selecionadas)}
+              aoConcluir={aoLimparSelecao}
+            />
             <BotaoEdicaoEmLote
               tarefasSelecionadas={tarefas.filter(t => selecionadas.has(t.id))}
               responsaveis={responsaveis}

@@ -860,6 +860,21 @@ export async function atualizarTarefasEmLote(
   const data_fim = formData.get("data_fim") ? String(formData.get("data_fim")) : null;
   if (data_fim) updates.data_fim = data_fim;
 
+  const exige_foto = formData.get("exige_foto");
+  if (exige_foto === "true" || exige_foto === "false") {
+    updates.exige_foto = exige_foto === "true";
+  }
+
+  const exige_video = formData.get("exige_video");
+  if (exige_video === "true" || exige_video === "false") {
+    updates.exige_video = exige_video === "true";
+  }
+
+  const exige_arquivo = formData.get("exige_arquivo");
+  if (exige_arquivo === "true" || exige_arquivo === "false") {
+    updates.exige_arquivo = exige_arquivo === "true";
+  }
+
   const medicoesRaw = formData.get("medicoes");
   let medicoes: { catalogo_id: string; quantidade: number }[] = [];
   if (medicoesRaw) {
@@ -1279,6 +1294,169 @@ export async function reverterAprovacao(
 
   revalidatePath("/tarefas");
   revalidatePath(`/tarefas/${tarefaId}`);
+  revalidatePath("/painel");
+  return {};
+}
+
+export async function aprovarTarefasEmLote(
+  ids: string[],
+): Promise<Resultado> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  if (!ids || ids.length === 0) {
+    return { erro: "Nenhuma tarefa selecionada." };
+  }
+
+  const papel = await papelDoUsuario(user.id);
+  const gestor = eGestor(papel);
+
+  const supabase = await createClient();
+  const { data: tarefas } = await supabase
+    .from("tarefas")
+    .select("id, status, aprovacao, supervisor_id")
+    .in("id", ids);
+
+  if (!tarefas || tarefas.length === 0) {
+    return { erro: "Nenhuma tarefa encontrada." };
+  }
+
+  // Filtra apenas as tarefas que o usuario pode aprovar: gestor/admin ou
+  // supervisor da tarefa. Tambem exige status concluido e aprovacao pendente.
+  const idsPermitidos = tarefas
+    .filter((t) => {
+      if (t.status !== "concluido") return false;
+      if (t.aprovacao === "aprovado") return false;
+      return gestor || t.supervisor_id === user.id;
+    })
+    .map((t) => t.id);
+
+  if (idsPermitidos.length === 0) {
+    return {
+      erro:
+        "Nenhuma tarefa selecionada pode ser aprovada. Apenas tarefas concluidas e pendentes de aprovacao, das quais voce e supervisor ou gestor, podem ser aprovadas.",
+    };
+  }
+
+  const agora = new Date().toISOString();
+
+  // RLS em `tarefas` so permite escrita a gestores e ao responsavel. Um
+  // supervisor colaborador nao pode atualizar a linha pelo client normal;
+  // a permissao ja foi conferida acima, entao o UPDATE passa pelo client
+  // admin (bypassa RLS) de forma deliberada.
+  const admin = createAdminClient();
+  const { error: erroTarefa } = await admin
+    .from("tarefas")
+    .update({
+      aprovacao: "aprovado",
+      avaliado_por: user.id,
+      avaliado_em: agora,
+      motivo_reprovacao: null,
+    })
+    .in("id", idsPermitidos);
+
+  if (erroTarefa) {
+    console.error("[tarefas] erro ao aprovar tarefas em lote:", erroTarefa);
+    return { erro: "Nao foi possivel aprovar as tarefas. Tente novamente." };
+  }
+
+  const historico = idsPermitidos.map((tarefaId) => ({
+    tarefa_id: tarefaId,
+    supervisor_id: user.id,
+    decisao: "aprovado" as const,
+    motivo: null,
+  }));
+
+  const { error: erroHistorico } = await admin
+    .from("tarefa_aprovacoes")
+    .insert(historico);
+
+  if (erroHistorico) {
+    console.error("[tarefas] erro ao registrar historico de aprovacao:", erroHistorico);
+    return { erro: "Nao foi possivel registrar o historico da aprovacao." };
+  }
+
+  revalidatePath("/tarefas");
+  revalidatePath("/painel");
+  return {};
+}
+
+export async function reverterAprovacaoTarefasEmLote(
+  ids: string[],
+): Promise<Resultado> {
+  const user = await usuarioAtual();
+  if (!user) return { erro: "Sessao expirada. Entre novamente." };
+
+  if (!ids || ids.length === 0) {
+    return { erro: "Nenhuma tarefa selecionada." };
+  }
+
+  const papel = await papelDoUsuario(user.id);
+  const gestor = eGestor(papel);
+
+  const supabase = await createClient();
+  const { data: tarefas } = await supabase
+    .from("tarefas")
+    .select("id, aprovacao, supervisor_id")
+    .in("id", ids);
+
+  if (!tarefas || tarefas.length === 0) {
+    return { erro: "Nenhuma tarefa encontrada." };
+  }
+
+  // Filtra apenas as tarefas aprovadas que o usuario pode reverter: gestor/admin
+  // ou supervisor da tarefa.
+  const idsPermitidos = tarefas
+    .filter((t) => {
+      if (t.aprovacao !== "aprovado") return false;
+      return gestor || t.supervisor_id === user.id;
+    })
+    .map((t) => t.id);
+
+  if (idsPermitidos.length === 0) {
+    return {
+      erro:
+        "Nenhuma tarefa selecionada pode ter a aprovacao revertida. Apenas tarefas aprovadas, das quais voce e supervisor ou gestor, podem ser revertidas.",
+    };
+  }
+
+  // RLS em `tarefas` so permite escrita a gestores e ao responsavel. Um
+  // supervisor colaborador nao pode atualizar a linha pelo client normal;
+  // a permissao ja foi conferida acima, entao o UPDATE passa pelo client
+  // admin (bypassa RLS) de forma deliberada.
+  const admin = createAdminClient();
+  const { error: erroTarefa } = await admin
+    .from("tarefas")
+    .update({
+      aprovacao: "pendente",
+      avaliado_por: null,
+      avaliado_em: null,
+      motivo_reprovacao: null,
+    })
+    .in("id", idsPermitidos);
+
+  if (erroTarefa) {
+    console.error("[tarefas] erro ao reverter aprovacao em lote:", erroTarefa);
+    return { erro: "Nao foi possivel reverter a aprovacao. Tente novamente." };
+  }
+
+  const historico = idsPermitidos.map((tarefaId) => ({
+    tarefa_id: tarefaId,
+    supervisor_id: user.id,
+    decisao: "pendente" as const,
+    motivo: null,
+  }));
+
+  const { error: erroHistorico } = await admin
+    .from("tarefa_aprovacoes")
+    .insert(historico);
+
+  if (erroHistorico) {
+    console.error("[tarefas] erro ao registrar historico de reversao:", erroHistorico);
+    return { erro: "Nao foi possivel registrar o historico da reversao." };
+  }
+
+  revalidatePath("/tarefas");
   revalidatePath("/painel");
   return {};
 }
