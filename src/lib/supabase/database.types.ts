@@ -14,6 +14,149 @@ export type Database = {
   }
   public: {
     Tables: {
+      compatibilizacoes: {
+        Row: {
+          id: string
+          obra_id: string
+          nome: string
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          obra_id: string
+          nome: string
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: string
+          obra_id?: string
+          nome?: string
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compatibilizacoes_obra_id_fkey"
+            columns: ["obra_id"]
+            isOneToOne: false
+            referencedRelation: "obras"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      compatibilizacao_plantas: {
+        Row: {
+          id: string
+          compatibilizacao_id: string
+          planta_id: string
+          pagina: number
+          e_base: boolean
+          ref1_x: number
+          ref1_y: number
+          ref2_x: number
+          ref2_y: number
+          cor_identificacao: string
+          opacidade: number
+          visivel: boolean
+          criado_em: string
+        }
+        Insert: {
+          id?: string
+          compatibilizacao_id: string
+          planta_id: string
+          pagina?: number
+          e_base?: boolean
+          ref1_x: number
+          ref1_y: number
+          ref2_x: number
+          ref2_y: number
+          cor_identificacao?: string
+          opacidade?: number
+          visivel?: boolean
+          criado_em?: string
+        }
+        Update: {
+          id?: string
+          compatibilizacao_id?: string
+          planta_id?: string
+          pagina?: number
+          e_base?: boolean
+          ref1_x?: number
+          ref1_y?: number
+          ref2_x?: number
+          ref2_y?: number
+          cor_identificacao?: string
+          opacidade?: number
+          visivel?: boolean
+          criado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compatibilizacao_plantas_compatibilizacao_id_fkey"
+            columns: ["compatibilizacao_id"]
+            isOneToOne: false
+            referencedRelation: "compatibilizacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compatibilizacao_plantas_planta_id_fkey"
+            columns: ["planta_id"]
+            isOneToOne: false
+            referencedRelation: "plantas"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      compatibilizacao_choques: {
+        Row: {
+          id: string
+          compatibilizacao_id: string
+          ponto_x: number
+          ponto_y: number
+          descricao: string
+          status: string
+          criado_por: string | null
+          criado_em: string
+        }
+        Insert: {
+          id?: string
+          compatibilizacao_id: string
+          ponto_x: number
+          ponto_y: number
+          descricao: string
+          status?: string
+          criado_por?: string | null
+          criado_em?: string
+        }
+        Update: {
+          id?: string
+          compatibilizacao_id?: string
+          ponto_x?: number
+          ponto_y?: number
+          descricao?: string
+          status?: string
+          criado_por?: string | null
+          criado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compatibilizacao_choques_compatibilizacao_id_fkey"
+            columns: ["compatibilizacao_id"]
+            isOneToOne: false
+            referencedRelation: "compatibilizacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compatibilizacao_choques_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       levantamentos: {
         Row: {
           atualizado_em: string
