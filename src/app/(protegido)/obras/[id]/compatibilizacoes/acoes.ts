@@ -143,3 +143,27 @@ export async function criarChoqueCompatibilizacao(compatId: string, ponto_x: num
     }]);
   return { error };
 }
+
+export async function atualizarCompatibilizacao(estadoAntigo: any, formData: FormData) {
+  const supabase = await createClient();
+  const id = formData.get("id") as string;
+  const obra_id = formData.get("obra_id") as string;
+  const nome = formData.get("nome") as string;
+  if (!id || !obra_id || !nome) return { erro: "Dados incompletos." };
+  const { error } = await supabase.from("compatibilizacoes").update({ nome }).eq("id", id);
+  if (error) return { erro: "Erro ao atualizar compatibilização." };
+  revalidatePath(`/obras/${obra_id}/compatibilizacoes`);
+  revalidatePath(`/obras/${obra_id}/compatibilizacoes/${id}`);
+  return { erro: null };
+}
+
+export async function apagarCompatibilizacaoDireto(estadoAntigo: any, formData: FormData) {
+  const supabase = await createClient();
+  const id = formData.get("id") as string;
+  const obra_id = formData.get("obra_id") as string;
+  if (!id || !obra_id) return { erro: "Dados inválidos." };
+  const { error } = await supabase.from("compatibilizacoes").delete().eq("id", id);
+  if (error) return { erro: "Erro ao apagar compatibilização." };
+  revalidatePath(`/obras/${obra_id}/compatibilizacoes`);
+  redirect(`/obras/${obra_id}/compatibilizacoes`);
+}

@@ -141,7 +141,7 @@ async function carregarElementoImagem(url: string): Promise<HTMLImageElement | n
   });
 }
 
-async function renderizarPaginaPdfEmCanvas(
+export async function renderizarPaginaPdfEmCanvas(
   urlPdf: string,
   numeroPagina: number,
   larguraMinima = 3200,

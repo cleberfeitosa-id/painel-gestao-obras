@@ -12,6 +12,9 @@ import {
   EstadoVazio,
 } from "@/components/ui";
 
+import { BotaoExcluirCompatibilizacao } from "@/components/compatibilizacao/botao-excluir-compatibilizacao";
+import { EditarCompatibilizacaoModal } from "@/components/compatibilizacao/editar-compatibilizacao-modal";
+
 interface CompatibilizacaoPageProps {
   params: Promise<{ id: string }>;
 }
@@ -82,19 +85,36 @@ export default async function CompatibilizacoesObra({ params }: Compatibilizacao
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {compatibilizacoes.map((comp) => (
-            <Link key={comp.id} href={`/obras/${id}/compatibilizacoes/${comp.id}`}>
-              <Cartao className="transition-all hover:border-primary">
-                <CartaoCabecalho>
-                  <CartaoTitulo className="text-lg">{comp.nome}</CartaoTitulo>
+            <Cartao key={comp.id} className="transition-all hover:border-primary relative flex flex-col group">
+              <Link 
+                href={`/obras/${id}/compatibilizacoes/${comp.id}`} 
+                className="absolute inset-0 z-0 rounded-xl"
+                aria-label={`Visualizar compatibilização ${comp.nome}`}
+              />
+              <CartaoCabecalho className="flex justify-between items-start">
+                <div className="z-10 pointer-events-none">
+                  <CartaoTitulo className="text-lg group-hover:text-primary transition-colors">{comp.nome}</CartaoTitulo>
                   <p className="text-sm text-muted-foreground mt-1">
                     {comp.compatibilizacao_plantas[0]?.count || 0} plantas
                   </p>
-                </CartaoCabecalho>
-                <CartaoConteudo className="text-sm text-muted-foreground flex justify-between items-center">
-                  <span>Criado em {formatarData(comp.criado_em)}</span>
-                </CartaoConteudo>
-              </Cartao>
-            </Link>
+                </div>
+                <div className="flex gap-1 z-10 relative">
+                  <EditarCompatibilizacaoModal
+                    compatibilizacaoId={comp.id}
+                    obraId={id}
+                    nomeInicial={comp.nome}
+                  />
+                  <BotaoExcluirCompatibilizacao
+                    compatibilizacaoId={comp.id}
+                    obraId={id}
+                    nome={comp.nome}
+                  />
+                </div>
+              </CartaoCabecalho>
+              <CartaoConteudo className="text-sm text-muted-foreground flex justify-between items-center z-10 pointer-events-none mt-auto">
+                <span>Criado em {formatarData(comp.criado_em)}</span>
+              </CartaoConteudo>
+            </Cartao>
           ))}
         </div>
       )}

@@ -1,12 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Document, Page } from "react-pdf";
-import { Eye, EyeOff, ZoomIn, ZoomOut, AlertTriangle, Trash2 } from "lucide-react";
+import { Document, Page, pdfjs } from "react-pdf";
+import { Eye, EyeOff, ZoomIn, ZoomOut, AlertTriangle, Trash2, FileDown } from "lucide-react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import dynamic from "next/dynamic";
 
 import { Botao, Cartao } from "@/components/ui";
+
+const ModalExportarCompatibilizacao = dynamic(
+  () => import("./modal-exportar-compatibilizacao").then((m) => m.ModalExportarCompatibilizacao),
+  { ssr: false }
+);
 import { calcularMatrizTransformacao } from "./math";
 import {
   adicionarPlantaCompatibilizacao,
@@ -14,6 +20,11 @@ import {
   removerPlantaCompatibilizacao,
   criarChoqueCompatibilizacao
 } from "@/app/(protegido)/obras/[id]/compatibilizacoes/acoes";
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url,
+).toString();
 
 interface TarefaItem {
   id: string;
@@ -78,6 +89,7 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
     plantasPreCarregadas.sort((a, b) => (a.e_base === b.e_base ? 0 : a.e_base ? -1 : 1))
   );
   const [choques, setChoques] = useState<ChoqueItem[]>(choquesIniciais);
+  const [marcandoRef, setMarcandoRef] = useState<{plantaId: string, refIndex: 1 | 2} | null>(null);
   
   const [escala, setEscala] = useState(1);
   const [renderEscala, setRenderEscala] = useState(1);
@@ -87,6 +99,7 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
   const [modoChoque, setModoChoque] = useState(false);
   const [novoChoquePonto, setNovoChoquePonto] = useState<{x: number, y: number} | null>(null);
   const [descChoque, setDescChoque] = useState("");
+  const [modalExportar, setModalExportar] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setRenderEscala(escala), 150);
@@ -117,6 +130,19 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
     if (modoChoque && !novoChoquePonto) {
       setNovoChoquePonto(pt);
     }
+  };
+
+  const salvarReferencia = async (plantaId: string, refIndex: 1 | 2, x: number, y: number) => {
+    const p = plantasComp.find(p => p.id === plantaId);
+    if (!p) return;
+    
+    const dados = refIndex === 1 
+      ? { ref1_x: x, ref1_y: y } 
+      : { ref2_x: x, ref2_y: y };
+      
+    setPlantasComp(prev => prev.map(x_1 => x_1.id === plantaId ? { ...x_1, ...dados } : x_1));
+    await atualizarPlantaCompatibilizacao(plantaId, dados);
+    setMarcandoRef(null);
   };
 
   const salvarChoque = async () => {
@@ -168,6 +194,8 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
 
   const executores: string[] = Array.from(new Set(tarefas.map((t) => t.executores?.nome).filter(Boolean))) as string[];
 
+  const safeRenderEscala = Math.min(renderEscala, 2.5);
+
   return (
     <div className="flex h-full w-full bg-slate-50">
       <div className="w-80 flex-shrink-0 border-r bg-white flex flex-col h-full overflow-hidden">
@@ -209,10 +237,47 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
                 </div>
                 {!p.e_base && (
                   <div className="text-xs space-y-1">
-                    <p className="text-muted-foreground mb-1">Pontos de referência (Edite no DB p/ alinhar)</p>
+                    <p className="text-muted-foreground mb-1">Alinhamento</p>
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-slate-100 p-1 rounded text-center">Ref 1</div>
-                      <div className="bg-slate-100 p-1 rounded text-center">Ref 2</div>
+                      <Botao 
+                        variante={marcandoRef?.plantaId === p.id && marcandoRef.refIndex === 1 ? "primario" : "contorno"} 
+                        tamanho="sm"
+                        onClick={() => setMarcandoRef({ plantaId: p.id, refIndex: 1 })}
+                        className="text-[10px] h-6 px-1"
+                      >
+                        {p.ref1_x ? "Ponto 1 (Ok)" : "Marcar Ponto 1"}
+                      </Botao>
+                      <Botao 
+                        variante={marcandoRef?.plantaId === p.id && marcandoRef.refIndex === 2 ? "primario" : "contorno"} 
+                        tamanho="sm"
+                        onClick={() => setMarcandoRef({ plantaId: p.id, refIndex: 2 })}
+                        className="text-[10px] h-6 px-1"
+                      >
+                        {p.ref2_x ? "Ponto 2 (Ok)" : "Marcar Ponto 2"}
+                      </Botao>
+                    </div>
+                  </div>
+                )}
+                {p.e_base && (
+                  <div className="text-xs space-y-1">
+                    <p className="text-muted-foreground mb-1">Alinhamento Base</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Botao 
+                        variante={marcandoRef?.plantaId === p.id && marcandoRef.refIndex === 1 ? "primario" : "contorno"} 
+                        tamanho="sm"
+                        onClick={() => setMarcandoRef({ plantaId: p.id, refIndex: 1 })}
+                        className="text-[10px] h-6 px-1"
+                      >
+                        {p.ref1_x ? "Ponto 1 (Ok)" : "Marcar Ponto 1"}
+                      </Botao>
+                      <Botao 
+                        variante={marcandoRef?.plantaId === p.id && marcandoRef.refIndex === 2 ? "primario" : "contorno"} 
+                        tamanho="sm"
+                        onClick={() => setMarcandoRef({ plantaId: p.id, refIndex: 2 })}
+                        className="text-[10px] h-6 px-1"
+                      >
+                        {p.ref2_x ? "Ponto 2 (Ok)" : "Marcar Ponto 2"}
+                      </Botao>
                     </div>
                   </div>
                 )}
@@ -242,6 +307,15 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
             <AlertTriangle className="h-4 w-4 mr-2" />
             {modoChoque ? "Cancelar Choque" : "Sinalizar Choque"}
           </Botao>
+          
+          <Botao 
+            variante="contorno" 
+            className="w-full mt-2"
+            onClick={() => setModalExportar(true)}
+          >
+            <FileDown className="h-4 w-4 mr-2" />
+            Exportar em PDF
+          </Botao>
         </div>
       </div>
 
@@ -268,54 +342,86 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
           </div>
         )}
 
+        {marcandoRef && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-3">
+            <span className="font-medium text-sm">
+              Clique na planta para marcar o Ponto {marcandoRef.refIndex === 1 ? '1' : '2'}
+            </span>
+            <Botao variante="secundario" tamanho="sm" className="h-6 text-xs px-2" onClick={() => setMarcandoRef(null)}>
+              Cancelar
+            </Botao>
+          </div>
+        )}
+
         <div 
           ref={containerRef}
-          className={`flex-1 overflow-auto bg-slate-300 relative ${modoChoque ? 'cursor-crosshair' : 'cursor-grab'}`}
+          className={`flex-1 overflow-auto bg-slate-300 relative ${modoChoque || marcandoRef ? 'cursor-crosshair' : 'cursor-grab'}`}
           onClick={aoClicarPlanta}
         >
           {plantaBase && plantaBase.urlPdf ? (
             <div 
-              className="relative origin-top-left"
+              className="relative m-auto"
               style={{
                 width: plantaBase.dimensoes ? plantaBase.dimensoes.largura * escala : 'auto',
-                height: plantaBase.dimensoes ? plantaBase.dimensoes.altura * escala : 'auto',
-                transform: `scale(${escala / renderEscala})`
+                height: plantaBase.dimensoes ? plantaBase.dimensoes.altura * escala : 'auto'
               }}
             >
-              {plantasComp.map((p) => {
-                if (!p.visivel || !p.urlPdf) return null;
-                
-                let matrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-                if (!p.e_base && p.ref1_x && p.ref2_x && plantaBase.ref1_x && plantaBase.ref2_x) {
-                  const bH = plantaBase.dimensoes?.altura || 0;
-                  const tH = p.dimensoes?.altura || 0;
-                  if (bH && tH) {
-                    matrix = calcularMatrizTransformacao(
-                      { x: plantaBase.ref1_x, y: bH - plantaBase.ref1_y },
-                      { x: plantaBase.ref2_x, y: bH - plantaBase.ref2_y },
-                      { x: p.ref1_x, y: tH - p.ref1_y },
-                      { x: p.ref2_x, y: tH - p.ref2_y }
-                    );
+              <div
+                className="origin-top-left absolute top-0 left-0"
+                style={{
+                  transform: `scale(${escala / safeRenderEscala})`,
+                  width: plantaBase.dimensoes ? plantaBase.dimensoes.largura * safeRenderEscala : 'auto',
+                  height: plantaBase.dimensoes ? plantaBase.dimensoes.altura * safeRenderEscala : 'auto'
+                }}
+              >
+                {plantasComp.map((p) => {
+                  if (!p.visivel || !p.urlPdf) return null;
+                  
+                  let matrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+                  if (!p.e_base && p.ref1_x && p.ref2_x && plantaBase.ref1_x && plantaBase.ref2_x) {
+                    const bH = plantaBase.dimensoes?.altura || 0;
+                    const tH = p.dimensoes?.altura || 0;
+                    if (bH && tH) {
+                      matrix = calcularMatrizTransformacao(
+                        { x: plantaBase.ref1_x, y: bH - plantaBase.ref1_y },
+                        { x: plantaBase.ref2_x, y: bH - plantaBase.ref2_y },
+                        { x: p.ref1_x, y: tH - p.ref1_y },
+                        { x: p.ref2_x, y: tH - p.ref2_y }
+                      );
+                    }
                   }
-                }
 
-                return (
-                  <div 
-                    key={p.id}
-                    className="absolute top-0 left-0 origin-top-left"
-                    style={{
-                      opacity: p.opacidade,
-                      zIndex: p.e_base ? 10 : 20,
-                      mixBlendMode: "multiply",
-                      transform: p.e_base ? 'none' : `matrix(${matrix.a}, ${matrix.b}, ${matrix.c}, ${matrix.d}, ${matrix.e}, ${matrix.f})`
-                    }}
-                  >
-                    <Document file={p.urlPdf}>
-                      <Page 
-                        pageNumber={p.pagina} 
-                        scale={renderEscala}
-                        renderTextLayer={false}
-                        renderAnnotationLayer={false}
+                  return (
+                    <div 
+                      key={p.id}
+                      className="absolute top-0 left-0 origin-top-left"
+                      style={{
+                        opacity: p.opacidade,
+                        zIndex: marcandoRef?.plantaId === p.id ? 40 : (p.e_base ? 10 : 20),
+                        mixBlendMode: (marcandoRef?.plantaId === p.id) ? "normal" : "multiply",
+                        transform: (p.e_base || marcandoRef?.plantaId === p.id) ? 'none' : `matrix(${matrix.a}, ${matrix.b}, ${matrix.c}, ${matrix.d}, ${matrix.e * safeRenderEscala}, ${matrix.f * safeRenderEscala})`
+                      }}
+                      onClick={(e) => {
+                        if (marcandoRef?.plantaId === p.id) {
+                          e.stopPropagation();
+                          if (!p.dimensoes) return;
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const proporcaoX = (e.clientX - rect.left) / rect.width;
+                          const proporcaoY = (e.clientY - rect.top) / rect.height;
+                          
+                          const pdfX = proporcaoX * p.dimensoes.largura;
+                          const pdfY = (1 - proporcaoY) * p.dimensoes.altura;
+                          
+                          salvarReferencia(p.id, marcandoRef.refIndex, pdfX, pdfY);
+                        }
+                      }}
+                    >
+                      <Document file={p.urlPdf}>
+                        <Page 
+                          pageNumber={p.pagina} 
+                          scale={safeRenderEscala}
+                          renderTextLayer={false}
+                          renderAnnotationLayer={false}
                         onLoadSuccess={(page: { getViewport: (options: { scale: number }) => { width: number; height: number } }) => {
                           const vp = page.getViewport({ scale: 1 });
                           setPlantasComp(prev => prev.map(x => 
@@ -324,6 +430,34 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
                         }}
                       />
                     </Document>
+                    {p.dimensoes && p.ref1_x && p.ref1_y && (
+                      <div 
+                        className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center pointer-events-none z-50"
+                        style={{ 
+                          left: `${(p.ref1_x / p.dimensoes.largura) * 100}%`, 
+                          top: `${((p.dimensoes.altura - p.ref1_y) / p.dimensoes.altura) * 100}%` 
+                        }}
+                      >
+                        <div className="w-3 h-3 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: p.cor_identificacao }}></div>
+                        <span className="text-[10px] font-bold mt-1 px-1.5 py-0.5 rounded shadow-sm text-white" style={{ backgroundColor: p.cor_identificacao }}>
+                          P1
+                        </span>
+                      </div>
+                    )}
+                    {p.dimensoes && p.ref2_x && p.ref2_y && (
+                      <div 
+                        className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center pointer-events-none z-50"
+                        style={{ 
+                          left: `${(p.ref2_x / p.dimensoes.largura) * 100}%`, 
+                          top: `${((p.dimensoes.altura - p.ref2_y) / p.dimensoes.altura) * 100}%` 
+                        }}
+                      >
+                        <div className="w-3 h-3 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: p.cor_identificacao }}></div>
+                        <span className="text-[10px] font-bold mt-1 px-1.5 py-0.5 rounded shadow-sm text-white" style={{ backgroundColor: p.cor_identificacao }}>
+                          P2
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -395,7 +529,7 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
                   </div>
                 )}
               </div>
-
+              </div>
             </div>
           ) : (
             <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -404,6 +538,17 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
           )}
         </div>
       </div>
+      {modalExportar && (
+        <ModalExportarCompatibilizacao
+          aberto={modalExportar}
+          aoFechar={() => setModalExportar(false)}
+          plantasComp={plantasComp}
+          tarefas={tarefasFiltradas}
+          choques={choques}
+          compatibilizacaoNome={compatibilizacao.nome}
+          obraNome={"Obras Vasconcelos"}
+        />
+      )}
     </div>
   );
 }
