@@ -21,6 +21,8 @@ interface ModalExportarProps {
   choques: any[];
   compatibilizacaoNome: string;
   obraNome: string;
+  transparenciaTarefas?: number;
+  transparenciaBordas?: number;
 }
 
 export function ModalExportarCompatibilizacao({
@@ -31,6 +33,8 @@ export function ModalExportarCompatibilizacao({
   choques,
   compatibilizacaoNome,
   obraNome,
+  transparenciaTarefas = 0,
+  transparenciaBordas = 0,
 }: ModalExportarProps) {
   const [exportando, setExportando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -50,6 +54,8 @@ export function ModalExportarCompatibilizacao({
         choques,
         compatibilizacaoNome,
         obraNome,
+        transparenciaTarefas,
+        transparenciaBordas,
         (etapa, pct) => setProgresso({ etapa, pct })
       );
       
@@ -79,7 +85,7 @@ export function ModalExportarCompatibilizacao({
     >
       <div className="space-y-6">
         <p className="text-sm text-superficie-600">
-          O PDF gerado manterá 100% da resolução vetorial infinita original das plantas CAD. A geometria da folha será moldada perfeitamente de forma adaptativa.
+          O PDF gerado manterá 100% da resolução vetorial infinita original das plantas CAD. A geometria da folha será moldada perfeitamente de forma adaptativa. Serão incluídas apenas as marcações de tarefas e choques atualmente visíveis na tela.
         </p>
 
         <div className="space-y-4">

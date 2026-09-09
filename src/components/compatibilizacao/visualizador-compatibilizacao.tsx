@@ -8,6 +8,7 @@ import "react-pdf/dist/Page/TextLayer.css";
 import dynamic from "next/dynamic";
 
 import { Botao, Cartao } from "@/components/ui";
+import { CORES_CORREDOR, situacaoDaTarefa } from "@/lib/domain/rotulos";
 
 const ModalExportarCompatibilizacao = dynamic(
   () => import("./modal-exportar-compatibilizacao").then((m) => m.ModalExportarCompatibilizacao),
@@ -26,10 +27,24 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
+function hexParaRgbaCompor(hex: string, alfa: number): string {
+  if (!hex) return `rgba(0, 0, 0, ${alfa})`;
+  const h = hex.replace("#", "");
+  const num = parseInt(h, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alfa})`;
+}
+
 interface TarefaItem {
   id: string;
   titulo: string;
   status: string;
+  aprovacao?: string;
+  localizacao_tipo?: string;
+  regiao?: any;
+  localizacao_detalhe?: any;
   executor_id: string | null;
   planta_id: string;
   ponto_x: number | null;
@@ -95,11 +110,38 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
   const [renderEscala, setRenderEscala] = useState(1);
   
   const [filtroExecutor, setFiltroExecutor] = useState("todos");
-  const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [statusSelecionados, setStatusSelecionados] = useState<Set<string>>(new Set(["pendente", "em_execucao", "concluido"]));
+  const [plantasSelecionadas, setPlantasSelecionadas] = useState<Set<string>>(new Set(plantasPreCarregadas.map(p => p.planta_id)));
+  const [transparenciaTarefas, setTransparenciaTarefas] = useState(0);
+  const [transparenciaBordas, setTransparenciaBordas] = useState(0);
   const [modoChoque, setModoChoque] = useState(false);
   const [novoChoquePonto, setNovoChoquePonto] = useState<{x: number, y: number} | null>(null);
   const [descChoque, setDescChoque] = useState("");
   const [modalExportar, setModalExportar] = useState(false);
+
+  const gruposTarefas = Array.from(new Set(tarefas.map(t => t.titulo))).sort();
+  const [gruposVisiveis, setGruposVisiveis] = useState<Set<string>>(new Set(gruposTarefas));
+
+  const alternarGrupo = (titulo: string) => {
+    const novo = new Set(gruposVisiveis);
+    if (novo.has(titulo)) novo.delete(titulo);
+    else novo.add(titulo);
+    setGruposVisiveis(novo);
+  };
+
+  const alternarStatus = (status: string) => {
+    const novo = new Set(statusSelecionados);
+    if (novo.has(status)) novo.delete(status);
+    else novo.add(status);
+    setStatusSelecionados(novo);
+  };
+
+  const alternarPlanta = (plantaId: string) => {
+    const novo = new Set(plantasSelecionadas);
+    if (novo.has(plantaId)) novo.delete(plantaId);
+    else novo.add(plantaId);
+    setPlantasSelecionadas(novo);
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => setRenderEscala(escala), 150);
@@ -185,11 +227,13 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
   };
 
   const tarefasFiltradas = tarefas.filter((t) => {
-    if (filtroStatus !== "todos" && t.status !== filtroStatus) return false;
-    if (filtroExecutor !== "todos" && t.executor_id !== filtroExecutor) return false;
+    if (statusSelecionados.size > 0 && !statusSelecionados.has(t.status)) return false;
+    if (filtroExecutor !== "todos" && t.executores?.nome !== filtroExecutor) return false;
+    if (!gruposVisiveis.has(t.titulo)) return false;
+    if (plantasSelecionadas.size > 0 && !plantasSelecionadas.has(t.planta_id)) return false;
     const plantaVisivel = plantasComp.find(p => p.planta_id === t.planta_id)?.visivel;
     if (!plantaVisivel) return false;
-    return t.ponto_x !== null && t.ponto_y !== null;
+    return true;
   });
 
   const executores: string[] = Array.from(new Set(tarefas.map((t) => t.executores?.nome).filter(Boolean))) as string[];
@@ -287,16 +331,127 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
 
           <hr className="my-4"/>
           <h3 className="font-semibold mb-2">Filtros de Tarefas</h3>
-          <select className="w-full border rounded p-2 text-sm mb-2" value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}>
-            <option value="todos">Todos os status</option>
-            <option value="pendente">Pendente</option>
-            <option value="em_execucao">Em Execução</option>
-            <option value="concluido">Concluído</option>
-          </select>
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-slate-600">Status</span>
+              <div className="flex gap-2">
+                <button type="button" className="text-[10px] text-blue-600 hover:underline" onClick={() => setStatusSelecionados(new Set(["pendente", "em_execucao", "concluido"]))}>Todos</button>
+                <button type="button" className="text-[10px] text-blue-600 hover:underline" onClick={() => setStatusSelecionados(new Set())}>Nenhum</button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              {[
+                { valor: "pendente", rotulo: "Não iniciada", cor: "bg-slate-400" },
+                { valor: "em_execucao", rotulo: "Em execução", cor: "bg-amber-500" },
+                { valor: "concluido", rotulo: "Concluído", cor: "bg-sky-500" },
+              ].map(s => (
+                <label key={s.valor} className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={statusSelecionados.has(s.valor)}
+                    onChange={() => alternarStatus(s.valor)}
+                    className="rounded border-slate-300"
+                  />
+                  <span className={`w-2.5 h-2.5 rounded-full ${s.cor}`} />
+                  <span>{s.rotulo}</span>
+                </label>
+              ))}
+            </div>
+          </div>
           <select className="w-full border rounded p-2 text-sm" value={filtroExecutor} onChange={e => setFiltroExecutor(e.target.value)}>
             <option value="todos">Todos os executores</option>
             {executores.map((ex: string) => <option key={ex} value={ex}>{ex}</option>)}
           </select>
+
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-slate-600">Plantas</span>
+              <div className="flex gap-2">
+                <button type="button" className="text-[10px] text-blue-600 hover:underline" onClick={() => setPlantasSelecionadas(new Set(plantasPreCarregadas.map(p => p.planta_id)))}>Todas</button>
+                <button type="button" className="text-[10px] text-blue-600 hover:underline" onClick={() => setPlantasSelecionadas(new Set())}>Nenhuma</button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              {plantasPreCarregadas.map(p => (
+                <label key={p.planta_id} className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={plantasSelecionadas.has(p.planta_id)}
+                    onChange={() => alternarPlanta(p.planta_id)}
+                    className="rounded border-slate-300"
+                  />
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.cor_identificacao }} />
+                  <span className="truncate">{p.plantas.nome}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <p className="text-xs font-medium text-slate-600 mb-1">Transparência das Tarefas</p>
+            <input
+              type="range"
+              min={0}
+              max={90}
+              step={5}
+              value={transparenciaTarefas}
+              onChange={e => setTransparenciaTarefas(Number(e.target.value))}
+              className="w-full"
+            />
+            <span className="text-[10px] text-slate-400">{transparenciaTarefas}%</span>
+          </div>
+          <div className="mt-2">
+            <p className="text-xs font-medium text-slate-600 mb-1">Transparência das Bordas</p>
+            <input
+              type="range"
+              min={0}
+              max={90}
+              step={5}
+              value={transparenciaBordas}
+              onChange={e => setTransparenciaBordas(Number(e.target.value))}
+              className="w-full"
+            />
+            <span className="text-[10px] text-slate-400">{transparenciaBordas}%</span>
+          </div>
+
+
+          <hr className="my-4"/>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-sm">Exibição / Exportação</h3>
+            <div className="flex gap-2">
+              <button 
+                type="button" 
+                className="text-[10px] text-blue-600 hover:underline"
+                onClick={() => setGruposVisiveis(new Set(gruposTarefas))}
+              >
+                Todas
+              </button>
+              <button 
+                type="button" 
+                className="text-[10px] text-blue-600 hover:underline"
+                onClick={() => setGruposVisiveis(new Set())}
+              >
+                Nenhuma
+              </button>
+            </div>
+          </div>
+          <div className="border rounded max-h-48 overflow-y-auto p-1 space-y-1">
+            {gruposTarefas.map(nome => {
+              const qtd = tarefas.filter(t => t.titulo === nome).length;
+              return (
+                <label key={nome} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer text-xs">
+                  <input 
+                    type="checkbox" 
+                    checked={gruposVisiveis.has(nome)} 
+                    onChange={() => alternarGrupo(nome)}
+                    className="rounded border-slate-300"
+                  />
+                  <span className="truncate flex-1" title={nome}>{nome}</span>
+                  <span className="text-slate-400">({qtd})</span>
+                </label>
+              );
+            })}
+          </div>
 
           <hr className="my-4"/>
           <Botao 
@@ -463,21 +618,100 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
               })}
 
               <div className="absolute inset-0 z-30 pointer-events-none">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible pointer-events-none">
+                  {tarefasFiltradas.map((t) => {
+                    const plantaDaTarefa = plantasComp.find(p => p.planta_id === t.planta_id);
+                    if (!plantaDaTarefa || !plantaDaTarefa.dimensoes || !plantaBase.dimensoes) return null;
+                    
+                    const tDimensoes = plantaDaTarefa.dimensoes;
+                    const bDimensoes = plantaBase.dimensoes;
+
+                    const bH = bDimensoes.altura;
+                    const transformPoint = (x: number, y: number) => {
+                      let px = x;
+                      let py = tDimensoes.altura - y;
+                      if (!plantaDaTarefa.e_base && plantaDaTarefa.ref1_x) {
+                        const tH = tDimensoes.altura;
+                        const mat = calcularMatrizTransformacao(
+                          { x: plantaBase.ref1_x, y: bH - plantaBase.ref1_y },
+                          { x: plantaBase.ref2_x, y: bH - plantaBase.ref2_y },
+                          { x: plantaDaTarefa.ref1_x, y: tH - plantaDaTarefa.ref1_y! },
+                          { x: plantaDaTarefa.ref2_x, y: tH - plantaDaTarefa.ref2_y! }
+                        );
+                        px = mat.a * px + mat.c * py + mat.e;
+                        py = mat.b * px + mat.d * py + mat.f;
+                      }
+                      return {
+                        xPct: (px / bDimensoes.largura) * 100,
+                        yPct: (py / bH) * 100
+                      };
+                    };
+
+                    const sit = situacaoDaTarefa({ status: t.status as any, aprovacao: t.aprovacao as any || "pendente" });
+                    const corStatus = CORES_CORREDOR[sit] || "#2563eb";
+                    const corPlanta = plantaDaTarefa.cor_identificacao || "#cbd5e1";
+
+                    let pontos: {x: number, y: number}[] = [];
+                    if (t.localizacao_tipo === "regiao" && t.regiao?.vertices) {
+                      pontos = t.regiao.vertices;
+                    } else if (t.localizacao_detalhe?.pontos && Array.isArray(t.localizacao_detalhe.pontos)) {
+                      pontos = t.localizacao_detalhe.pontos;
+                    }
+
+                    let svgPolygon = null;
+                    if (pontos.length > 1) {
+                      const pointsStr = pontos.map(p => {
+                        const pt = transformPoint(p.x, p.y);
+                        return `${pt.xPct.toFixed(3)},${pt.yPct.toFixed(3)}`;
+                      }).join(" ");
+                      const isClosed = t.localizacao_tipo === "regiao" || t.localizacao_tipo === "area";
+                      
+                      const stkOpacity = 1 - (transparenciaBordas / 100);
+                      svgPolygon = isClosed ? (
+                        <polygon
+                          points={pointsStr}
+                          fill={corStatus}
+                          fillOpacity={1 - (transparenciaTarefas / 100)}
+                          stroke={corPlanta}
+                          strokeOpacity={stkOpacity}
+                          strokeWidth={0.5}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      ) : (
+                        <polyline
+                          points={pointsStr}
+                          fill="none"
+                          stroke={corPlanta}
+                          strokeOpacity={stkOpacity}
+                          strokeWidth={2.5}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      );
+                    }
+
+                    return <g key={t.id}>{svgPolygon}</g>;
+                  })}
+                </svg>
+
                 {tarefasFiltradas.map((t) => {
                   const plantaDaTarefa = plantasComp.find(p => p.planta_id === t.planta_id);
                   if (!plantaDaTarefa || !plantaDaTarefa.dimensoes || !plantaBase.dimensoes) return null;
 
-                  let px = t.ponto_x!;
-                  let py = plantaDaTarefa.dimensoes.altura - t.ponto_y!;
+                  const tDimensoes = plantaDaTarefa.dimensoes;
+                  const bDimensoes = plantaBase.dimensoes;
+
+                  let px = t.ponto_x;
+                  if (px === null) return null;
+                  let py = tDimensoes.altura - t.ponto_y!;
 
                   if (!plantaDaTarefa.e_base && plantaDaTarefa.ref1_x) {
-                    const bH = plantaBase.dimensoes.altura;
-                    const tH = plantaDaTarefa.dimensoes.altura;
+                    const bH = bDimensoes.altura;
+                    const tH = tDimensoes.altura;
                     const mat = calcularMatrizTransformacao(
                       { x: plantaBase.ref1_x, y: bH - plantaBase.ref1_y },
                       { x: plantaBase.ref2_x, y: bH - plantaBase.ref2_y },
-                      { x: plantaDaTarefa.ref1_x, y: tH - plantaDaTarefa.ref1_y },
-                      { x: plantaDaTarefa.ref2_x, y: tH - plantaDaTarefa.ref2_y }
+                      { x: plantaDaTarefa.ref1_x, y: tH - plantaDaTarefa.ref1_y! },
+                      { x: plantaDaTarefa.ref2_x, y: tH - plantaDaTarefa.ref2_y! }
                     );
                     const nx = mat.a * px + mat.c * py + mat.e;
                     const ny = mat.b * px + mat.d * py + mat.f;
@@ -485,17 +719,29 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
                     py = ny;
                   }
 
-                  const esq = (px / plantaBase.dimensoes.largura) * 100;
-                  const topo = (py / plantaBase.dimensoes.altura) * 100;
+                  const esq = (px / bDimensoes.largura) * 100;
+                  const topo = (py / bDimensoes.altura) * 100;
+
+                  const sit = situacaoDaTarefa({ status: t.status as any, aprovacao: t.aprovacao as any || "pendente" });
+                  const corStatus = CORES_CORREDOR[sit] || "#2563eb";
+                  const isConcluido = t.status === 'concluido';
+
+                  const corStatusRgba = hexParaRgbaCompor(corStatus, 1 - (transparenciaTarefas / 100));
+                  const corBordaRgba = hexParaRgbaCompor(plantaDaTarefa.cor_identificacao || '#fff', 1 - (transparenciaBordas / 100));
 
                   return (
                     <div 
                       key={t.id} 
-                      className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full w-5 h-5 flex items-center justify-center text-[10px] text-white font-bold pointer-events-auto cursor-pointer shadow-md border-2 border-white"
-                      style={{ left: `${esq}%`, top: `${topo}%`, backgroundColor: plantaDaTarefa.cor_identificacao }}
+                      className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full w-5 h-5 flex items-center justify-center text-[10px] text-white font-bold pointer-events-auto cursor-pointer shadow-md hover:opacity-100 transition-opacity"
+                      style={{ 
+                        left: `${esq}%`, 
+                        top: `${topo}%`, 
+                        backgroundColor: corStatusRgba,
+                        border: `2px solid ${corBordaRgba}`,
+                      }}
                       title={`${t.titulo}\nStatus: ${t.status}\nExecutor: ${t.executores?.nome || 'N/A'}`}
                     >
-                      {t.status === 'concluido' ? '✓' : '!'}
+                      {isConcluido ? 'V' : ''}
                     </div>
                   );
                 })}
@@ -547,6 +793,8 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
           choques={choques}
           compatibilizacaoNome={compatibilizacao.nome}
           obraNome={"Obras Vasconcelos"}
+          transparenciaTarefas={transparenciaTarefas}
+          transparenciaBordas={transparenciaBordas}
         />
       )}
     </div>

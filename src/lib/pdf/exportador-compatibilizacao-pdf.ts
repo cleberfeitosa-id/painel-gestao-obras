@@ -3,12 +3,22 @@
 import { PDFDocument, rgb, pushGraphicsState, popGraphicsState, concatTransformationMatrix, StandardFonts, BlendMode, degrees, PDFPage, PDFName, moveTo, lineTo, fillAndStroke, closePath, setFillingRgbColor, setStrokingRgbColor, setLineWidth } from "pdf-lib";
 import { calcularMatrizTransformacao } from "@/components/compatibilizacao/math";
 
+const CORES_STATUS_HEX: Record<string, string> = {
+  pendente: "#94a3b8",
+  em_execucao: "#f59e0b",
+  concluido: "#10b981",
+  aprovado: "#10b981",
+  reprovado: "#ef4444",
+};
+
 export async function exportarCompatibilizacaoPdf(
   plantasComp: any[],
   tarefas: any[],
   choques: any[],
   compatibilizacaoNome: string,
   obraNome: string,
+  transparenciaTarefas = 0,
+  transparenciaBordas = 0,
   aoProgresso?: (etapa: string, pct: number) => void
 ): Promise<{ blob: Blob; url: string }> {
   const notificar = (etapa: string, pct: number) => {
@@ -215,45 +225,112 @@ export async function exportarCompatibilizacaoPdf(
     finalPage.pushOperators(popGraphicsState());
   });
 
+  const parseHexToRgbArray = (hex: string) => {
+    if (!hex) return [0, 0, 1];
+    const h = hex.replace('#', '');
+    return [
+      parseInt(h.substring(0,2), 16)/255,
+      parseInt(h.substring(2,4), 16)/255,
+      parseInt(h.substring(4,6), 16)/255
+    ];
+  };
+
+  const mixColorWhite = (rgbArr: number[], opacity: number) => {
+    return [
+      rgbArr[0] * opacity + 1 * (1 - opacity),
+      rgbArr[1] * opacity + 1 * (1 - opacity),
+      rgbArr[2] * opacity + 1 * (1 - opacity)
+    ];
+  };
+
   tarefas.forEach(t => {
     const plantaDaTarefa = plantasComp.find(p => p.planta_id === t.planta_id);
     if (!plantaDaTarefa || !plantaDaTarefa.dimensoes || !plantaDaTarefa.visivel) return;
 
-    let px_pdf = t.ponto_x;
-    let py_pdf = t.ponto_y;
+    const transformPoint = (x: number, y: number) => {
+      if (!plantaDaTarefa.e_base && plantaDaTarefa.ref1_x) {
+        const mat = calcularMatrizTransformacao(
+          { x: plantaBase.ref1_x, y: plantaBase.ref1_y },
+          { x: plantaBase.ref2_x, y: plantaBase.ref2_y },
+          { x: plantaDaTarefa.ref1_x, y: plantaDaTarefa.ref1_y },
+          { x: plantaDaTarefa.ref2_x, y: plantaDaTarefa.ref2_y }
+        );
+        return {
+          x: mat.a * x + mat.c * y + mat.e,
+          y: mat.b * x + mat.d * y + mat.f
+        };
+      }
+      return { x, y };
+    };
 
-    if (!plantaDaTarefa.e_base && plantaDaTarefa.ref1_x) {
-      const mat = calcularMatrizTransformacao(
-        { x: plantaBase.ref1_x, y: plantaBase.ref1_y },
-        { x: plantaBase.ref2_x, y: plantaBase.ref2_y },
-        { x: plantaDaTarefa.ref1_x, y: plantaDaTarefa.ref1_y },
-        { x: plantaDaTarefa.ref2_x, y: plantaDaTarefa.ref2_y }
-      );
-      const nx = mat.a * px_pdf + mat.c * py_pdf + mat.e;
-      const ny = mat.b * px_pdf + mat.d * py_pdf + mat.f;
-      px_pdf = nx;
-      py_pdf = ny;
+    const corPlanta = parseHexToRgbArray(plantaDaTarefa.cor_identificacao || "#2563eb");
+    const corStatusHex = CORES_STATUS_HEX[t.status] || "#2563eb";
+    const corStatus = parseHexToRgbArray(corStatusHex);
+    const corStatusFill = mixColorWhite(corStatus, 1 - (transparenciaTarefas / 100));
+    const corBorda = mixColorWhite(corPlanta, 1 - (transparenciaBordas / 100));
+    
+    let pontos: {x: number, y: number}[] = [];
+    if (t.localizacao_tipo === "regiao" && t.regiao?.vertices) {
+      pontos = t.regiao.vertices;
+    } else if (t.localizacao_detalhe?.pontos && Array.isArray(t.localizacao_detalhe.pontos)) {
+      pontos = t.localizacao_detalhe.pontos;
     }
 
-    const size = 10;
-    
-    finalPage.drawCircle({
-      x: px_pdf,
-      y: py_pdf,
-      size: size,
-      color: parseHex(plantaDaTarefa.cor_identificacao || "#2563eb"),
-      borderColor: rgb(1, 1, 1),
-      borderWidth: 1.5,
-    });
+    if (pontos.length > 1) {
+      const tfPontos = pontos.map(p => transformPoint(p.x, p.y));
+      
+      finalPage.pushOperators(
+        pushGraphicsState(),
+        setFillingRgbColor(corStatusFill[0], corStatusFill[1], corStatusFill[2]),
+        setStrokingRgbColor(corBorda[0], corBorda[1], corBorda[2]),
+        setLineWidth(1.5),
+        moveTo(tfPontos[0].x, tfPontos[0].y)
+      );
 
-    const isConcluido = t.status === 'concluido';
-    finalPage.drawText(isConcluido ? "✓" : "!", {
-      x: px_pdf - (size * 0.4),
-      y: py_pdf - (size * 0.4),
-      size: size * 1.2,
-      font: fontBold,
-      color: rgb(1, 1, 1)
-    });
+      for (let i = 1; i < tfPontos.length; i++) {
+        finalPage.pushOperators(lineTo(tfPontos[i].x, tfPontos[i].y));
+      }
+
+      const isClosed = t.localizacao_tipo === "regiao" || t.localizacao_tipo === "area";
+      if (isClosed) {
+        finalPage.pushOperators(closePath(), fillAndStroke());
+      } else {
+        finalPage.pushOperators(fillAndStroke());
+      }
+      finalPage.pushOperators(popGraphicsState());
+    }
+    
+    if (t.ponto_x !== null && t.ponto_y !== null) {
+      const center = transformPoint(t.ponto_x, t.ponto_y);
+      const size = 10;
+      
+      finalPage.pushOperators(
+        pushGraphicsState(),
+        setFillingRgbColor(corStatusFill[0], corStatusFill[1], corStatusFill[2]),
+        setStrokingRgbColor(corBorda[0], corBorda[1], corBorda[2]),
+        setLineWidth(1.5)
+      );
+
+      finalPage.drawCircle({
+        x: center.x,
+        y: center.y,
+        size: size,
+        color: rgb(corStatusFill[0], corStatusFill[1], corStatusFill[2]),
+        borderColor: rgb(corBorda[0], corBorda[1], corBorda[2]),
+        borderWidth: 1.5,
+      });
+
+      const isConcluido = t.status === 'concluido';
+      finalPage.drawText(isConcluido ? "V" : "!", {
+        x: center.x - (size * 0.4),
+        y: center.y - (size * 0.35),
+        size: size * 1.0,
+        font: fontBold,
+        color: rgb(1, 1, 1)
+      });
+      
+      finalPage.pushOperators(popGraphicsState());
+    }
   });
 
   // Remove o deslocamento global para desenhar a legenda no canto da página fixa
