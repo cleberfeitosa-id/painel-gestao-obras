@@ -13,6 +13,12 @@ import {
 } from "@/lib/domain/rotulos";
 import { formatarData, formatarDataHora } from "@/lib/datas";
 import { formatarMoeda } from "@/lib/utils";
+import {
+  formatarMetros,
+  formatarMetrosQuadrados,
+  obterNomeCorCabo,
+  rotuloCondutor,
+} from "@/lib/levantamento/calculos";
 import type { PontoPdf } from "@/lib/supabase/database.types";
 import type { TarefaExportacaoCompleta } from "@/app/(protegido)/obras/[id]/plantas/acoes";
 import type {
@@ -1216,6 +1222,270 @@ export async function exportarLevantamentoIluminadoPdf(
     }
   });
 
+  const painelX = 40;
+  const painelLargura = 600;
+  const paddingPainel = 20;
+  const raioPainel = 12;
+  const linhaAltura = 28;
+  const tituloSecaoAltura = 32;
+  const cabecalhoAltura = 80;
+  const totalSecaoAltura = 30;
+  const swatchRaio = 9;
+  const swatchGap = 14;
+
+  let alturaNecessaria = cabecalhoAltura + paddingPainel * 2;
+  const secoesComItens: string[] = [];
+
+  if (resumo.elementos.length > 0) {
+    secoesComItens.push("elementos");
+    alturaNecessaria += tituloSecaoAltura + resumo.elementos.length * linhaAltura + totalSecaoAltura;
+  }
+  if (resumo.distancias.length > 0 || resumo.descidasSubidas.length > 0) {
+    secoesComItens.push("distancias");
+    const qtdItensDist = resumo.distancias.length + resumo.descidasSubidas.length;
+    alturaNecessaria += tituloSecaoAltura + qtdItensDist * linhaAltura + totalSecaoAltura;
+  }
+  if (resumo.cabos.length > 0) {
+    secoesComItens.push("cabos");
+    alturaNecessaria += tituloSecaoAltura + resumo.cabos.length * linhaAltura + totalSecaoAltura;
+  }
+  if (resumo.areas.length > 0) {
+    secoesComItens.push("areas");
+    alturaNecessaria += tituloSecaoAltura + resumo.areas.length * linhaAltura + totalSecaoAltura;
+  }
+
+  if (secoesComItens.length === 0) {
+    alturaNecessaria += linhaAltura;
+  }
+
+  const maxAlturaPainel = compositeCanvas.height * 0.7;
+  let escalaFonte = 1;
+  if (alturaNecessaria > maxAlturaPainel) {
+    escalaFonte = Math.max(0.6, maxAlturaPainel / alturaNecessaria);
+    alturaNecessaria = maxAlturaPainel;
+  }
+
+  const painelY = compositeCanvas.height - alturaNecessaria - 40;
+  const painelAltura = alturaNecessaria;
+
+  ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
+  desenharRetanguloArredondado(ctx, painelX, painelY, painelLargura, painelAltura, raioPainel);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  let yAtual = painelY + paddingPainel;
+
+  const fonteCabecalho = Math.round(18 * escalaFonte);
+  const fonteTitulo = Math.round(20 * escalaFonte);
+  const fonteCorpo = Math.round(14 * escalaFonte);
+  const fontePequena = Math.round(12 * escalaFonte);
+  const linhaAlturaEsc = Math.round(linhaAltura * escalaFonte);
+  const tituloSecaoAlturaEsc = Math.round(tituloSecaoAltura * escalaFonte);
+  const totalSecaoAlturaEsc = Math.round(totalSecaoAltura * escalaFonte);
+  const swatchRaioEsc = Math.round(swatchRaio * escalaFonte);
+  const swatchGapEsc = Math.round(swatchGap * escalaFonte);
+  const paddingPainelEsc = Math.round(paddingPainel * escalaFonte);
+
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = `bold ${fonteCabecalho}px sans-serif`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("VASCONCELOS ENGENHARIA", painelX + paddingPainelEsc, yAtual);
+  yAtual += Math.round(28 * escalaFonte);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `bold ${fonteTitulo}px sans-serif`;
+  ctx.fillText(`LEVANTAMENTO: ${nomeLevantamento.toUpperCase()}`, painelX + paddingPainelEsc, yAtual);
+  yAtual += Math.round(30 * escalaFonte);
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = `${fontePequena}px sans-serif`;
+  ctx.fillText(`Obra: ${obraNome} · Planta: ${plantaNome} (Pág. ${paginaNumero})`, painelX + paddingPainelEsc, yAtual);
+  yAtual += cabecalhoAltura * escalaFonte - (Math.round(28 * escalaFonte) + Math.round(30 * escalaFonte) + Math.round(16 * escalaFonte));
+
+  const xDireita = painelX + painelLargura - paddingPainelEsc;
+  const xSwatch = painelX + paddingPainelEsc;
+  const xTexto = xSwatch + swatchRaioEsc * 2 + swatchGapEsc;
+
+  const desenharSwatch = (x: number, y: number, cor: string) => {
+    ctx.beginPath();
+    ctx.arc(x, y, swatchRaioEsc, 0, Math.PI * 2);
+    ctx.fillStyle = cor;
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.4)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  };
+
+  const verificarEspaco = (alturaNecessaria: number): boolean => {
+    return yAtual + alturaNecessaria <= painelY + painelAltura - paddingPainelEsc;
+  };
+
+  if (resumo.elementos.length > 0 && verificarEspaco(tituloSecaoAlturaEsc + resumo.elementos.length * linhaAlturaEsc + totalSecaoAlturaEsc)) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${fonteCorpo}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("ELEMENTOS CONTADOS", xTexto, yAtual);
+
+    ctx.textAlign = "right";
+    ctx.fillText(`${resumo.totalGeralElementos} un`, xDireita, yAtual);
+    yAtual += tituloSecaoAlturaEsc;
+
+    ctx.font = `${fontePequena}px sans-serif`;
+    for (const el of resumo.elementos) {
+      if (!verificarEspaco(linhaAlturaEsc)) break;
+      desenharSwatch(xSwatch, yAtual + linhaAlturaEsc / 2, el.cor);
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "left";
+      const label = el.nivelNome ? `${el.nome} (${el.nivelNome})` : el.nome;
+      ctx.fillText(label, xTexto, yAtual + Math.round(16 * escalaFonte));
+      ctx.fillStyle = "#fbbf24";
+      ctx.textAlign = "right";
+      ctx.fillText(`${el.quantidade} un`, xDireita, yAtual + Math.round(16 * escalaFonte));
+      yAtual += linhaAlturaEsc;
+    }
+
+    ctx.fillStyle = "#fbbf24";
+    ctx.font = `bold ${fontePequena}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("Total:", xTexto, yAtual + Math.round(16 * escalaFonte));
+    ctx.textAlign = "right";
+    ctx.fillText(`${resumo.totalGeralElementos} un`, xDireita, yAtual + Math.round(16 * escalaFonte));
+    yAtual += totalSecaoAlturaEsc;
+  }
+
+  const temDistancias = resumo.distancias.length > 0 || resumo.descidasSubidas.length > 0;
+  if (temDistancias && verificarEspaco(tituloSecaoAlturaEsc + (resumo.distancias.length + resumo.descidasSubidas.length) * linhaAlturaEsc + totalSecaoAlturaEsc)) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${fonteCorpo}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("TUBULAÇÕES / DISTÂNCIAS", xTexto, yAtual);
+
+    ctx.textAlign = "right";
+    ctx.fillText(formatarMetros(resumo.totalGeralDistancias), xDireita, yAtual);
+    yAtual += tituloSecaoAlturaEsc;
+
+    ctx.font = `${fontePequena}px sans-serif`;
+
+    for (const d of resumo.distancias) {
+      if (!verificarEspaco(linhaAlturaEsc)) break;
+      desenharSwatch(xSwatch, yAtual + linhaAlturaEsc / 2, d.cor);
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "left";
+      ctx.fillText(d.nome, xTexto, yAtual + Math.round(16 * escalaFonte));
+      ctx.fillStyle = "#22d3ee";
+      ctx.textAlign = "right";
+      ctx.fillText(formatarMetros(d.totalMetros), xDireita, yAtual + Math.round(16 * escalaFonte));
+      yAtual += linhaAlturaEsc;
+    }
+
+    for (const desc of resumo.descidasSubidas) {
+      if (!verificarEspaco(linhaAlturaEsc)) break;
+      desenharSwatch(xSwatch, yAtual + linhaAlturaEsc / 2, desc.cor);
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "left";
+      ctx.fillText(`Descida/Subida (${desc.nome})`, xTexto, yAtual + Math.round(16 * escalaFonte));
+      ctx.fillStyle = "#c084fc";
+      ctx.textAlign = "right";
+      ctx.fillText(formatarMetros(desc.alturaTotal), xDireita, yAtual + Math.round(16 * escalaFonte));
+      yAtual += linhaAlturaEsc;
+    }
+
+    ctx.fillStyle = "#22d3ee";
+    ctx.font = `bold ${fontePequena}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("Total:", xTexto, yAtual + Math.round(16 * escalaFonte));
+    ctx.textAlign = "right";
+    ctx.fillText(formatarMetros(resumo.totalGeralDistancias), xDireita, yAtual + Math.round(16 * escalaFonte));
+    yAtual += totalSecaoAlturaEsc;
+  }
+
+  if (resumo.cabos.length > 0 && verificarEspaco(tituloSecaoAlturaEsc + resumo.cabos.length * linhaAlturaEsc + totalSecaoAlturaEsc)) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${fonteCorpo}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("CABOS E CONDUTORES", xTexto, yAtual);
+
+    ctx.textAlign = "right";
+    ctx.fillText(formatarMetros(resumo.totalGeralCabos), xDireita, yAtual);
+    yAtual += tituloSecaoAlturaEsc;
+
+    ctx.font = `${fontePequena}px sans-serif`;
+
+    for (const c of resumo.cabos) {
+      if (!verificarEspaco(linhaAlturaEsc * 1.5)) break;
+      if (c.corCabo) {
+        desenharSwatch(xSwatch, yAtual + linhaAlturaEsc / 2, c.corCabo);
+      }
+      ctx.fillStyle = "#34d399";
+      ctx.textAlign = "left";
+      const labelPrincipal = `${c.circuito} · ${rotuloCondutor(c.funcao)}${c.fase ? ` (${c.fase})` : ""}`;
+      ctx.fillText(labelPrincipal, xTexto, yAtual + Math.round(14 * escalaFonte));
+
+      const labelSecundaria = `${c.tipoCabo} (${c.quantidadeCondutores}x) · ${obterNomeCorCabo(c.corCabo)}`;
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = `${Math.round(10 * escalaFonte)}px sans-serif`;
+      ctx.fillText(labelSecundaria, xTexto, yAtual + Math.round(26 * escalaFonte));
+
+      ctx.fillStyle = "#34d399";
+      ctx.font = `bold ${fontePequena}px sans-serif`;
+      ctx.textAlign = "right";
+      ctx.fillText(formatarMetros(c.comprimentoTotal), xDireita, yAtual + Math.round(16 * escalaFonte));
+      yAtual += Math.round(linhaAlturaEsc * 1.3);
+    }
+
+    ctx.fillStyle = "#34d399";
+    ctx.font = `bold ${fontePequena}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("Total:", xTexto, yAtual + Math.round(16 * escalaFonte));
+    ctx.textAlign = "right";
+    ctx.fillText(formatarMetros(resumo.totalGeralCabos), xDireita, yAtual + Math.round(16 * escalaFonte));
+    yAtual += totalSecaoAlturaEsc;
+  }
+
+  if (resumo.areas.length > 0 && verificarEspaco(tituloSecaoAlturaEsc + resumo.areas.length * linhaAlturaEsc + totalSecaoAlturaEsc)) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${fonteCorpo}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("ÁREAS E ACABAMENTOS", xTexto, yAtual);
+
+    ctx.textAlign = "right";
+    ctx.fillText(formatarMetrosQuadrados(resumo.totalGeralAreas), xDireita, yAtual);
+    yAtual += tituloSecaoAlturaEsc;
+
+    ctx.font = `${fontePequena}px sans-serif`;
+
+    for (const a of resumo.areas) {
+      if (!verificarEspaco(linhaAlturaEsc)) break;
+      desenharSwatch(xSwatch, yAtual + linhaAlturaEsc / 2, a.cor);
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "left";
+      ctx.fillText(a.nome, xTexto, yAtual + Math.round(16 * escalaFonte));
+      ctx.fillStyle = "#f472b6";
+      ctx.textAlign = "right";
+      ctx.fillText(formatarMetrosQuadrados(a.totalArea), xDireita, yAtual + Math.round(16 * escalaFonte));
+      yAtual += linhaAlturaEsc;
+    }
+
+    ctx.fillStyle = "#f472b6";
+    ctx.font = `bold ${fontePequena}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("Total:", xTexto, yAtual + Math.round(16 * escalaFonte));
+    ctx.textAlign = "right";
+    ctx.fillText(formatarMetrosQuadrados(resumo.totalGeralAreas), xDireita, yAtual + Math.round(16 * escalaFonte));
+    yAtual += totalSecaoAlturaEsc;
+  }
+
+  if (secoesComItens.length === 0) {
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = `italic ${fontePequena}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText("Nenhuma marcação no levantamento.", painelX + painelLargura / 2, yAtual + linhaAlturaEsc / 2);
+  }
+
   const seloW = 460;
   const seloH = 180;
   const seloX = compositeCanvas.width - seloW - 40;
@@ -1242,8 +1512,6 @@ export async function exportarLevantamentoIluminadoPdf(
   ctx.fillStyle = "#94a3b8";
   ctx.font = "14px sans-serif";
   ctx.fillText(`Obra: ${obraNome} · Planta: ${plantaNome} (Pág. ${paginaNumero})`, seloX + 28, seloY + 82);
-  ctx.fillText(`Itens: ${itens.length} · Elementos: ${resumo.totalGeralElementos} un`, seloX + 28, seloY + 106);
-  ctx.fillText(`Tubulações: ${resumo.totalGeralDistancias.toFixed(1)}m · Cabos: ${resumo.totalGeralCabos.toFixed(1)}m`, seloX + 28, seloY + 130);
 
   notificar("Inicializando documento PDF...", 40);
   const pdfDoc = await PDFDocument.create();

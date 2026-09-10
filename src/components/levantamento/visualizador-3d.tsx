@@ -16,6 +16,12 @@ import {
   baixarDataUrl,
   exportarParaPdfViaImpressao,
 } from "@/lib/levantamento/exportacao";
+import {
+  formatarMetros,
+  formatarMetrosQuadrados,
+  obterNomeCorCabo,
+  rotuloCondutor,
+} from "@/lib/levantamento/calculos";
 import type {
   ConfigLegenda,
   ItemLevantamento,
@@ -820,11 +826,15 @@ export function Visualizador3D({
                 <tr>
                   <td><span class="badge-cor" style="background:${desc.cor}"></span>Descida/Subida (${desc.nome})</td>
                   <td>Vertical</td>
-                  <td class="text-right">${desc.alturaTotal.toFixed(2)} m</td>
+                  <td class="text-right">${formatarMetros(desc.alturaTotal)}</td>
                 </tr>
               `,
                 )
                 .join("")}
+              <tr style="font-weight:bold; border-top: 2px solid #334155;">
+                <td colspan="2">Total de Elementos</td>
+                <td class="text-right">${resumoExibicao.totalGeralElementos} un</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -844,7 +854,7 @@ export function Visualizador3D({
                   (d) => `
                 <tr>
                   <td><span class="badge-cor" style="background:${d.cor}"></span>${d.nome}</td>
-                  <td class="text-right">${d.totalMetros.toFixed(2)} m</td>
+                  <td class="text-right">${formatarMetros(d.totalMetros)}</td>
                 </tr>
               `,
                 )
@@ -853,15 +863,57 @@ export function Visualizador3D({
                 .map(
                   (c) => `
                 <tr>
-                  <td>${c.corCabo ? `<span class="badge-cor" style="background:${c.corCabo};"></span>` : ""}${c.circuito} (${c.tipoCabo} - ${c.funcao}${c.fase ? ` - Fase ${c.fase}` : ""})</td>
-                  <td class="text-right">${c.comprimentoTotal.toFixed(2)} m</td>
+                  <td>
+                    ${c.corCabo ? `<span class="badge-cor" style="background:${c.corCabo};"></span>` : ""}
+                    ${c.circuito} · ${rotuloCondutor(c.funcao)}${c.fase ? ` (${c.fase})` : ""}
+                    — ${c.tipoCabo} (${c.quantidadeCondutores}x)${c.tipoCondutor ? `, ${c.tipoCondutor}` : ""}${c.corCabo ? `, ${obterNomeCorCabo(c.corCabo)}` : ""}
+                  </td>
+                  <td class="text-right">${formatarMetros(c.comprimentoTotal)}</td>
                 </tr>
               `,
                 )
                 .join("")}
+              <tr style="font-weight:bold; border-top: 2px solid #334155;">
+                <td>Total de Tubulações</td>
+                <td class="text-right">${formatarMetros(resumoExibicao.totalGeralDistancias)}</td>
+              </tr>
+              <tr style="font-weight:bold; border-top: 1px solid #334155;">
+                <td>Total de Cabos</td>
+                <td class="text-right">${formatarMetros(resumoExibicao.totalGeralCabos)}</td>
+              </tr>
             </tbody>
           </table>
         </div>
+
+        ${resumoExibicao.areas.length > 0 ? `
+        <div class="secao">
+          <h3>Resumo de Áreas e Acabamentos</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Área</th>
+                <th class="text-right">Área Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${resumoExibicao.areas
+                .map(
+                  (a) => `
+                <tr>
+                  <td><span class="badge-cor" style="background:${a.cor}"></span>${a.nome}</td>
+                  <td class="text-right">${formatarMetrosQuadrados(a.totalArea)}</td>
+                </tr>
+              `,
+                )
+                .join("")}
+              <tr style="font-weight:bold; border-top: 2px solid #334155;">
+                <td>Total de Áreas</td>
+                <td class="text-right">${formatarMetrosQuadrados(resumoExibicao.totalGeralAreas)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        ` : ""}
       </div>
 
       <div class="imagem-container">
