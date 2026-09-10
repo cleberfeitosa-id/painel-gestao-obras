@@ -7,6 +7,7 @@ import {
   Calendar,
   ChevronRight,
   Copy,
+  Edit2,
   FileSpreadsheet,
   FileText,
   Filter,
@@ -25,6 +26,7 @@ import { formatarMetros, formatarMetrosQuadrados } from "@/lib/levantamento/calc
 import { excluirLevantamento } from "@/app/(protegido)/levantamento/acoes";
 import { ModalNovoLevantamento } from "./modal-novo-levantamento";
 import { ModalUploadNovaPlanta } from "./modal-upload-nova-planta";
+import { EditarLevantamentoModal } from "./editar-levantamento-modal";
 import type {
   LevantamentoRow,
   ObraRow,
@@ -233,14 +235,25 @@ export function ListaLevantamentos({
                     </div>
 
                     {podeEditar && (
-                      <button
-                        type="button"
-                        onClick={() => confirmarExcluir(item.id, item.nome)}
-                        className="text-superficie-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors"
-                        title="Excluir Levantamento"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-0.5">
+                        <EditarLevantamentoModal
+                          levantamentoId={item.id}
+                          nomeAtual={item.nome}
+                          aoRenomeado={(novoNome) =>
+                            setLista((prev) =>
+                              prev.map((l) => (l.id === item.id ? { ...l, nome: novoNome } : l)),
+                            )
+                          }
+                        />
+                        <button
+                          type="button"
+                          onClick={() => confirmarExcluir(item.id, item.nome)}
+                          className="text-superficie-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors"
+                          title="Excluir Levantamento"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
 

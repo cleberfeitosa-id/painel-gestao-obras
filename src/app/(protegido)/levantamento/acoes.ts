@@ -439,6 +439,37 @@ export async function obterDadosExportacaoLevantamento(levantamentoId: string): 
   };
 }
 
+const esquemaAtualizarLevantamento = z.object({
+  levantamentoId: z.string().uuid(),
+  nome: z.string().trim().min(1, "Informe o nome do levantamento.").max(200),
+});
+
+export async function atualizarLevantamento(dados: {
+  levantamentoId: string;
+  nome: string;
+}): Promise<{ erro?: string }> {
+  const negado = await verificarGestor();
+  if (negado) return negado;
+
+  const resultado = esquemaAtualizarLevantamento.safeParse(dados);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("levantamentos")
+    .update({ nome: resultado.data.nome })
+    .eq("id", resultado.data.levantamentoId);
+
+  if (error) {
+    return { erro: "Nao foi possivel atualizar o levantamento. Tente novamente." };
+  }
+
+  revalidatePath("/levantamento");
+  return {};
+}
+
 export async function atualizarDescricoesTarefasCircuitosExistentes(): Promise<
   { ok: true; atualizadas: number } | { erro: string }
 > {
