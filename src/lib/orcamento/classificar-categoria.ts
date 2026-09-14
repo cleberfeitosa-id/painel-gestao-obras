@@ -46,11 +46,6 @@ function ehExplicitamenteEquipamento(classificacao: string): boolean {
   return c === "equipamento" || c.includes("equipamento");
 }
 
-function ehExplicitamenteMaterial(classificacao: string): boolean {
-  const c = normalizar(classificacao);
-  return c === "material" || c.includes("custo horario");
-}
-
 export function classificarCategoria(
   tipo: string,
   classificacao: string,

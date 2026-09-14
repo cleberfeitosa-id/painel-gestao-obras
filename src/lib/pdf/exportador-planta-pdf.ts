@@ -576,7 +576,6 @@ function gerarPaginaGradeDinamicaCanvas(
   totalPaginasDoc: number,
   tituloDocumento: string,
   opcoes: OpcoesExportacaoPlanta,
-  _rotuloDocumento = "PLANTA ANOTADA",
 ): string {
   const canvas = document.createElement("canvas");
   canvas.width = 2480;
@@ -1073,7 +1072,6 @@ export async function exportarPlantaIluminadaPdf(
         totalPaginasDetalhes,
         plantaNome,
         opcoes,
-        "PLANTA ANOTADA",
       );
 
       const taskPage = pdfDoc.addPage([DIMENSOES_A4_PT.largura, DIMENSOES_A4_PT.altura]);
@@ -1607,7 +1605,6 @@ export async function exportarLevantamentoIluminadoPdf(
         totalPaginasDetalhes,
         nomeLevantamento,
         opcoes,
-        "LEVANTAMENTO",
       );
 
       const taskPage = pdfDoc.addPage([DIMENSOES_A4_PT.largura, DIMENSOES_A4_PT.altura]);
@@ -2076,7 +2073,6 @@ export async function exportarRelatorioRdoCompletoPdf(
         totalPaginasDetalhes,
         titulo,
         opcoes,
-        "RELATÓRIO",
       );
 
       const taskPage = pdfDoc.addPage([DIMENSOES_A4_PT.largura, DIMENSOES_A4_PT.altura]);
