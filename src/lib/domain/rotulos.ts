@@ -7,6 +7,7 @@ import type {
   StatusTarefa,
   TipoAnexo,
 } from "@/lib/supabase/database.types";
+import type { StatusVinculo } from "@/lib/orcamento/vinculo";
 
 type Opcao<T extends string> = { valor: T; rotulo: string; classe: string };
 
@@ -189,3 +190,70 @@ export const CORES_CORREDOR: Record<SituacaoTarefa, string> = {
 export const OPCOES_STATUS_TAREFA = Object.values(STATUS_TAREFA);
 export const OPCOES_PRIORIDADE = Object.values(PRIORIDADE_TAREFA);
 export const OPCOES_STATUS_OBRA = Object.values(STATUS_OBRA);
+
+export const CATEGORIA_COMPOSICAO: Record<string, { rotulo: string }> = {
+  mao_de_obra: { rotulo: "Mão de obra" },
+  material: { rotulo: "Material" },
+  equipamento: { rotulo: "Equipamento" },
+  outro: { rotulo: "Outros" },
+};
+
+export const STATUS_VINCULO: Record<StatusVinculo, Opcao<StatusVinculo>> = {
+  encontrada: {
+    valor: "encontrada",
+    rotulo: "Encontrada",
+    classe: "bg-emerald-100 text-emerald-800 ring-emerald-600/25",
+  },
+  ausente: {
+    valor: "ausente",
+    rotulo: "Sem composição",
+    classe: "bg-slate-100 text-slate-700 ring-slate-600/20",
+  },
+  duplicada: {
+    valor: "duplicada",
+    rotulo: "Duplicada",
+    classe: "bg-amber-100 text-amber-800 ring-amber-600/25",
+  },
+  desatualizada: {
+    valor: "desatualizada",
+    rotulo: "Desatualizada",
+    classe: "bg-amber-100 text-amber-800 ring-amber-600/25",
+  },
+};
+
+export type FuncaoColunaOrcamento =
+  | "codigo"
+  | "descricao"
+  | "unidade"
+  | "quantidade"
+  | "valor_unitario"
+  | "valor_total"
+  | "valor_bdi"
+  | "custo_real"
+  | "grupo"
+  | "fonte"
+  | "categoria"
+  | "composicao"
+  | "bdi"
+  | "quantidade_executada";
+
+export const FUNCAO_COLUNA_ORCAMENTO: Record<FuncaoColunaOrcamento, { rotulo: string }> = {
+  codigo: { rotulo: "Código" },
+  descricao: { rotulo: "Descrição" },
+  unidade: { rotulo: "Unidade" },
+  quantidade: { rotulo: "Quantidade" },
+  valor_unitario: { rotulo: "Valor unitário" },
+  valor_total: { rotulo: "Valor total" },
+  valor_bdi: { rotulo: "Valor com BDI" },
+  custo_real: { rotulo: "Custo real" },
+  grupo: { rotulo: "Grupo" },
+  fonte: { rotulo: "Fonte" },
+  categoria: { rotulo: "Categoria" },
+  composicao: { rotulo: "Composição" },
+  bdi: { rotulo: "BDI (%)" },
+  quantidade_executada: { rotulo: "Quantidade executada" },
+};
+
+export const OPCOES_FUNCAO_COLUNA_ORCAMENTO = Object.keys(
+  FUNCAO_COLUNA_ORCAMENTO,
+) as FuncaoColunaOrcamento[];
