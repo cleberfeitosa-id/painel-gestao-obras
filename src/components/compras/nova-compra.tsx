@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   buscarInsumosCompra,
   criarCompra,
@@ -124,9 +125,12 @@ export function NovaCompra({
       composicaoCodigo: null,
       composicaoNome: "Insumo manual",
       categoria: "material",
-      quantidadeReal: null,
-      valorUnitarioReal: null,
-      alterado: true,
+       quantidadeReal: null,
+       valorUnitarioReal: null,
+       quantidadeComprada: 0,
+       valorComprado: 0,
+       comprasAnteriores: [],
+       alterado: true,
     }]);
   }, []);
 
@@ -193,6 +197,15 @@ export function NovaCompra({
 
   // -- totais calculados --
   const totalReal = insumos.reduce((s, c) => s + (c.quantidadeReal ?? 0) * (c.valorUnitarioReal ?? 0), 0);
+  const excessos = insumos.flatMap((insumo) => {
+    if (!insumo.componenteId || !insumo.alterado) return [];
+    const quantidadeTotal = insumo.quantidadeComprada + (insumo.quantidadeReal ?? 0);
+    const valorTotal = insumo.valorComprado + (insumo.quantidadeReal ?? 0) * (insumo.valorUnitarioReal ?? 0);
+    return [
+      quantidadeTotal > insumo.quantidadePrevista ? `Quantidade acima do previsto para ${insumo.nome}.` : null,
+      valorTotal > insumo.valorPrevisto ? `Valor acima do previsto para ${insumo.nome}.` : null,
+    ].filter((aviso): aviso is string => aviso !== null);
+  });
 
   return (
     <Cartao>
@@ -295,6 +308,7 @@ export function NovaCompra({
                              <span>V. un. prev.: {formatarMoeda(insumo.custoUnitario)}</span>
                              <span>Orç.: {insumo.orcamentoCodigo ?? "—"}</span>
                              <span>Prev.: {insumo.quantidadePrevista.toLocaleString("pt-BR", { maximumFractionDigits: 4 })} {insumo.unidade}</span>
+                              {insumo.quantidadeComprada > 0 && <span className="font-medium text-azul-700">Já comprado: {insumo.quantidadeComprada.toLocaleString("pt-BR", { maximumFractionDigits: 4 })} {insumo.unidade}</span>}
                           </div>
                          </div>
                        </li>
@@ -329,9 +343,13 @@ export function NovaCompra({
                 </LinhaCabecalho>
               </Cabecalho>
               <Corpo>
-                {insumos.map((insumo, i) => {
-                   const totalRealItem = (insumo.quantidadeReal ?? 0) * (insumo.valorUnitarioReal ?? 0);
-                  return (
+                 {insumos.map((insumo, i) => {
+                    const totalRealItem = (insumo.quantidadeReal ?? 0) * (insumo.valorUnitarioReal ?? 0);
+                   const quantidadeAcumulada = insumo.quantidadeComprada + (insumo.quantidadeReal ?? 0);
+                   const valorAcumulado = insumo.valorComprado + totalRealItem;
+                   const quantidadeExcedida = insumo.alterado && insumo.componenteId && quantidadeAcumulada > insumo.quantidadePrevista;
+                   const valorExcedido = insumo.alterado && insumo.componenteId && valorAcumulado > insumo.valorPrevisto;
+                   return (
                       <Linha key={`${insumo.componenteId ?? "manual"}-${insumo.orcamentoItemId ?? i}`} className={insumo.alterado ? "bg-ambar-50" : undefined}>
                        <Celula className="font-mono text-xs text-superficie-500">
                          {insumo.componenteId ? insumo.codigo ?? "—" : <input className="w-24 rounded border border-borda px-2 py-1" value={insumo.codigo ?? ""} onChange={(e) => alterarTexto(i, "codigo", e.target.value)} placeholder="Código" aria-label="Código do insumo manual" />}
@@ -349,8 +367,9 @@ export function NovaCompra({
                        <Celula className="text-right tabular-nums font-medium">
                           {formatarMoeda(insumo.custoUnitario)}
                         </Celula>
-                       <Celula className="text-right tabular-nums font-medium">
-                          {formatarMoeda(insumo.valorPrevisto)}
+                        <Celula className="text-right tabular-nums font-medium">
+                           {formatarMoeda(insumo.valorPrevisto)}
+                           {insumo.valorComprado > 0 && <div className="text-xs font-normal text-azul-700">Acum.: {formatarMoeda(valorAcumulado)}</div>}
                        </Celula>
                        <Celula>
                           <input className="w-28 rounded border border-borda px-2 py-1 text-right tabular-nums" type="number" min="0" step="any" value={insumo.quantidadeReal ?? ""} placeholder="0" onChange={(e) => alterarInsumo(i, "quantidadeReal", e.target.value)} aria-label={`Quantidade real de ${insumo.nome}`} />
@@ -358,12 +377,24 @@ export function NovaCompra({
                        <Celula>
                           <input className="w-28 rounded border border-borda px-2 py-1 text-right tabular-nums" type="number" min="0" step="any" value={insumo.valorUnitarioReal ?? ""} placeholder="0" onChange={(e) => alterarInsumo(i, "valorUnitarioReal", e.target.value)} aria-label={`Valor real por unidade de ${insumo.nome}`} />
                        </Celula>
-                       <Celula className="text-right tabular-nums font-medium">
-                          {formatarMoeda(totalRealItem)}
+                        <Celula className="text-right tabular-nums font-medium">
+                           {formatarMoeda(totalRealItem)}
+                           {quantidadeExcedida && <div className="mt-1 text-left text-xs font-medium text-perigo">Qtd. acima do previsto</div>}
+                           {valorExcedido && <div className="text-left text-xs font-medium text-perigo">Valor acima do previsto</div>}
                       </Celula>
                       <Celula className="max-w-[160px] truncate text-xs text-superficie-500">
-                        {insumo.composicaoCodigo ?? "—"} · {insumo.composicaoNome}
-                      </Celula>
+                         {insumo.composicaoCodigo ?? "—"} · {insumo.composicaoNome}
+                         {insumo.comprasAnteriores.length > 0 && (
+                           <div className="mt-1 space-y-0.5 whitespace-normal">
+                             <p className="font-medium text-azul-700">Compras anteriores:</p>
+                             {insumo.comprasAnteriores.map((compra) => (
+                               <Link key={compra.id} href={`/obras/${obraId}/compras#compra-${compra.id}`} className="block text-azul-600 hover:underline">
+                                 {compra.dataCompra} · {compra.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 4 })} {insumo.unidade} · {formatarMoeda(compra.valorUnitario)} un.
+                               </Link>
+                             ))}
+                           </div>
+                         )}
+                       </Celula>
                       <Celula>
                         <button
                           type="button"
@@ -391,7 +422,14 @@ export function NovaCompra({
               </Corpo>
             </Tabela>
           </div>
-        )}
+         )}
+
+         {excessos.length > 0 && (
+           <div role="alert" className="rounded-lg border border-ambar-300 bg-ambar-50 px-4 py-3 text-sm text-ambar-900">
+             <p className="font-semibold">Atenção: esta compra ultrapassa o orçamento.</p>
+             <ul className="mt-1 list-inside list-disc">{excessos.map((aviso, i) => <li key={`${aviso}-${i}`}>{aviso}</li>)}</ul>
+           </div>
+         )}
 
         {/* --- Botão salvar --- */}
         <div className="flex justify-end gap-2 border-t border-borda pt-4">
