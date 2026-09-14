@@ -14,6 +14,333 @@ export type Database = {
   }
   public: {
     Tables: {
+      compras: {
+        Row: { id: string; obra_id: string; fornecedor: string | null; documento: string | null; data_compra: string; observacao: string | null; criado_por: string | null; criado_em: string; atualizado_em: string }
+        Insert: { id?: string; obra_id: string; fornecedor?: string | null; documento?: string | null; data_compra?: string; observacao?: string | null; criado_por?: string | null; criado_em?: string; atualizado_em?: string }
+        Update: { id?: string; obra_id?: string; fornecedor?: string | null; documento?: string | null; data_compra?: string; observacao?: string | null; criado_por?: string | null; criado_em?: string; atualizado_em?: string }
+        Relationships: []
+      }
+      compra_itens: {
+        Row: { id: string; compra_id: string; orcamento_item_id: string | null; composicao_id: string | null; codigo_insumo: string | null; descricao: string; unidade: string; quantidade: number; valor_unitario: number; composicao_componente_id: string | null; categoria: string | null; coeficiente: number | null; criado_em: string }
+        Insert: { id?: string; compra_id: string; orcamento_item_id?: string | null; composicao_id?: string | null; codigo_insumo?: string | null; descricao: string; unidade?: string; quantidade: number; valor_unitario: number; composicao_componente_id?: string | null; categoria?: string | null; coeficiente?: number | null; criado_em?: string }
+        Update: { id?: string; compra_id?: string; orcamento_item_id?: string | null; composicao_id?: string | null; codigo_insumo?: string | null; descricao?: string; unidade?: string; quantidade?: number; valor_unitario?: number; composicao_componente_id?: string | null; categoria?: string | null; coeficiente?: number | null; criado_em?: string }
+        Relationships: []
+      }
+      orcamento_auditoria: {
+        Row: {
+          id: string
+          orcamento_id: string | null
+          entidade: string
+          entidade_id: string | null
+          operacao: string
+          antes: Json | null
+          depois: Json | null
+          autor_id: string | null
+          criado_em: string
+        }
+        Insert: {
+          id?: string
+          orcamento_id?: string | null
+          entidade: string
+          entidade_id?: string | null
+          operacao: string
+          antes?: Json | null
+          depois?: Json | null
+          autor_id?: string | null
+          criado_em?: string
+        }
+        Update: {
+          id?: string
+          orcamento_id?: string | null
+          entidade?: string
+          entidade_id?: string | null
+          operacao?: string
+          antes?: Json | null
+          depois?: Json | null
+          autor_id?: string | null
+          criado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orcamento_auditoria_orcamento_id_fkey"
+            columns: ["orcamento_id"]
+            isOneToOne: false
+            referencedRelation: "orcamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orcamento_auditoria_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orcamento_itens: {
+        Row: {
+          id: string
+          orcamento_id: string
+          chave_estavel: string
+          ordem: number
+          codigo: string | null
+          descricao: string | null
+          unidade: string | null
+          quantidade: number
+          valor_unitario: number
+          valor_total: number
+          valor_bdi: number | null
+          custo_real: number | null
+          grupo: string | null
+          dados: Json
+          tipo: string
+          ativo: boolean
+          atualizado_em: string
+          composicao_id: string | null
+          composicao_versao: string | null
+        }
+        Insert: {
+          id?: string
+          orcamento_id: string
+          chave_estavel: string
+          ordem?: number
+          codigo?: string | null
+          descricao?: string | null
+          unidade?: string | null
+          quantidade?: number
+          valor_unitario?: number
+          valor_total?: number
+          valor_bdi?: number | null
+          custo_real?: number | null
+          grupo?: string | null
+          dados?: Json
+          tipo?: string
+          ativo?: boolean
+          atualizado_em?: string
+          composicao_id?: string | null
+          composicao_versao?: string | null
+        }
+        Update: {
+          id?: string
+          orcamento_id?: string
+          chave_estavel?: string
+          ordem?: number
+          codigo?: string | null
+          descricao?: string | null
+          unidade?: string | null
+          quantidade?: number
+          valor_unitario?: number
+          valor_total?: number
+          valor_bdi?: number | null
+          custo_real?: number | null
+          grupo?: string | null
+          dados?: Json
+          tipo?: string
+          ativo?: boolean
+          atualizado_em?: string
+          composicao_id?: string | null
+          composicao_versao?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orcamento_itens_orcamento_id_fkey"
+            columns: ["orcamento_id"]
+            isOneToOne: false
+            referencedRelation: "orcamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orcamento_itens_composicao_id_fkey"
+            columns: ["composicao_id"]
+            isOneToOne: false
+            referencedRelation: "composicoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orcamento_versoes: {
+        Row: {
+          id: string
+          orcamento_id: string
+          versao: number
+          colunas: Json
+          linhas: Json
+          arquivo_caminho: string | null
+          criado_por: string | null
+          criado_em: string
+        }
+        Insert: {
+          id?: string
+          orcamento_id: string
+          versao: number
+          colunas: Json
+          linhas: Json
+          arquivo_caminho?: string | null
+          criado_por?: string | null
+          criado_em?: string
+        }
+        Update: {
+          id?: string
+          orcamento_id?: string
+          versao?: number
+          colunas?: Json
+          linhas?: Json
+          arquivo_caminho?: string | null
+          criado_por?: string | null
+          criado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orcamento_versoes_orcamento_id_fkey"
+            columns: ["orcamento_id"]
+            isOneToOne: false
+            referencedRelation: "orcamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orcamento_versoes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orcamentos: {
+        Row: {
+          id: string
+          obra_id: string
+          nome: string
+          descricao: string | null
+          arquivo_nome: string | null
+          arquivo_caminho: string | null
+          colunas: Json
+          linhas: Json
+          criado_por: string | null
+          criado_em: string
+          atualizado_em: string
+          versao: number
+        }
+        Insert: {
+          id?: string
+          obra_id: string
+          nome: string
+          descricao?: string | null
+          arquivo_nome?: string | null
+          arquivo_caminho?: string | null
+          colunas?: Json
+          linhas?: Json
+          criado_por?: string | null
+          criado_em?: string
+          atualizado_em?: string
+          versao?: number
+        }
+        Update: {
+          id?: string
+          obra_id?: string
+          nome?: string
+          descricao?: string | null
+          arquivo_nome?: string | null
+          arquivo_caminho?: string | null
+          colunas?: Json
+          linhas?: Json
+          criado_por?: string | null
+          criado_em?: string
+          atualizado_em?: string
+          versao?: number
+        }
+        Relationships: []
+      }
+      composicoes: {
+        Row: {
+          id: string
+          obra_id: string
+          codigo: string | null
+          nome: string
+          unidade: string
+          custo_unitario: number
+          criado_por: string | null
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          obra_id: string
+          codigo?: string | null
+          nome: string
+          unidade?: string
+          custo_unitario?: number
+          criado_por?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: string
+          obra_id?: string
+          codigo?: string | null
+          nome?: string
+          unidade?: string
+          custo_unitario?: number
+          criado_por?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: []
+      }
+      composicao_componentes: {
+        Row: {
+          id: string
+          composicao_id: string
+          nome: string
+          categoria: string
+          unidade: string
+          quantidade: number
+          custo_unitario: number
+          codigo: string | null
+          composicao_referencia_id: string | null
+          criado_em: string
+        }
+        Insert: {
+          id?: string
+          composicao_id: string
+          nome: string
+          categoria?: string
+          unidade?: string
+          quantidade?: number
+          custo_unitario?: number
+          codigo?: string | null
+          composicao_referencia_id?: string | null
+          criado_em?: string
+        }
+        Update: {
+          id?: string
+          composicao_id?: string
+          nome?: string
+          categoria?: string
+          unidade?: string
+          quantidade?: number
+          custo_unitario?: number
+          codigo?: string | null
+          composicao_referencia_id?: string | null
+          criado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "composicao_componentes_composicao_id_fkey"
+            columns: ["composicao_id"]
+            isOneToOne: false
+            referencedRelation: "composicoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "composicao_componentes_composicao_referencia_id_fkey"
+            columns: ["composicao_referencia_id"]
+            isOneToOne: false
+            referencedRelation: "composicoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       compatibilizacoes: {
         Row: {
           id: string
@@ -282,6 +609,7 @@ export type Database = {
           criado_por: string | null
           id: string
           medicao_id: string
+          orcamento_item_id: string | null
           nome: string
           unidade: string
           valor_unitario: number
@@ -292,6 +620,7 @@ export type Database = {
           criado_por?: string | null
           id?: string
           medicao_id: string
+          orcamento_item_id?: string | null
           nome: string
           unidade?: string
           valor_unitario: number
@@ -302,6 +631,7 @@ export type Database = {
           criado_por?: string | null
           id?: string
           medicao_id?: string
+          orcamento_item_id?: string | null
           nome?: string
           unidade?: string
           valor_unitario?: number
@@ -319,6 +649,46 @@ export type Database = {
             columns: ["medicao_id"]
             isOneToOne: false
             referencedRelation: "medicoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalogo_precos_orcamento_item_id_fkey"
+            columns: ["orcamento_item_id"]
+            isOneToOne: false
+            referencedRelation: "orcamento_itens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      catalogo_precos_orcamento_itens: {
+        Row: {
+          catalogo_id: string
+          orcamento_item_id: string
+          created_at: string
+        }
+        Insert: {
+          catalogo_id: string
+          orcamento_item_id: string
+          created_at?: string
+        }
+        Update: {
+          catalogo_id?: string
+          orcamento_item_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalogo_precos_orcamento_itens_catalogo_id_fkey"
+            columns: ["catalogo_id"]
+            isOneToOne: false
+            referencedRelation: "catalogo_precos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalogo_precos_orcamento_itens_orcamento_item_id_fkey"
+            columns: ["orcamento_item_id"]
+            isOneToOne: false
+            referencedRelation: "orcamento_itens"
             referencedColumns: ["id"]
           },
         ]
@@ -629,6 +999,7 @@ export type Database = {
           id: string
           nome: string
           papel: Database["public"]["Enums"]["papel_usuario"]
+          pode_editar_financeiro: boolean
           telefone: string | null
         }
         Insert: {
@@ -642,6 +1013,7 @@ export type Database = {
           id: string
           nome: string
           papel?: Database["public"]["Enums"]["papel_usuario"]
+          pode_editar_financeiro?: boolean
           telefone?: string | null
         }
         Update: {
@@ -655,6 +1027,7 @@ export type Database = {
           id?: string
           nome?: string
           papel?: Database["public"]["Enums"]["papel_usuario"]
+          pode_editar_financeiro?: boolean
           telefone?: string | null
         }
         Relationships: [
@@ -1335,12 +1708,127 @@ export type Database = {
     Views: {
       [_ in never]: never
     }
-    Functions: {
+      Functions: {
+      compras_por_item_orcamento: {
+        Args: { p_obra_id: string }
+        Returns: { orcamento_item_id: string; comprado: number }[]
+      }
+      componentes_composicao_para_compra: {
+        Args: { p_composicao_id: string }
+        Returns: { componente_id: string; codigo: string | null; nome: string; categoria: string; unidade: string; quantidade: number; custo_unitario: number; custo_total: number }[]
+      }
+      painel_compras_orcamento: {
+        Args: { p_obra_id: string }
+        Returns: {
+          orcamento_item_id: string; codigo: string | null; descricao: string | null; unidade: string | null
+          quantidade_prevista: number; previsto: number
+          quantidade_medida: number; medido: number
+          quantidade_executada: number; executado: number
+          comprado_total: number; comprado_material: number
+          saldo_disponivel_material: number; economia_material: number
+          composicao_id: string | null
+        }[]
+      }
+      buscar_insumos_compra: {
+        Args: { p_obra_id: string; p_termo: string }
+        Returns: {
+          componente_id: string; codigo: string | null; nome: string; unidade: string
+          coeficiente: number; custo_unitario: number; composicao_id: string
+          composicao_codigo: string | null; composicao_nome: string
+        }[]
+      }
+      buscar_insumos_compra_hierarquicos: {
+        Args: { p_obra_id: string; p_termo: string }
+        Returns: {
+          componente_id: string; orcamento_item_id: string; orcamento_codigo: string | null
+          orcamento_descricao: string | null; quantidade_composicao: number
+          quantidade_prevista: number; valor_previsto: number; codigo: string | null
+           nome: string; unidade: string; coeficiente: number; custo_unitario: number
+           composicao_id: string; composicao_codigo: string | null; composicao_nome: string
+           categoria: string
+         }[]
+      }
+      limpar_dados_importados_obra: {
+        Args: { p_obra_id: string }
+        Returns: undefined
+      }
+      buscar_itens_orcamento_composicao: {
+        Args: { p_obra_id: string; p_termo: string }
+        Returns: { id: string; codigo: string | null; descricao: string | null; unidade: string | null; quantidade: number; valor_unitario: number; valor_total: number; composicao_id: string | null }[]
+      }
+      aplicar_custo_composicao: {
+        Args: { p_autor?: string; p_chave_estavel: string; p_orcamento_id: string }
+        Returns: number
+      }
+      custo_composicoes: {
+        Args: { p_composicao_id?: string; p_obra_id: string }
+        Returns: { composicao_id: string; categoria: string; total: number }[]
+      }
+      custo_composicao_por_categoria: {
+        Args: { p_obra_id: string; p_orcamento_item_id: string }
+        Returns: { categoria: string; total: number }[]
+      }
       e_admin: { Args: never; Returns: boolean }
+      e_financeiro: { Args: never; Returns: boolean }
       e_gestor: { Args: never; Returns: boolean }
+      painel_orcamento_hierarquico: {
+        Args: { p_obra_id: string }
+        Returns: {
+          orcamento_item_id: string; codigo: string | null; descricao: string | null
+          unidade: string | null; tipo: string | null; nivel: number
+          quantidade_prevista: number; previsto: number
+          quantidade_medida: number; medido: number
+          quantidade_executada: number; executado: number
+          comprado_material: number; composicao_id: string | null
+        }[]
+      }
+      painel_financeiro_obra: {
+        Args: { p_obra_id: string }
+        Returns: {
+          codigo: string | null
+          composicao_id: string | null
+          descricao: string | null
+          executado: number
+          medido: number
+          orcamento_item_id: string
+          quantidade_executada: number
+          quantidade_medida: number
+          quantidade_prevista: number
+          previsto: number
+          unidade: string | null
+        }[]
+      }
       private_papel_atual: {
         Args: never
         Returns: Database["public"]["Enums"]["papel_usuario"]
+      }
+      registrar_versao_orcamento: {
+        Args: { p_autor?: string; p_orcamento_id: string }
+        Returns: number
+      }
+      resolver_composicao_por_codigo: {
+        Args: { p_codigo: string; p_obra_id: string }
+        Returns: string
+      }
+      reverter_custo_composicao: {
+        Args: { p_autor?: string; p_chave_estavel: string; p_orcamento_id: string }
+        Returns: number
+      }
+      salvar_orcamento_atomico: {
+        Args: {
+          p_autor?: string
+          p_colunas: Json
+          p_linhas: Json
+          p_nome: string
+          p_orcamento_id: string
+          p_obra_id: string
+          p_versao_esperada?: number | null
+        }
+        Returns: number
+      }
+      substituir_componentes_composicao: {
+        Args: { p_composicao_id: string; p_componentes: Json }
+        Returns: undefined
       }
       valor_executado_medicao: {
         Args: { p_medicao_id: string }
@@ -1352,6 +1840,10 @@ export type Database = {
       }
       valor_pendente_medicao: {
         Args: { p_medicao_id: string }
+        Returns: number
+      }
+      vincular_composicao_item: {
+        Args: { p_autor?: string; p_chave_estavel: string; p_composicao_id: string; p_orcamento_id: string }
         Returns: number
       }
     }
@@ -1540,6 +2032,12 @@ export type TagsTarefaRow = Tabelas<"tags_tarefa">;
 export type TarefaDependenciaRow = Tabelas<"tarefa_dependencias">;
 export type MedicaoPagamentoRow = Tabelas<"medicao_pagamentos">;
 export type LevantamentoRow = Tabelas<"levantamentos">;
+export type OrcamentoRow = Tabelas<"orcamentos">;
+export type OrcamentoItemRow = Tabelas<"orcamento_itens">;
+export type OrcamentoVersaoRow = Tabelas<"orcamento_versoes">;
+export type OrcamentoAuditoriaRow = Tabelas<"orcamento_auditoria">;
+export type ComposicaoRow = Tabelas<"composicoes">;
+export type ComposicaoComponenteRow = Tabelas<"composicao_componentes">;
 export type QuadroTemplateRow = Tabelas<"quadro_templates">;
 export type QuadroEletricoRow = Tabelas<"quadros_eletricos">;
 
