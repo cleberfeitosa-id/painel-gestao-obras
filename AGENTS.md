@@ -106,3 +106,8 @@ supabase gen types typescript --project-id <ref> --schema public > src/lib/supab
 - **Limitações conhecidas**: confirmação de e-mail ativa; plano grátis Supabase limita arquivos a 50 MB; Resend sandbox (100 emails/dia, só owner).
 - Buckets privados: `plantas` (só PDF) e `anexos` (imagens/vídeos/arquivos).
 - Papéis: `admin` (tudo), `gestor` (cria/edita obras, plantas, tarefas, medições, levantamentos), `colaborador` (consulta + atualiza tarefas próprias).
+
+## Sprint 19 — base configurável e orçamento
+- Branding por implantação: `NEXT_PUBLIC_NOME_EMPRESA` e `NEXT_PUBLIC_NOME_APLICACAO` são lidos por `src/lib/configuracao-aplicacao.ts`; o fallback preserva a instalação atual.
+- A migração `0018_modulo_validacao_orcamento.sql` cria o módulo de orçamentos e composições. A planilha é parseada no navegador e o servidor recebe apenas JSON validado.
+- O projeto continua single-tenant nesta etapa. Uma futura clonagem multiempresa exigirá tabela de empresas, `empresa_id` nas entidades e revisão das políticas RLS; não se deve inferir isolamento multi-tenant da configuração de branding.

@@ -1,0 +1,581 @@
+1. O que foi previsto na Sprint 19
+A Sprint 19 previa:
+1.1 Correções de relatórios e levantamentos
+- Corrigir imagens distorcidas nos relatórios.
+- Preservar a proporção de fotos verticais e horizontais.
+- Remover a segunda legenda dos PDFs de levantamento.
+- Tornar nome da empresa, aplicação, logo e configurações institucionais configuráveis.
+1.2 Módulo de validação de orçamento
+- Importar planilhas CSV, XLS e XLSX.
+- Escolher colunas.
+- Editar células, linhas e colunas.
+- Criar indicadores financeiros.
+- Comparar previsto e custo real.
+- Associar orçamento às medições.
+- Associar orçamento a composições.
+- Calcular custos compostos de mão de obra, material e equipamentos.
+- Criar e editar composições manualmente.
+- Importar composições de planilhas.
+2. O que foi implementado
+2.1 Correções de imagem e PDF
+Implementado:
+- Renderização proporcional de imagens.
+- Centralização de imagens verticais.
+- Remoção do antigo selo/legenda duplicado no PDF de levantamento.
+- Melhorias no exportador de PDF.
+- Escape de valores dinâmicos no relatório 3D para evitar injeção de HTML.
+- Configuração de cores e nome institucional nos PDFs.
+Ainda é necessário fazer testes visuais reais com:
+- Pontos.
+- Áreas.
+- Circuitos.
+- Descidas.
+- Levantamentos sem elementos.
+- Plantas com várias páginas.
+2.2 Branding e clonagem
+Implementado:
+- NEXT_PUBLIC_NOME_EMPRESA.
+- NEXT_PUBLIC_NOME_APLICACAO.
+- URL de logo configurável.
+- Cor primária.
+- Cor de destaque.
+- Favicon configurável.
+- Tagline configurável.
+- Componente LogoAplicacao.
+- Fallback para a instalação atual da Vasconcelos.
+- Fallback textual para empresas sem logo.
+- Documentação inicial em docs/implantacao.md.
+- Separação conceitual entre branding e multi-tenant.
+Ainda falta ou precisa ser aprimorado:
+- Tela administrativa para visualizar/alterar configurações de branding.
+- Configuração institucional persistida por implantação.
+- Processo automatizado de clonagem.
+- Processo automatizado de criação de novo projeto Supabase.
+- Atualização completa da documentação com a migration 0020 e o bucket orcamentos.
+- Definição formal de quais configurações são build-time e quais são runtime.
+- Definição de logo para PDFs impressos, e-mails e relatórios.
+- Estratégia definitiva para empresas que não utilizam o logo padrão.
+O sistema ainda é single-tenant. Trocar o nome da empresa não cria isolamento entre clientes.
+2.3 Importação de orçamento
+Implementado:
+- Leitura de CSV, XLS e XLSX.
+- Seleção de aba.
+- Seleção de linha de cabeçalho.
+- Seleção de colunas.
+- Detecção automática de funções semânticas:
+- Código.
+- Descrição.
+- Unidade.
+- Quantidade.
+- Valor unitário.
+- Valor total.
+- BDI.
+- Custo real.
+- Grupo.
+- Fonte.
+- Categoria.
+- Conversão inicial de números brasileiros.
+- Identificação de códigos duplicados.
+- Classificação preliminar de linhas:
+- Item.
+- Grupo.
+- Subtotal.
+- Informativa.
+- Geração de chaves estáveis para as linhas.
+- Preparação da divisão em lotes.
+- Parser compartilhado em src/lib/orcamento/planilha.ts.
+Ainda falta na experiência de importação:
+- Tela explícita de mapeamento manual de cada coluna.
+- Preview realmente completo com as colunas já normalizadas.
+- Relatório detalhado de erros.
+- Escolha de importar ou ignorar linhas inválidas.
+- Importação parcial.
+- Importação de múltiplas abas como partes do mesmo orçamento.
+- Reprocessamento de uma importação.
+- Desfazer importação.
+- Detecção visual de duplicidades.
+- Escolha de qual item duplicado deve prevalecer.
+- Upload automático do arquivo original para o Storage.
+- Associação do arquivo enviado ao orçamento salvo.
+- Histórico visível de importações.
+A action de upload direto foi criada, mas ainda não está conectada ao fluxo visual de importação.
+3. Situação atual dos cards do orçamento
+Hoje os cards são calculados exclusivamente em:
+src/components/orcamento/editor-orcamento.tsx
+A lógica atual é:
+Card “Previsto”
+Procura a primeira coluna cujo nome contenha:
+- previst
+- orçamento
+Se não encontrar, usa a primeira coluna do tipo moeda.
+Card “Custo real”
+Procura a primeira coluna cujo nome contenha:
+- real
+- gasto
+- execut
+Se não encontrar, usa uma coluna chamada internamente custo_real.
+Card “Variação”
+Calcula:
+custo real - previsto
+Se a variação for positiva, aparece em vermelho. Caso contrário, aparece em verde.
+Card “Linhas”
+Conta as linhas consideradas como itens.
+Linhas classificadas como:
+- Grupo.
+- Informativa.
+- Subtotal.
+são excluídas do cálculo do resumo.
+Problemas atuais dos cards
+Eles ainda não são configuráveis pelo usuário.
+Também não existe:
+- Card de valor com BDI.
+- Card de quantidade prevista.
+- Card de quantidade executada.
+- Card de percentual executado.
+- Card de saldo contratual.
+- Card de itens sem composição.
+- Card de itens sem custo real.
+- Card de divergências entre custo original e calculado.
+- Card de valor medido.
+- Card de valor pago.
+- Card de saldo a executar.
+- Card de estouro de orçamento.
+- Card por categoria.
+- Card por grupo/capítulo.
+- Card por fonte.
+- Card por composição.
+Ou seja: hoje os cards são apenas um resumo heurístico, não uma análise financeira configurável.
+4. Lista de composições
+Sua percepção também está correta.
+A tela atual faz:
+select * from composicoes
+where obra_id = ...
+order by codigo
+Depois renderiza todas as composições simultaneamente em uma grade.
+Atualmente, a lista:
+- Não possui paginação.
+- Não possui busca.
+- Não possui filtro.
+- Não possui agrupamento.
+- Não possui ordenação interativa.
+- Não possui seleção por categoria.
+- Não possui colunas configuráveis.
+- Não possui carregamento incremental.
+- Não possui contador resumido por categoria.
+- Não possui visualização compacta.
+- Não possui modo tabela.
+- Não possui virtualização.
+- Não possui tela dedicada.
+Por isso, quando há muitas composições, a página fica poluída.
+Melhor solução para a lista de composições
+A lista deveria ser substituída por uma seção resumida:
+Composições
+1.284 cadastradas
+
+[Buscar código ou descrição]
+[Fonte] [Categoria] [Status]
+[Mostrar somente vinculadas]
+[Mostrar somente sem vínculo]
+
+Tabela paginada:
+Código | Descrição | Unidade | Custo | Componentes | Status | Ações
+A lista completa deveria ficar em uma rota própria, por exemplo:
+/obras/[id]/orcamentos/composicoes
+Na página principal do orçamento deveria aparecer apenas:
+- Quantidade de composições.
+- Últimas importadas.
+- Composições sem vínculo.
+- Botão “Ver todas”.
+- Botão “Nova composição”.
+- Botão “Importar composições”.
+5. Editar e excluir orçamentos
+Editar orçamento
+Existe uma edição básica.
+Ao clicar no card do orçamento, abre:
+/obras/[id]/orcamentos/[orcamentoId]
+Nessa tela é possível:
+- Alterar o nome.
+- Editar células.
+- Criar colunas.
+- Excluir colunas.
+- Criar linhas.
+- Excluir linhas.
+- Alterar o tipo da coluna.
+- Salvar alterações.
+Porém, ainda faltam:
+- Edição em massa.
+- Copiar e colar intervalos.
+- Preenchimento para baixo.
+- Fórmulas persistentes na interface.
+- Validação por tipo.
+- Formatação de moeda e número.
+- Ordenação.
+- Filtros.
+- Congelamento de colunas.
+- Busca dentro da planilha.
+- Seleção de múltiplas linhas.
+- Histórico de alterações.
+- Comparação entre versões.
+- Botão “desfazer”.
+- Restaurar uma versão anterior.
+- Indicador de quem alterou.
+- Controle de concorrência visível ao usuário.
+A infraestrutura de versionamento foi criada, mas ainda não existe uma interface para consultar e restaurar versões.
+Excluir orçamento
+A action excluirOrcamento existe no servidor, mas não há botão na interface.
+Portanto, atualmente o usuário não consegue excluir um orçamento pela tela.
+Falta:
+- Botão de exclusão no card.
+- Modal de confirmação.
+- Exibição do nome do orçamento a ser excluído.
+- Proteção contra exclusão acidental.
+- Tratamento de orçamento com medições vinculadas.
+- Registro da exclusão na auditoria.
+- Possibilidade de arquivar em vez de excluir definitivamente.
+Editar e excluir composições
+O cenário é ainda mais incompleto:
+- Existe formulário para criar composição.
+- A action salvarComposicao aceita atualização por id.
+- Não há tela para abrir uma composição existente.
+- Não há tabela administrativa completa.
+- Não há botão de editar.
+- Não há botão de excluir.
+- Não há modal de detalhes.
+- Não há edição dos componentes importados.
+- Não há origem visível.
+- Não há versão visível.
+- Não há dependências visíveis.
+6. Conexão atual entre orçamento e composição
+Hoje a conexão ainda não está implementada visualmente.
+Há apenas:
+- Tabelas separadas.
+- Códigos textuais em ambos os módulos.
+- Estrutura de vínculo preparada no banco.
+- Campos semânticos para identificar a coluna de composição.
+- Função de cálculo recursivo criada.
+- Prevenção de ciclos criada no banco.
+Mas ainda falta o fluxo real:
+ 1. Identificar a coluna de composição do orçamento.
+ 2. Procurar o código na tabela de composições.
+ 3. Mostrar o status:
+- Encontrada.
+- Ausente.
+- Duplicada.
+- Desatualizada.
+ 4. Abrir a composição relacionada.
+ 5. Mostrar componentes.
+ 6. Mostrar custo por categoria:
+- Mão de obra.
+- Material.
+- Equipamento.
+- Serviços/outros.
+ 7. Comparar o custo importado com o custo calculado.
+ 8. Aplicar o custo calculado ao orçamento.
+ 9. Preservar o valor original.
+10. Permitir substituição manual.
+11. Exibir divergência.
+12. Recalcular quando uma composição mudar.
+13. Identificar quais itens do orçamento estão sem composição.
+Fluxo esperado
+Uma linha do orçamento deveria mostrar algo como:
+Código: 12345
+Descrição: Pavimentação em bloco
+Quantidade: 850 m²
+Valor original: R$ 125,00
+Valor calculado: R$ 131,42
+Diferença: +R$ 6,42
+Composição: encontrada
+Status: divergência
+[Ver composição] [Aplicar calculado] [Manter original]
+Esse é um dos principais pontos ainda faltantes.
+7. Conexão atual com medições
+A infraestrutura de banco foi preparada parcialmente:
+- orcamento_itens foi criado.
+- catalogo_precos.orcamento_item_id foi criado.
+- O caminho existente das medições continua:
+medicoes
+  -> catalogo_precos
+    -> tarefa_medicoes
+      -> tarefas
+O orçamento poderia se conectar assim:
+orcamento_itens
+  -> catalogo_precos
+    -> tarefa_medicoes
+      -> tarefas
+      -> medições
+Isso preserva o fluxo atual de medições.
+Ainda não implementado na interface
+Falta permitir:
+- Associar item do orçamento a um item de catálogo.
+- Criar associação por código.
+- Selecionar item do orçamento durante a criação da medição.
+- Selecionar item do orçamento ao associar uma tarefa.
+- Mostrar quantidade prevista.
+- Mostrar quantidade medida.
+- Mostrar quantidade executada.
+- Mostrar valor previsto.
+- Mostrar valor medido.
+- Mostrar custo real.
+- Mostrar saldo.
+- Mostrar percentual executado.
+- Mostrar custo de mão de obra.
+- Mostrar custo de material.
+- Mostrar custo de equipamento.
+- Comparar por período.
+- Comparar por boletim de medição.
+- Consolidar tarefas vinculadas.
+- Mostrar itens orçamentários sem medição.
+- Mostrar itens medidos sem orçamento correspondente.
+Relatório financeiro esperado
+Uma análise deveria apresentar:
+Código | Item | Previsto | Medido | Executado | Saldo | % Executado | Desvio
+E também:
+Mão de obra prevista
+Mão de obra executada
+
+Materiais previstos
+Materiais executados
+
+Equipamentos previstos
+Equipamentos executados
+Atualmente esse painel ainda não existe.
+8. O que a Sprint 20 adicionou ou preparou
+A Sprint 20 foi estruturada em seis fases.
+Fase 1 — Fundação de dados
+Parcialmente implementado
+- orcamento_itens.
+- orcamento_versoes.
+- orcamento_auditoria.
+- Chaves estáveis.
+- Campo de versão.
+- Projeção do JSONB para tabela normalizada.
+- Vínculo entre catalogo_precos e orcamento_itens.
+- Origem de upload.
+- Permissão financeira.
+- Prevenção de ciclos de composição.
+Ainda falta
+- Interface para consultar versões.
+- Interface para restaurar versão.
+- Histórico visual.
+- Tela de auditoria.
+- Interface de administração da permissão financeira.
+- Regras completas de versionamento de composições.
+- Rastreamento de fonte da composição.
+- Processamento de importação em lotes realmente conectado à UI.
+Fase 2 — Importação profissional
+Parcialmente implementado
+- Seleção de aba.
+- Seleção de cabeçalho.
+- Detecção semântica.
+- Preview inicial.
+- Conversão de números brasileiros.
+- Detecção de linhas informativas.
+- Duplicidades preliminares.
+Ainda falta
+- Wizard completo.
+- Mapeamento manual.
+- Relatório de erros.
+- Importação parcial.
+- Reprocessamento.
+- Desfazer.
+- Upload original automático.
+- Versionamento visível.
+- Importação de múltiplas abas como partes.
+- Importação realmente em lotes.
+- Worker para planilhas muito grandes.
+- Indicador de progresso.
+Fase 3 — Orçamento e composição
+Parcialmente implementado
+- Tabela composicoes.
+- Tabela composicao_componentes.
+- Importação de composições.
+- Criação manual simples.
+- Cálculo recursivo no código.
+- Prevenção de ciclos no banco.
+Ainda falta
+- Tela completa de composições.
+- Paginação e busca.
+- Editar composição.
+- Excluir composição.
+- Editar componentes importados.
+- Código do componente na interface.
+- Origem da composição.
+- Fonte do arquivo.
+- Dependências.
+- Status do vínculo.
+- Detalhamento ao clicar no item.
+- Aplicar custo calculado.
+- Divergência entre original e calculado.
+- Recalcular dependentes.
+- Composição de composições pela interface.
+Fase 4 — Integração com medições
+Preparado no banco
+- Relação entre catálogo e item orçamentário.
+- Preservação do fluxo existente de tarefas e medições.
+Ainda não implementado
+- Seletor de itens orçamentários na medição.
+- Quantidade prevista.
+- Quantidade medida.
+- Valor executado.
+- Saldo.
+- Percentual.
+- Custo por categoria.
+- Comparação por medição.
+- Relatório previsto versus realizado.
+Fase 5 — Indicadores e gráficos
+Implementado atualmente
+Apenas quatro cards simples:
+- Previsto.
+- Custo real.
+- Variação.
+- Quantidade de linhas.
+Ainda falta
+- Configuração de colunas dos indicadores.
+- Gráfico por grupo.
+- Gráfico por fonte.
+- Gráfico por categoria.
+- Gráfico por unidade.
+- Gráfico por composição.
+- Percentual do orçamento.
+- Previsto versus realizado.
+- Evolução por medição.
+- Maiores desvios.
+- Itens sem composição.
+- Itens sem custo real.
+- Saldo contratual.
+- Filtros interativos.
+- Totalização hierárquica.
+- Tratamento visual de subtotais e capítulos.
+- Alertas de estouro.
+Fase 6 — Qualidade e governança
+Implementado parcialmente
+- Validação Zod.
+- Controle de permissões de gestor.
+- Permissão financeira no banco.
+- Auditoria estrutural.
+- Parser centralizado.
+- Fórmulas sem eval.
+- Escape de HTML no exportador 3D.
+Ainda falta
+- Testes unitários persistidos no repositório.
+- Testes automatizados para os cinco arquivos de referência.
+- Testes de UTF-8.
+- UTF-8 com BOM.
+- Windows-1252.
+- ISO-8859-1.
+- Números brasileiros.
+- Duplicidades.
+- Importação parcial.
+- Payload grande.
+- Auditoria exibida na interface.
+- Permissões financeiras gerenciáveis.
+- Testes reais contra um banco Supabase de homologação.
+- Testes end-to-end do fluxo completo.
+9. Resumo por módulo
+Orçamentos
+Já funciona ou existe
+- Importação básica.
+- Seleção de aba.
+- Seleção de cabeçalho.
+- Edição básica.
+- Criação e exclusão de linhas.
+- Criação e exclusão de colunas.
+- Cards básicos.
+- Persistência JSONB.
+- Estrutura normalizada.
+- Versionamento no banco.
+- Auditoria no banco.
+- Action de exclusão.
+Falta
+- Botão de excluir.
+- Lista administrativa melhor.
+- Busca e filtros.
+- Versões visíveis.
+- Análise financeira configurável.
+- Fórmulas na interface.
+- Conexão com composição.
+- Conexão com medição.
+- Gráficos.
+- Relatórios.
+Composições
+Já funciona ou existe
+- Importação.
+- Agrupamento por código.
+- Criação manual simples.
+- Cálculo de custo unitário.
+- Lista simples.
+- Estrutura para composição recursiva.
+Falta
+- Evitar poluição da página.
+- Página própria.
+- Paginação.
+- Busca.
+- Filtros.
+- Editar.
+- Excluir.
+- Detalhar.
+- Mostrar componentes.
+- Mostrar origem.
+- Mostrar dependências.
+- Ligar ao orçamento.
+Medições
+Já existe no sistema anterior
+- Boletins de medição.
+- Catálogo de preços.
+- Tarefas associadas.
+- Quantidades medidas.
+- Pagamentos.
+- Valores executados e pendentes.
+Falta nesta integração
+- Relacionar item de orçamento.
+- Comparar previsto e medido.
+- Calcular saldo.
+- Consolidar custos por categoria.
+- Mostrar análise financeira por medição.
+10. Prioridade recomendada para concluir
+Eu recomendaria a seguinte sequência:
+Prioridade 1 — Organizar a experiência
+1. Separar a página principal em seções resumidas.
+2. Criar rota própria para composições.
+3. Adicionar busca, paginação e filtros.
+4. Adicionar editar/excluir orçamento.
+5. Adicionar editar/excluir composição.
+6. Adicionar confirmação e mensagens de erro.
+Prioridade 2 — Tornar o orçamento interpretável
+1. Criar configuração de indicadores.
+2. Permitir escolher:
+- Coluna prevista.
+- Coluna real.
+- Coluna de quantidade.
+- Coluna de BDI.
+- Coluna de composição.
+3. Exibir no cabeçalho da tela quais colunas estão alimentando os cards.
+4. Mostrar a origem de cada valor.
+Prioridade 3 — Ligar orçamento e composição
+1. Identificar a coluna de código.
+2. Criar status de correspondência.
+3. Criar tabela de itens sem composição.
+4. Abrir composição em modal ou página.
+5. Calcular custo composto por categoria.
+6. Mostrar divergência.
+7. Permitir aplicar custo calculado.
+Prioridade 4 — Ligar orçamento e medição
+1. Associar orcamento_item ao catálogo.
+2. Usar o catálogo existente nas medições.
+3. Mostrar previsto, medido, executado e saldo.
+4. Criar painel de avanço financeiro.
+5. Criar relatório comparativo.
+Prioridade 5 — Gráficos e governança
+1. Gráficos por grupo/categoria/fonte.
+2. Evolução por medição.
+3. Alertas de estouro.
+4. Histórico de versões.
+5. Auditoria visual.
+6. Testes automatizados com os arquivos reais.
+Conclusão
+A Sprint 19 e a Sprint 20 já deixaram uma base importante: importação, edição inicial, parser, tabelas normalizadas, versionamento, branding e preparação das relações. Porém, o módulo ainda está no estágio de fundação + protótipo de editor.
+Os três maiores pontos ainda pendentes são exatamente os que você identificou:
+1. A tela de composições precisa ser separada e paginada.
+2. O orçamento precisa ter ações claras de editar, excluir e analisar.
+3. A relação orçamento → composição → medição ainda precisa ser transformada em fluxo visual e operacional.
+Hoje os cards não são alimentados por composição nem medição; eles apenas somam colunas escolhidas por heurística de nome dentro do JSONB importado.

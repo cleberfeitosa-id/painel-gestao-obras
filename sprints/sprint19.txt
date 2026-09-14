@@ -1,0 +1,17 @@
+Implemente as seguintes melhorias no projeto:
+
+1. Buh fixes:
+    - Na geração de relatórios, observo que as imagens anexadas e a imagem gerada que identifica os arredores da tarefa na planta, estão esticadas distorcidas para atender ao tamanho destinado a elas, de forma que quando não há imagem anexada, a gerada automaticamente para identificação da tarefa na planta fica muito esticada. quando a imagem anexada possui uma aspect ratio vertical, por exemplo, ela também é achatada, o que a deixa desagradável visualmente.
+    - Na tela de levantamentos, ao gerar um pdf, agora observo dois elementos de legenda sobre a planta, uma que é a correta com as legendas dos elementos presentes na planta, e outra imagino remanescente de uma versão anterior que não trás nenhuma informação relevante além do nome da empresa, sendo essa segunda aparentemente fixa no canto inferior direito da planta.
+    - Quero ser capaz de no futuro criar clones desse projeto para outras empresas, logo elementos como o nome da empresa deve ser herdado e não hardcoded. O mesmo vale para coisas como o schema do database, e todos os elementos que serão configuraveis para cada cliente. Deve haver um "schema" base que será usado como base para criação dessa plataforma para outras empresas além da vasconcelos em um futuro.
+
+2. Módulo de validação de orçamento:
+    - Deve ser criado um novo módulo para acompanhamento e validação de orçamentos.
+    - Esse móduto deve permitir, para cada obra cadastrada, que sejam upadas planilhas que serão parseadas e manipuladas dentro da própria plataforma.
+    - Deve ser possível escolher da planilha, quais colunas serão importadas.
+    - As colúnas destinadas a quantidades e valores devem poder ser usadas para construir cards e gráficos que representem sua participação financeira no orçamento.
+    - Deve ser possível manipular a planilha importada, incluindo novas linhas, excluindo linhas, o mesmo para colunas, realizar operações aritméticas básicas de análise.
+    - Deve ser possível, por exemplo, incluir uma nova coluna identificando o valor de fato gasto com um determinado item para que se compare se o valor previsto em orçamento está de acordo com o custo real.
+    - Deve ser possível conectar elementos do módulo de orçamento com o módulo de medições para identificar o custo associado da mão de obra de cada item com os valores previstos em orçamento.
+    - Deve ser possível incluir uma outra planilha de composições comunicável com a planilha de orçamento, de modo que seja possível identificar o custo de cada item da planilha de orçamento com base na composição de composições. Ou seja, a planilha de orçamento deve conter os itens que serão produzidos, cada item deve ter um custo unitário, o qual pode ser composto por um conjunto de outros itens, por exemplo, uma composição de pavimentação pode ser composta por mão de obra, material e equipamentos, de modo que o custo total de pavimentação seja a soma do custo de cada componente. Ou seja, deve haver uma composição de mão de obra, uma composição de materiais e uma composição de equipamentos, e o custo total de pavimentação será a soma do custo de cada componente. 
+    - As composições devem também poder ser importadas de uma planilha, como também devem poder ser editadas ou construídas dentro da plataforma, de modo que o usuário possa ajustar os valores de custo unitário, quantidades, etc, de acordo com suas necessidades.

@@ -1,0 +1,309 @@
+Estado atual da Sprint 19
+Arquivo analisado:
+sprints/sprint19.txt
+1. Correções de bugs
+1.1 Imagens distorcidas nos relatórios
+Implementado:
+- imagens anexadas passaram a ser renderizadas sem deformação;
+- o exportador PDF calcula dimensões proporcionais;
+- fotos verticais são centralizadas dentro da área disponível;
+- o drawImage deixou de forçar largura e altura incompatíveis com a proporção original.
+Arquivos principais:
+src/lib/pdf/exportador-planta-pdf.ts
+src/components/relatorios/documento-relatorio.tsx
+1.2 Segunda legenda no PDF de levantamentos
+Não foi implementado nesta etapa.
+Ainda é necessário:
+- localizar o elemento adicional que aparece no canto inferior direito;
+- identificar se ele vem de um canvas, componente de legenda ou camada de exportação;
+- remover a legenda antiga;
+- manter somente a legenda atual;
+- testar exportações com pontos, áreas, circuitos, descidas e demais elementos.
+1.3 Configuração para outras empresas
+Parcialmente implementado.
+Já existe base para branding configurável:
+src/lib/configuracao-aplicacao.ts
+E variáveis como:
+NEXT_PUBLIC_NOME_EMPRESA
+NEXT_PUBLIC_NOME_APLICACAO
+Ainda falta:
+- remover todos os nomes hardcoded do código;
+- centralizar logotipo, nome, cores e textos institucionais;
+- criar configuração de implantação;
+- definir estratégia para schema/base de dados;
+- separar claramente configuração de branding de isolamento multiempresa;
+- criar processo de clonagem/instalação para uma nova empresa;
+- revisar políticas RLS caso futuramente exista multi-tenant real.
+Importante: a aplicação continua single-tenant. Apenas trocar o nome da empresa não cria isolamento entre clientes.
+2. Módulo de validação de orçamento
+2.1 Importação de planilhas
+Implementado parcialmente.
+Atualmente é possível:
+- importar .csv, .xls e .xlsx;
+- escolher a linha de cabeçalho;
+- importar somente a primeira aba;
+- selecionar colunas;
+- detectar tipos básicos:
+- texto;
+- número;
+- moeda;
+- editar linhas e colunas depois da importação;
+- adicionar novas linhas;
+- adicionar novas colunas;
+- excluir linhas;
+- excluir colunas;
+- salvar o orçamento em JSONB.
+Arquivos principais:
+src/components/orcamento/importar-planilha.tsx
+src/components/orcamento/editor-orcamento.tsx
+src/lib/orcamento/tipos.ts
+src/lib/orcamento/calculos.ts
+Ainda falta nessa parte
+- selecionar explicitamente qual aba importar;
+- pré-visualização mais clara antes de confirmar;
+- mapeamento semântico das colunas:
+- código do item;
+- descrição;
+- unidade;
+- quantidade;
+- valor unitário;
+- valor total;
+- valor com BDI;
+- custo real;
+- identificar automaticamente linhas de grupo/subtotal;
+- filtrar linhas vazias ou apenas informativas;
+- suportar planilhas muito grandes sem ultrapassar limite de payload;
+- guardar o arquivo original no Storage;
+- versionar importações;
+- desfazer/reprocessar uma importação;
+- importar múltiplas abas como partes de um mesmo orçamento.
+2.2 Cards e gráficos financeiros
+Parcialmente implementado.
+Já existem cards de:
+- previsto;
+- custo real;
+- variação;
+- quantidade de linhas.
+O resumo é calculado por:
+src/lib/orcamento/calculos.ts
+Ainda falta
+- configurar quais colunas alimentam cada indicador;
+- gráficos por:
+- grupo;
+- fonte;
+- categoria;
+- unidade;
+- composição;
+- percentual do orçamento;
+- gráficos de previsto versus realizado;
+- filtros interativos;
+- indicadores por BDI;
+- totalização hierárquica;
+- tratamento de subtotais e capítulos;
+- alertas de estouro de orçamento.
+2.3 Manipulação da planilha
+Parcialmente implementado.
+Já é possível editar células, linhas e colunas.
+Ainda falta
+- fórmulas persistentes;
+- operações aritméticas entre colunas;
+- colunas calculadas;
+- preenchimento em massa;
+- copiar/colar intervalos;
+- validação por tipo de coluna;
+- formatação numérica;
+- fórmulas como:
+- quantidade × preço unitário;
+- valor com BDI;
+- diferença previsto–real;
+- percentual executado;
+- histórico de alterações;
+- controle de versão.
+2.4 Custo real e comparação com orçamento
+Parcialmente implementado.
+O editor possui uma coluna de custo real detectada por nome e mostra uma variação básica.
+Ainda falta
+- interface específica para declarar custo real;
+- integração com medições;
+- associação por código do item;
+- associação por tarefa;
+- consolidação de mão de obra;
+- atualização automática do custo executado;
+- comparação por período;
+- comparação por medição;
+- trilha de auditoria.
+2.5 Integração com medições
+Ainda não implementado.
+A sprint exige conectar:
+- item do orçamento;
+- composição;
+- tarefa;
+- medição;
+- custo executado;
+- custo previsto.
+Para finalizar essa parte, será necessário:
+1. definir uma chave estável para o item do orçamento;
+2. definir como o código da composição será associado ao item;
+3. criar relação entre item orçamentário e medição;
+4. permitir que uma medição identifique o item correspondente;
+5. calcular:
+- quantidade prevista;
+- quantidade executada;
+- valor previsto;
+- valor medido;
+- saldo;
+- percentual executado;
+6. evitar depender apenas do texto da descrição.
+Provavelmente será necessária uma nova tabela normalizada para itens orçamentários, pois armazenar tudo somente no JSONB dificulta consultas, relações e agregações.
+3. Composições
+3.1 Importação de composições
+Implementado.
+É possível:
+- selecionar uma planilha;
+- escolher a linha de cabeçalho;
+- identificar código da composição;
+- identificar descrição;
+- identificar unidade;
+- identificar quantidade;
+- identificar valor unitário;
+- identificar categoria;
+- agrupar várias linhas pelo mesmo código;
+- importar múltiplas composições;
+- substituir componentes ao reimportar;
+- preservar números brasileiros;
+- importar arquivos SINAPI, UFCA e Juazeiro com estruturas diferentes.
+A importação usa:
+src/components/orcamento/importar-composicoes.tsx
+src/app/(protegido)/obras/[id]/orcamentos/acoes.ts
+3.2 Visualização de composições
+Implementado nesta etapa.
+Agora as composições aparecem na seção:
+Composições disponíveis
+Elas são consultadas diretamente da tabela composicoes.
+3.3 Edição e criação manual
+Parcialmente implementado.
+Existe o formulário:
+src/components/orcamento/editor-composicao.tsx
+Ele permite criar uma composição manual com componentes.
+Ainda falta
+- listar composições em uma tabela completa;
+- abrir uma composição para edição;
+- excluir composição;
+- editar componentes importados;
+- visualizar custo por categoria;
+- adicionar/remover componentes no editor;
+- mostrar origem da composição;
+- indicar qual planilha originou os dados;
+- detectar dependências entre composições;
+- impedir ciclos de composição;
+- recalcular composições dependentes.
+3.4 Ligação entre orçamento e composição
+Ainda não está implementada visualmente.
+Atualmente:
+- as composições são armazenadas por obra;
+- o orçamento é armazenado separadamente em JSONB;
+- ambos possuem códigos textuais;
+- não existe uma tela que encontre o código do orçamento na tabela de composições;
+- não existe detalhamento da composição ao clicar em um item;
+- o custo unitário do orçamento não é recalculado automaticamente a partir da composição;
+- não existe destaque para códigos sem composição correspondente.
+A seção de composições agora informa explicitamente essa limitação.
+Para finalizar o objetivo da sprint, o sistema deve:
+1. identificar no orçamento a coluna de código da composição;
+2. associar essa coluna à tabela composicoes;
+3. exibir o status:
+- composição encontrada;
+- composição ausente;
+- código duplicado;
+- composição desatualizada;
+4. abrir o detalhamento da composição;
+5. calcular o custo composto:
+- mão de obra;
+- material;
+- equipamento;
+- serviços;
+6. permitir aplicar o custo calculado ao orçamento;
+7. preservar o valor original e o valor calculado;
+8. permitir substituir o custo manualmente;
+9. sinalizar divergências.
+O que ainda precisa ser feito para finalizar a Sprint 19
+Fase 1 — Fundação dos dados
+Recomendada antes de ampliar a interface:
+- criar entidade normalizada para itens do orçamento;
+- adicionar relação entre orçamento e composição;
+- adicionar origem/fonte da composição;
+- guardar versão da importação;
+- criar chave estável para o item;
+- preservar código original da composição;
+- preservar código do componente;
+- guardar arquivo original no Storage.
+Possíveis tabelas:
+orcamento_itens
+composicao_fontes
+composicao_componentes
+orcamento_composicao_vinculos
+A modelagem atual em JSONB é suficiente para protótipo, mas não é ideal para integração com medições, gráficos e consultas financeiras.
+Fase 2 — Importação profissional
+Implementar:
+- seleção de aba;
+- seleção de linha de cabeçalho;
+- mapeamento de colunas;
+- mapeamento de funções;
+- preview;
+- validação;
+- relatório de erros;
+- importação parcial;
+- importação em lotes;
+- suporte a grandes planilhas;
+- identificação de duplicatas;
+- reimportação segura;
+- histórico da fonte.
+Fase 3 — Integração orçamento–composição
+Implementar:
+- ligação por código;
+- resolução de códigos duplicados;
+- visualização do detalhamento;
+- cálculo do custo composto;
+- atualização do orçamento;
+- diferenças entre valor importado e valor calculado;
+- composição de composições;
+- dependências recursivas;
+- prevenção de ciclos.
+Fase 4 — Integração com medições
+Implementar:
+- seleção de itens do orçamento na medição;
+- quantidade prevista;
+- quantidade medida;
+- valor executado;
+- saldo;
+- percentual;
+- custo de mão de obra;
+- custo de material;
+- custo de equipamento;
+- relatórios comparativos.
+Fase 5 — Indicadores e gráficos
+Implementar:
+- distribuição do orçamento por grupo;
+- distribuição por fonte;
+- previsto versus realizado;
+- evolução por medição;
+- maiores desvios;
+- itens sem composição;
+- itens sem custo real;
+- saldo contratual;
+- filtros por capítulo, código e composição.
+Fase 6 — Qualidade e governança
+Implementar:
+- testes unitários dos parsers;
+- testes com os cinco arquivos de referência;
+- testes de encoding:
+- UTF-8;
+- UTF-8 com BOM;
+- Windows-1252;
+- ISO-8859-1;
+- testes de números brasileiros;
+- testes de duplicação;
+- testes de importação parcial;
+- testes de payload grande;
+- auditoria de alterações;
+- permissões específicas para edição financeira.
