@@ -12,14 +12,16 @@ export function FiltrosObras() {
   const [busca, setBusca] = useState(searchParams.get("busca") ?? "");
 
   const aplicar = useCallback(
-    (status: string, termo: string) => {
+      (status: string, termo: string) => {
       const params = new URLSearchParams();
+      const modulo = searchParams.get("modulo");
+      if (modulo) params.set("modulo", modulo);
       if (status) params.set("status", status);
       if (termo.trim()) params.set("busca", termo.trim());
       const query = params.toString();
       router.push(query ? `/obras?${query}` : "/obras");
     },
-    [router],
+    [router, searchParams],
   );
 
   const limpar = () => {

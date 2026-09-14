@@ -61,7 +61,7 @@ async function buscarContagemTarefas(obraIds: string[]) {
 export default async function ObrasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; busca?: string }>;
+  searchParams: Promise<{ status?: string; busca?: string; modulo?: string }>;
 }) {
   const params = await searchParams;
   const statusValido: StatusObra[] = [
@@ -74,6 +74,9 @@ export default async function ObrasPage({
     ? (params.status as StatusObra)
     : undefined;
   const busca = params.busca;
+  const modulo = ["medicoes", "orcamentos", "levantamento", "quadros", "compatibilizacoes"].includes(params.modulo ?? "")
+    ? params.modulo
+    : undefined;
 
   const obras = await buscarObras(status, busca);
   const contagens = await buscarContagemTarefas(obras.map((o) => o.id));
@@ -84,7 +87,9 @@ export default async function ObrasPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-superficie-900">Obras</h1>
+          <h1 className="text-2xl font-bold text-superficie-900">
+            {modulo ? `Selecione uma obra para abrir ${modulo === "orcamentos" ? "orçamentos" : modulo}` : "Obras"}
+          </h1>
           <p className="mt-1 text-sm text-superficie-500">
             Gerencie os canteiros e projetos da empresa.
           </p>
@@ -134,8 +139,8 @@ export default async function ObrasPage({
           {obras.map((obra) => {
             const contagem = contagens.get(obra.id);
             const statusInfo = STATUS_OBRA[obra.status];
-            return (
-              <Link key={obra.id} href={`/obras/${obra.id}`} className="group">
+              return (
+                <Link key={obra.id} href={modulo ? `/obras/${obra.id}/${modulo}` : `/obras/${obra.id}`} className="group">
                 <Cartao className="h-full transition-shadow group-hover:shadow-md">
                   <CartaoConteudo className="flex h-full flex-col gap-4">
                     <div className="flex items-start justify-between gap-3">

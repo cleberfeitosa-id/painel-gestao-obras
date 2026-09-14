@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatarData } from "@/lib/datas";
 import { PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
+import { CONFIGURACAO_APLICACAO } from "@/lib/configuracao-aplicacao";
 import type { PrioridadeTarefa } from "@/lib/supabase/database.types";
 
 type NotificacaoTarefa = {
@@ -34,6 +35,8 @@ function montarHtml(dados: NotificacaoTarefa) {
   const link = `${urlBase()}/tarefas/${dados.tarefaId}`;
   const prioridade = PRIORIDADE_TAREFA[dados.prioridade].rotulo;
   const prazo = dados.prazo ? formatarData(dados.prazo) : "Sem prazo definido";
+  const corDestaque = CONFIGURACAO_APLICACAO.corDestaque;
+  const nomeEmpresa = escapar(CONFIGURACAO_APLICACAO.nomeEmpresa);
 
   const linhas = [
     ["Obra", escapar(dados.obra)],
@@ -50,7 +53,7 @@ function montarHtml(dados: NotificacaoTarefa) {
 <html lang="pt-BR"><body style="margin:0;background:#f1f5f9;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
   <div style="max-width:560px;margin:0 auto;padding:32px 16px">
     <div style="background:#ffffff;border-radius:12px;padding:32px;border:1px solid #e2e8f0">
-      <p style="margin:0 0 4px;color:#1d4ed8;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Vasconcelos Engenharia</p>
+       <p style="margin:0 0 4px;color:${corDestaque};font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">${nomeEmpresa}</p>
       <h1 style="margin:0 0 16px;color:#0f172a;font-size:20px">Nova tarefa atribuida a voce</h1>
       <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6">Ola, ${escapar(dados.nomeResponsavel)}. Voce foi definido como responsavel pela tarefa abaixo.</p>
       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin-bottom:24px">
@@ -58,7 +61,7 @@ function montarHtml(dados: NotificacaoTarefa) {
         ${dados.descricao ? `<p style="margin:0 0 12px;color:#475569;font-size:14px;line-height:1.6">${escapar(dados.descricao)}</p>` : ""}
         <table style="width:100%;border-collapse:collapse">${linhas}</table>
       </div>
-      <a href="${link}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600">Abrir tarefa</a>
+      <a href="${link}" style="display:inline-block;background:${corDestaque};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600">Abrir tarefa</a>
       <p style="margin:24px 0 0;color:#94a3b8;font-size:12px;line-height:1.6">Voce recebeu este e-mail porque e o responsavel por esta tarefa no Painel de Gestao de Obras.</p>
     </div>
   </div>
@@ -93,7 +96,7 @@ export async function notificarResponsavel(dados: NotificacaoTarefa) {
   }
 
   const { error } = await new Resend(chave).emails.send({
-    from: process.env.RESEND_FROM ?? "Vasconcelos Engenharia <onboarding@resend.dev>",
+     from: process.env.RESEND_FROM ?? `${CONFIGURACAO_APLICACAO.nomeEmpresa} <onboarding@resend.dev>`,
     to: [dados.para],
     subject: assunto,
     html: montarHtml(dados),

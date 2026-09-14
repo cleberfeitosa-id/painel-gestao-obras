@@ -7,8 +7,9 @@ import {
   CartaoTitulo,
   EstadoVazio,
   Etiqueta,
-  LogoVasconcelos,
+  LogoAplicacao,
 } from "@/components/ui";
+import { CONFIGURACAO_APLICACAO } from "@/lib/configuracao-aplicacao";
 import { PRIORIDADE_TAREFA, STATUS_TAREFA } from "@/lib/domain/rotulos";
 import { formatarDataHora } from "@/lib/datas";
 import { MiniaturaPlanta } from "@/components/relatorios/miniatura-planta-dinamica";
@@ -124,13 +125,13 @@ function ImagensTarefa({
             className="quebra-evitar flex flex-col overflow-hidden rounded-lg border border-borda"
           >
             {url ? (
-              <img
-                src={url}
-                alt={anexo.nome_arquivo}
-                className="aspect-square w-full object-cover"
+             <img
+               src={url}
+               alt={anexo.nome_arquivo}
+                className="h-44 w-full bg-superficie-100 object-contain"
               />
             ) : (
-              <div className="flex aspect-square w-full items-center justify-center bg-superficie-100 text-xs text-superficie-400">
+              <div className="flex h-44 w-full items-center justify-center bg-superficie-100 text-xs text-superficie-400">
                 Imagem indisponível
               </div>
             )}
@@ -304,7 +305,10 @@ export function DocumentoRelatorio({
     <>
       <header className="border-b border-borda pb-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <LogoVasconcelos variante="completa" className="h-14 w-auto" />
+           <div className="flex items-center gap-3">
+             <LogoAplicacao variante="completa" className="h-14 w-auto" />
+             <span className="sr-only">{CONFIGURACAO_APLICACAO.nomeEmpresa}</span>
+           </div>
           <div className="text-left sm:text-right">
             <span className="inline-block rounded-md border border-borda bg-superficie-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-superficie-600">
               Relatório Gerencial de Obras

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Info, MailCheck } from "lucide-react";
 import { z } from "zod";
 import { cadastrar } from "../login/acoes";
-import { Botao, Campo, LogoVasconcelos } from "@/components/ui";
+import { Botao, Campo, LogoAplicacao } from "@/components/ui";
 
 const esquemaCadastro = z
   .object({
@@ -63,7 +63,7 @@ export default function CadastroPage() {
       <div className="flex min-h-screen items-center justify-center bg-fundo px-6">
         <div className="w-full max-w-md text-center">
           <div className="flex justify-center mb-6">
-            <LogoVasconcelos variante="completa" className="h-16 w-auto" />
+            <LogoAplicacao variante="completa" className="h-16 w-auto" />
           </div>
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sucesso-fundo text-sucesso mb-6">
             <MailCheck className="h-8 w-8" />
@@ -105,7 +105,7 @@ export default function CadastroPage() {
         </div>
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
           <div className="mb-10">
-            <LogoVasconcelos
+            <LogoAplicacao
               variante="completa"
               tema="negativo"
               className="h-20 w-auto"
@@ -124,7 +124,7 @@ export default function CadastroPage() {
       <div className="flex flex-1 flex-col justify-center px-6 py-12 sm:px-12 lg:px-16 bg-white">
         <div className="mx-auto w-full max-w-sm">
           <div className="flex justify-center lg:hidden mb-8">
-            <LogoVasconcelos variante="completa" className="h-16 w-auto" />
+            <LogoAplicacao variante="completa" className="h-16 w-auto" />
           </div>
 
           <h2 className="text-2xl font-bold text-superficie-900">

@@ -79,6 +79,9 @@
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-pill: 9999px;
+
+  --color-branding-primaria: var(--branding-cor-primaria, #F48040);
+  --color-branding-destaque: var(--branding-cor-destaque, #1d4ed8);
 }
 
 /* ── Base layer ── */
@@ -205,10 +208,7 @@ body {
     max-height: 45mm;
   }
 
-  /* Grade de imagens: fotos das tarefas em proporcoes padronizadas (quadrado)
-     e maiores na impressao. Como cada tarefa ja ocupa meia pagina (2
-     colunas), usa-se 3 colunas de fotos por tarefa, de modo que varias caibam
-     em cada pagina A4 do relatorio. */
+  /* Grade de imagens: preserva a proporcao das fotos na impressao. */
   .imprensa-grid-imagens {
     grid-template-columns: repeat(3, 1fr) !important;
     gap: 3mm !important;
@@ -219,8 +219,9 @@ body {
   }
 
   .imprensa-grid-imagens img {
-    aspect-ratio: 1 / 1;
-    object-fit: cover;
+    height: auto;
+    max-height: 45mm;
+    object-fit: contain;
   }
 
   .imprensa-grid-imagens figcaption {

@@ -14,10 +14,12 @@ import {
   Boxes,
   Layers,
   CopyCheck,
+  Calculator,
+  ShoppingCart,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { LogoVasconcelos } from "@/components/ui";
+import { LogoAplicacao } from "@/components/ui";
 import type { PapelUsuario } from "@/lib/supabase/database.types";
 
 interface BarraLateralProps {
@@ -35,7 +37,7 @@ export function BarraLateral({ papel }: BarraLateralProps) {
     { href: "/painel", rotulo: "Painel", icone: LayoutDashboard },
     { href: "/obras", rotulo: "Obras", icone: HardHat },
     {
-      href: obraId ? `/obras/${obraId}/medicoes` : "/obras",
+      href: obraId ? `/obras/${obraId}/medicoes` : "/obras?modulo=medicoes",
       chave: "medicoes",
       rotulo: "Medições",
       icone: Ruler,
@@ -47,16 +49,28 @@ export function BarraLateral({ papel }: BarraLateralProps) {
       icone: Boxes,
     },
     {
-      href: obraId ? `/obras/${obraId}/quadros` : "/obras",
+      href: obraId ? `/obras/${obraId}/quadros` : "/obras?modulo=quadros",
       chave: "quadros",
       rotulo: "Quadros",
       icone: Layers,
     },
     {
-      href: obraId ? `/obras/${obraId}/compatibilizacoes` : "/obras",
+      href: obraId ? `/obras/${obraId}/compatibilizacoes` : "/obras?modulo=compatibilizacoes",
       chave: "compatibilizacoes",
       rotulo: "Compatibilização",
       icone: CopyCheck,
+    },
+    {
+      href: obraId ? `/obras/${obraId}/orcamentos` : "/obras?modulo=orcamentos",
+      chave: "orcamentos",
+      rotulo: "Orçamentos",
+      icone: Calculator,
+    },
+    {
+      href: obraId ? `/obras/${obraId}/compras` : "/obras?modulo=compras",
+      chave: "compras",
+      rotulo: "Compras",
+      icone: ShoppingCart,
     },
     { href: "/plantas", rotulo: "Plantas", icone: FileText },
     { href: "/tarefas", rotulo: "Tarefas", icone: CheckSquare },
@@ -67,7 +81,7 @@ export function BarraLateral({ papel }: BarraLateralProps) {
   function estaAtivo(href: string) {
     if (
       href === "/obras" &&
-      (pathname.includes("/medicoes") || pathname.includes("/levantamento") || pathname.includes("/quadros") || pathname.includes("/compatibilizacoes"))
+      (pathname.includes("/medicoes") || pathname.includes("/levantamento") || pathname.includes("/quadros") || pathname.includes("/compatibilizacoes") || pathname.includes("/orcamentos") || pathname.includes("/compras"))
     )
       return false;
     if (href.startsWith("/levantamento") && pathname.startsWith("/levantamento"))
@@ -90,7 +104,7 @@ export function BarraLateral({ papel }: BarraLateralProps) {
           className="flex flex-col items-center group transition-opacity hover:opacity-90"
           onClick={() => setAberto(false)}
         >
-          <LogoVasconcelos
+          <LogoAplicacao
             variante="completa"
             className="h-11 w-auto max-w-[124px]"
           />

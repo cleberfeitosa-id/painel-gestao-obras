@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { entrar } from "./acoes";
-import { Botao, Campo, LogoVasconcelos } from "@/components/ui";
+import { Botao, Campo, LogoAplicacao } from "@/components/ui";
 
 function FormularioLogin() {
   const searchParams = useSearchParams();
@@ -28,7 +28,7 @@ function FormularioLogin() {
         </div>
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
           <div className="mb-10">
-            <LogoVasconcelos
+            <LogoAplicacao
               variante="completa"
               tema="negativo"
               className="h-20 w-auto"
@@ -59,7 +59,7 @@ function FormularioLogin() {
       <div className="flex flex-1 flex-col justify-center px-6 py-12 sm:px-12 lg:px-16 bg-white">
         <div className="mx-auto w-full max-w-sm">
           <div className="flex justify-center lg:hidden mb-8">
-            <LogoVasconcelos variante="completa" className="h-16 w-auto" />
+            <LogoAplicacao variante="completa" className="h-16 w-auto" />
           </div>
 
           <h2 className="text-2xl font-bold text-superficie-900">

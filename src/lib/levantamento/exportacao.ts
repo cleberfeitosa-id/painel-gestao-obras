@@ -2,6 +2,7 @@ import type { Calibracao } from "@/lib/pdf/coordenadas";
 import { formatarMedida } from "@/lib/pdf/coordenadas";
 import { obterNomeCorCabo, rotuloCondutor } from "./calculos";
 import type { ItemLevantamento, Nivel3D, ResumoLevantamento } from "./tipos";
+import { CONFIGURACAO_APLICACAO } from "@/lib/configuracao-aplicacao";
 
 interface DadosExportacao {
   nomeLevantamento: string;
@@ -26,7 +27,7 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
 
   linhas.push(
     [
-      escaparCsv("LEVANTAMENTO DE QUANTIDADES - VASCONCELOS ENGENHARIA"),
+       escaparCsv(`LEVANTAMENTO DE QUANTIDADES - ${CONFIGURACAO_APLICACAO.nomeEmpresa.toUpperCase()}`),
     ].join(";"),
   );
   linhas.push(

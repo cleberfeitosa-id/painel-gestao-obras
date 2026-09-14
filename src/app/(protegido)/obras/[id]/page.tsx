@@ -15,6 +15,7 @@ import {
   Layers,
   ArrowRight,
   TrendingUp,
+  Calculator,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_OBRA, STATUS_TAREFA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
@@ -257,6 +258,14 @@ export default async function DetalheObraPage({
                 <Botao variante="contorno">
                   <Ruler className="h-4 w-4" />
                   Medição
+                </Botao>
+              </Link>
+            )}
+            {podeMedir && (
+              <Link href={`/obras/${obra.id}/orcamentos`}>
+                <Botao variante="primario">
+                  <Calculator className="h-4 w-4" />
+                  Orçamentos
                 </Botao>
               </Link>
             )}

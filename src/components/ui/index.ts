@@ -21,10 +21,12 @@ export {
 export { EstadoVazio } from "./estado-vazio";
 export { Avatar } from "./avatar";
 export { Spinner, EsqueletoLinha } from "./carregando";
+export { Paginacao } from "./paginacao";
 export {
   LogoVasconcelos,
   type LogoVariante,
   type LogoTema,
   type LogoVasconcelosProps,
 } from "./logo-vasconcelos";
+export { LogoAplicacao, type LogoAplicacaoProps } from "./logo-aplicacao";
 
