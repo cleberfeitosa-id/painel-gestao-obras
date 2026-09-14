@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@e965/xlsx": "^0.20.3",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.109.0",
     "@types/three": "^0.185.4",
