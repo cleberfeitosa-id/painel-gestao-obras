@@ -319,7 +319,8 @@ export function NovaCompra({
                   <CelulaCabecalho>Un.</CelulaCabecalho>
                    <CelulaCabecalho className="text-right">Coef.</CelulaCabecalho>
                    <CelulaCabecalho className="text-right">Qtd. prev.</CelulaCabecalho>
-                   <CelulaCabecalho className="text-right">Valor prev.</CelulaCabecalho>
+                   <CelulaCabecalho className="text-right">Valor un. prev.</CelulaCabecalho>
+                   <CelulaCabecalho className="text-right">Valor total prev.</CelulaCabecalho>
                    <CelulaCabecalho className="text-right">Qtd. real *</CelulaCabecalho>
                    <CelulaCabecalho className="text-right">Valor un. real *</CelulaCabecalho>
                    <CelulaCabecalho className="text-right">Total real</CelulaCabecalho>
@@ -335,7 +336,7 @@ export function NovaCompra({
                        <Celula className="font-mono text-xs text-superficie-500">
                          {insumo.componenteId ? insumo.codigo ?? "—" : <input className="w-24 rounded border border-borda px-2 py-1" value={insumo.codigo ?? ""} onChange={(e) => alterarTexto(i, "codigo", e.target.value)} placeholder="Código" aria-label="Código do insumo manual" />}
                        </Celula>
-                       <Celula className="max-w-[200px] truncate font-medium text-superficie-900">
+                       <Celula className="min-w-[18rem] max-w-[28rem] whitespace-normal break-words font-medium text-superficie-900">
                          {insumo.componenteId ? insumo.nome : <input className="w-44 rounded border border-borda px-2 py-1" value={insumo.nome} onChange={(e) => alterarTexto(i, "nome", e.target.value)} placeholder="Descrição" aria-label="Descrição do insumo manual" />}
                        </Celula>
                        <Celula>{insumo.componenteId ? insumo.unidade : <input className="w-16 rounded border border-borda px-2 py-1" value={insumo.unidade} onChange={(e) => alterarTexto(i, "unidade", e.target.value)} aria-label="Unidade do insumo manual" />}</Celula>
@@ -345,8 +346,11 @@ export function NovaCompra({
                       <Celula className="text-right tabular-nums">
                          {insumo.quantidadePrevista.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}
                       </Celula>
-                      <Celula className="text-right tabular-nums font-medium">
-                         {formatarMoeda(insumo.valorPrevisto)}
+                       <Celula className="text-right tabular-nums font-medium">
+                          {formatarMoeda(insumo.custoUnitario)}
+                        </Celula>
+                       <Celula className="text-right tabular-nums font-medium">
+                          {formatarMoeda(insumo.valorPrevisto)}
                        </Celula>
                        <Celula>
                           <input className="w-28 rounded border border-borda px-2 py-1 text-right tabular-nums" type="number" min="0" step="any" value={insumo.quantidadeReal ?? ""} placeholder="0" onChange={(e) => alterarInsumo(i, "quantidadeReal", e.target.value)} aria-label={`Quantidade real de ${insumo.nome}`} />
@@ -375,7 +379,7 @@ export function NovaCompra({
 
                 {/* Linha de total */}
                 <Linha className="bg-superficie-50 font-semibold hover:bg-superficie-50">
-                   <Celula colSpan={8} className="font-semibold text-superficie-900">
+                   <Celula colSpan={9} className="font-semibold text-superficie-900">
                     Total
                   </Celula>
                   <Celula className="text-right tabular-nums font-bold">
