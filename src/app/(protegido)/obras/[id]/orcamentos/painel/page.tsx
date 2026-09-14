@@ -45,7 +45,7 @@ export default async function PainelFinanceiroObraPage({
   const custos = custosResult.data ?? [];
 
   const orcamentoItemIds = linhas.map((l) => l.orcamento_item_id);
-  let vinculoCatalogo = new Map<string, Set<string>>();
+  const vinculoCatalogo = new Map<string, Set<string>>();
   if (orcamentoItemIds.length > 0) {
     const { data: vinculos } = await supabase
       .from("catalogo_precos_orcamento_itens")

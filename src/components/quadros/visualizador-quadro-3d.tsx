@@ -185,8 +185,6 @@ export function VisualizadorQuadro3D({
     }
 
     const espessuraChapa = 2;
-    const profundidadeUtil = profundidadeMm - 20;
-
     if (mostrarGabinete) {
       const matGabinete = new THREE.MeshStandardMaterial({
         color: 0x94a3b8,
@@ -456,8 +454,6 @@ export function VisualizadorQuadro3D({
         bar.alturaMm,
         30,
       );
-
-      const fasesCores = [0xef4444, 0xeab308, 0x3b82f6, 0x10b981];
 
       for (let b = 0; b < numBarras; b++) {
         const offsetBarraX = -larguraTotal / 2 + b * (larguraBarra + espacamento) + larguraBarra / 2;
