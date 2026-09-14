@@ -514,6 +514,8 @@ export type ItemOrcamentoParaCatalogo = {
   valor_total: number;
   composicao_id: string | null;
   valor_mao_obra: number;
+  valor_equipamento: number;
+  valor_composicao: number;
 };
 
 export type ResultadoBuscaItensOrcamento =
@@ -551,13 +553,23 @@ export async function buscarItensOrcamento(dados: {
     .eq("ativo", true)
     .eq("tipo", "item")
     .or(`codigo.ilike.%${termo}%,descricao.ilike.%${termo}%`)
-    .limit(20);
+    .limit(100);
 
   if (error) {
     return { erro: "Nao foi possivel buscar os itens do orcamento." };
   }
 
-  const itens: (ItemOrcamentoParaCatalogo & { composicao_id: string | null })[] = (data ?? []).map((item) => ({
+  const todosItens = data ?? [];
+  const codigosPais = new Set(
+    todosItens
+      .map((item) => item.codigo?.trim())
+      .filter((codigo): codigo is string => Boolean(codigo))
+      .filter((codigo, indice, codigos) => codigos.some((outro, outroIndice) => outroIndice !== indice && outro.startsWith(`${codigo}.`))),
+  );
+  const itens = todosItens.filter((item) => {
+    const codigo = item.codigo?.trim();
+    return !codigo || !codigosPais.has(codigo);
+  }).map((item) => ({
     id: item.id,
     codigo: item.codigo,
     descricao: item.descricao,
@@ -567,7 +579,13 @@ export async function buscarItensOrcamento(dados: {
     valor_total: item.valor_total,
     composicao_id: item.composicao_id,
     valor_mao_obra: 0,
-  }));
+    valor_equipamento: 0,
+    valor_composicao: item.valor_unitario > 0
+      ? item.valor_unitario
+      : item.quantidade > 0
+        ? item.valor_total / item.quantidade
+        : item.valor_total,
+  })).slice(0, 20);
 
   // Enriquecer com valor de mao de obra via custo_composicoes RPC
   const composicaoIds = [...new Set(itens.map((i) => i.composicao_id).filter((id): id is string => Boolean(id)))];
@@ -575,20 +593,22 @@ export async function buscarItensOrcamento(dados: {
     const { data: custos } = await supabase.rpc("custo_composicoes", {
       p_obra_id: resultado.data.obraId,
     });
-    const maoDeObraPorComposicao = new Map<string, number>();
+    const custosPorComposicao = new Map<string, Record<string, number>>();
     for (const row of custos ?? []) {
-      if (row.categoria === "mao_de_obra") {
-        maoDeObraPorComposicao.set(row.composicao_id, row.total);
-      }
+      const atual = custosPorComposicao.get(row.composicao_id) ?? {};
+      atual[row.categoria] = (atual[row.categoria] ?? 0) + row.total;
+      custosPorComposicao.set(row.composicao_id, atual);
     }
     for (const item of itens) {
       if (item.composicao_id) {
-        const perUnit = maoDeObraPorComposicao.get(item.composicao_id) ?? 0;
-        item.valor_mao_obra = Number(item.quantidade) * perUnit;
+        const custos = custosPorComposicao.get(item.composicao_id) ?? {};
+        item.valor_mao_obra = custos.mao_de_obra ?? 0;
+        item.valor_equipamento = custos.equipamento ?? 0;
+        const valorComposicao = item.valor_mao_obra + item.valor_equipamento;
+        item.valor_composicao = valorComposicao > 0 ? valorComposicao : item.valor_unitario;
       }
     }
   }
 
   return { itens };
 }
-
