@@ -1,7 +1,7 @@
-import { type HTMLAttributes, type TableHTMLAttributes } from "react";
+import { type TableHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-interface TabelaWrapperProps extends TableHTMLAttributes<HTMLTableElement> {}
+type TabelaWrapperProps = TableHTMLAttributes<HTMLTableElement>;
 
 export function Tabela({ className, children, ...resto }: TabelaWrapperProps) {
   return (

@@ -8,7 +8,7 @@ interface CampoComumProps {
   obrigatorio?: boolean;
 }
 
-function usarIds(rotulo: string, erro?: string, dica?: string) {
+function useIds(rotulo: string, erro?: string, dica?: string) {
   const id = useId();
   return {
     inputId: id,
@@ -24,7 +24,7 @@ function usarIds(rotulo: string, erro?: string, dica?: string) {
   };
 }
 
-function rotuloClasses(obrigatorio?: boolean) {
+function rotuloClasses() {
   return cn(
     "block text-sm font-medium text-superficie-700 mb-1.5",
   );
@@ -48,11 +48,11 @@ export const Campo = forwardRef<HTMLInputElement, CampoProps>(
     { rotulo, erro, dica, obrigatorio, className, type = "text", ...resto },
     ref,
   ) {
-    const ids = usarIds(rotulo, erro, dica);
+    const ids = useIds(rotulo, erro, dica);
 
     return (
       <div>
-        <label htmlFor={ids.inputId} className={rotuloClasses(obrigatorio)}>
+        <label htmlFor={ids.inputId} className={rotuloClasses()}>
           {rotulo}
           {obrigatorio && (
             <span className="text-perigo ml-0.5" aria-hidden="true">*</span>
@@ -92,11 +92,11 @@ export const AreaTexto = forwardRef<HTMLTextAreaElement, AreaTextoProps>(
     { rotulo, erro, dica, obrigatorio, className, ...resto },
     ref,
   ) {
-    const ids = usarIds(rotulo, erro, dica);
+    const ids = useIds(rotulo, erro, dica);
 
     return (
       <div>
-        <label htmlFor={ids.inputId} className={rotuloClasses(obrigatorio)}>
+        <label htmlFor={ids.inputId} className={rotuloClasses()}>
           {rotulo}
           {obrigatorio && (
             <span className="text-perigo ml-0.5" aria-hidden="true">*</span>
@@ -142,11 +142,11 @@ export const Selecao = forwardRef<HTMLSelectElement, SelecaoProps>(
     { rotulo, erro, dica, obrigatorio, className, children, ...resto },
     ref,
   ) {
-    const ids = usarIds(rotulo, erro, dica);
+    const ids = useIds(rotulo, erro, dica);
 
     return (
       <div>
-        <label htmlFor={ids.inputId} className={rotuloClasses(obrigatorio)}>
+        <label htmlFor={ids.inputId} className={rotuloClasses()}>
           {rotulo}
           {obrigatorio && (
             <span className="text-perigo ml-0.5" aria-hidden="true">*</span>
