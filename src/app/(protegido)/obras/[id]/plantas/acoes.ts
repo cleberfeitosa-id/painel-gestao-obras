@@ -18,6 +18,9 @@ import type {
   RegiaoPdf,
   StatusTarefa,
   TipoLocalizacao,
+  TarefaAnexoRow,
+  TarefaComentarioRow,
+  TarefaMedicaoRow,
 } from "@/lib/supabase/database.types";
 import type { DetalheLocalizacaoLevantamento } from "@/components/plantas/tipos";
 
@@ -28,6 +31,9 @@ type ResultadoRegistrar = { id: string } | { erro: string };
 type ResultadoCalibracao = { ok: true } | { erro: string };
 type ResultadoExcluir = { ok: true } | { erro: string };
 type ResultadoRenovar = { url: string } | { erro: string };
+type AnexoExportacao = Pick<TarefaAnexoRow, "id" | "tarefa_id" | "nome_arquivo" | "tipo" | "momento" | "caminho" | "tamanho_bytes" | "criado_em">;
+type ComentarioExportacao = Pick<TarefaComentarioRow, "id" | "tarefa_id" | "texto" | "criado_em"> & { autor: { nome: string } | null };
+type MedicaoExportacao = Pick<TarefaMedicaoRow, "id" | "tarefa_id" | "quantidade" | "catalogo_id"> & { catalogo_precos: Record<string, unknown> };
 
 async function verificarGestor(): Promise<{ erro: string } | null> {
   const supabase = await createClient();
@@ -353,7 +359,7 @@ export async function obterDadosCompletosTarefasExportacao(
   
   const [anexosDb, comentariosDb, medicoesDb] = await Promise.all([
     (async () => {
-      let resultados: any[] = [];
+       let resultados: AnexoExportacao[] = [];
       for (let i = 0; i < tarefaIds.length; i += TAMANHO_BLOCO) {
         const bloco = tarefaIds.slice(i, i + TAMANHO_BLOCO);
         const { data } = await supabase
@@ -366,7 +372,7 @@ export async function obterDadosCompletosTarefasExportacao(
       return resultados;
     })(),
     (async () => {
-      let resultados: any[] = [];
+       let resultados: ComentarioExportacao[] = [];
       for (let i = 0; i < tarefaIds.length; i += TAMANHO_BLOCO) {
         const bloco = tarefaIds.slice(i, i + TAMANHO_BLOCO);
         const { data } = await supabase
@@ -379,7 +385,7 @@ export async function obterDadosCompletosTarefasExportacao(
       return resultados;
     })(),
     (async () => {
-      let resultados: any[] = [];
+       let resultados: MedicaoExportacao[] = [];
       for (let i = 0; i < tarefaIds.length; i += TAMANHO_BLOCO) {
         const bloco = tarefaIds.slice(i, i + TAMANHO_BLOCO);
         const { data } = await supabase

@@ -15,13 +15,8 @@ import type {
 } from "@/components/plantas/tipos";
 import type {
   PlantaCalibracaoRow,
-  PlantaRow,
   RegiaoPdf,
 } from "@/lib/supabase/database.types";
-
-interface PlantaComObra extends PlantaRow {
-  obras: { id: string; nome: string } | null;
-}
 
 export default async function DetalhePlantaPage({
   params,
