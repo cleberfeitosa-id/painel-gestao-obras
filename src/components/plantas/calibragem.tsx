@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Ruler } from "lucide-react";
 import { Botao, Campo, Modal, Selecao } from "@/components/ui";
 import {
@@ -40,13 +40,6 @@ export function Calibragem({
 
   const modalAberto = pontos.length === 2;
 
-  useEffect(() => {
-    if (pontos.length === 2) {
-      setDistancia("");
-      setErro(null);
-    }
-  }, [pontos.length]);
-
   const distanciaEmPontosRef = pontos.length === 2 ? distanciaEmPontos(pontos[0], pontos[1]) : 0;
   const valorDistancia = Number(distancia.replace(",", "."));
   const escalaPreview =
@@ -65,7 +58,18 @@ export function Calibragem({
     if (resultado.erro) {
       setErro(resultado.erro);
       setSalvando(false);
+      return;
     }
+    setDistancia("");
+    setErro(null);
+    setSalvando(false);
+  }
+
+  function cancelar() {
+    setDistancia("");
+    setErro(null);
+    setSalvando(false);
+    aoCancelar();
   }
 
   return (
@@ -113,12 +117,12 @@ export function Calibragem({
 
       <Modal
         aberto={modalAberto}
-        aoFechar={aoCancelar}
+        aoFechar={cancelar}
         titulo="Calibrar escala"
         descricao="Informe a distancia real entre os dois pontos marcados na planta."
         tamanho="sm"
       >
-        <div className="space-y-4">
+        <div key={modalAberto ? "aberto" : "fechado"} className="space-y-4">
           <p className="text-sm text-superficie-600">
             Distancia entre os pontos no PDF:{" "}
             <strong>{formatarMedida(distanciaEmPontosRef, "pt")}</strong>
@@ -156,7 +160,7 @@ export function Calibragem({
           )}
 
           <div className="flex items-center justify-end gap-3 pt-2">
-            <Botao variante="fantasma" onClick={aoCancelar} disabled={salvando}>
+             <Botao variante="fantasma" onClick={cancelar} disabled={salvando}>
               Cancelar
             </Botao>
             <Botao onClick={salvar} carregando={salvando}>

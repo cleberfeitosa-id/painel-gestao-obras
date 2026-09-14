@@ -470,20 +470,6 @@ export function VisualizadorPlanta({
     Map<number, PlantaCalibracaoRow>
   >(() => new Map(calibracoes.map((c) => [c.pagina, c])));
 
-  const timerDicaRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const aoEntrarPino = useCallback((id: string) => {
-    if (timerDicaRef.current) clearTimeout(timerDicaRef.current);
-    setDicaTarefa(null);
-    timerDicaRef.current = setTimeout(() => setDicaTarefa(id), 450);
-  }, []);
-
-  const aoSairPino = useCallback(() => {
-    if (timerDicaRef.current) clearTimeout(timerDicaRef.current);
-    timerDicaRef.current = null;
-    setDicaTarefa(null);
-  }, []);
-
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -516,7 +502,6 @@ export function VisualizadorPlanta({
     : null;
 
   const emAssociacao = ferramenta === "associar";
-  const modoInterativo = ferramenta === "navegar";
   const modoDesenho: "pino" | "regiao" | null =
     ferramenta === "pino"
       ? "pino"
@@ -602,7 +587,8 @@ export function VisualizadorPlanta({
     return () => observador.disconnect();
   }, [aplicarAjusteLargura]);
 
-  useEffect(() => {
+  function trocarPagina(novaPagina: number) {
+    setPaginaAtual(novaPagina);
     setPontosMedicao([]);
     setPontosCalibracao([]);
     setRegiaoAtual(null);
@@ -614,7 +600,7 @@ export function VisualizadorPlanta({
     cantoDragRef.current = null;
     regiaoRef.current = null;
     if (containerRef.current) containerRef.current.scrollTop = 0;
-  }, [paginaAtual]);
+  }
 
   function pontoDoEvento(e: { clientX: number; clientY: number }): PontoPdf | null {
     const rect = overlayRef.current?.getBoundingClientRect();
@@ -939,7 +925,7 @@ export function VisualizadorPlanta({
           tarefa.pagina !== paginaAtual &&
           (!tarefa.planta_id || tarefa.planta_id === planta.id)
         ) {
-          setPaginaAtual(tarefa.pagina);
+          trocarPagina(tarefa.pagina);
         }
         setConfirmacao({
           tipo: "ponto",
@@ -952,7 +938,7 @@ export function VisualizadorPlanta({
           tarefa.pagina !== paginaAtual &&
           (!tarefa.planta_id || tarefa.planta_id === planta.id)
         ) {
-          setPaginaAtual(tarefa.pagina);
+          trocarPagina(tarefa.pagina);
         }
         setConfirmacao({ tipo: "regiao", regiao: tarefa.regiao });
         setRegiaoAtual(tarefa.regiao);
@@ -964,9 +950,11 @@ export function VisualizadorPlanta({
   );
 
   useEffect(() => {
-    if (associarParam && podeEditar) {
+    if (!associarParam || !podeEditar) return;
+    const id = window.setTimeout(() => {
       aoSelecionarTarefaParaAssociar(associarParam);
-    }
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [associarParam, podeEditar, aoSelecionarTarefaParaAssociar]);
 
   function confirmarCriacao() {
@@ -1310,7 +1298,7 @@ export function VisualizadorPlanta({
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                   onClick={() => trocarPagina(Math.max(1, paginaAtual - 1))}
                   disabled={paginaAtual <= 1}
                   className="flex h-9 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100 disabled:opacity-40"
                   title="Pagina anterior"
@@ -1325,7 +1313,7 @@ export function VisualizadorPlanta({
                   onChange={(e) => {
                     const valor = Number(e.target.value);
                     if (Number.isFinite(valor) && valor >= 1 && valor <= numPaginas) {
-                      setPaginaAtual(valor);
+                       trocarPagina(valor);
                     }
                   }}
                   className="h-9 w-14 rounded-lg border border-borda bg-white px-2 text-center text-sm text-superficie-900 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
@@ -1334,7 +1322,7 @@ export function VisualizadorPlanta({
                 <span className="text-sm text-superficie-500">/ {numPaginas}</span>
                 <button
                   type="button"
-                  onClick={() => setPaginaAtual((p) => Math.min(numPaginas, p + 1))}
+                   onClick={() => trocarPagina(Math.min(numPaginas, paginaAtual + 1))}
                   disabled={paginaAtual >= numPaginas}
                   className="flex h-9 w-11 items-center justify-center rounded-lg text-superficie-600 hover:bg-superficie-100 disabled:opacity-40"
                   title="Proxima pagina"
