@@ -68,7 +68,7 @@ export function BotaoEdicaoEmLote({
   }
 
   const [estado, acaoFormulario, pending] = useActionState(
-    async (estadoAnterior: any, formData: FormData) => {
+    async (_estadoAnterior: { erro?: string }, formData: FormData) => {
       const resultado = await atualizarTarefasEmLote(tarefaIds, formData);
       if (!resultado.erro) {
         setAberto(false);

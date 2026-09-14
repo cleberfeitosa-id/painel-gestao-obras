@@ -9,8 +9,6 @@ import { formatarDataHora } from "@/lib/datas";
 import { adicionarComentario, excluirComentario } from "@/app/(protegido)/tarefas/acoes";
 import type { TarefaComentarioRow, PerfilRow } from "@/lib/supabase/database.types";
 
-type ResultadoFormulario = { erro?: string };
-
 interface ComentarioComAutor extends TarefaComentarioRow {
   autor: Pick<PerfilRow, "id" | "nome"> | null;
 }

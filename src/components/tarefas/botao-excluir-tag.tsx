@@ -14,7 +14,7 @@ export function BotaoExcluirTag({ tagId, nome }: BotaoExcluirTagProps) {
   const [aberto, setAberto] = useState(false);
 
   const [estado, acaoFormulario, pending] = useActionState(
-    async (_estadoAnterior: any, _formData: FormData) => {
+    async () => {
       const resultado = await excluirTag(tagId);
       if (!resultado.erro) {
         setAberto(false);
