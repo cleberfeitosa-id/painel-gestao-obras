@@ -1,7 +1,8 @@
 "use client";
 
-import { PDFDocument, rgb, pushGraphicsState, popGraphicsState, concatTransformationMatrix, StandardFonts, BlendMode, degrees, PDFPage, PDFName, moveTo, lineTo, fillAndStroke, stroke, closePath, setFillingRgbColor, setStrokingRgbColor, setLineWidth, setGraphicsState } from "pdf-lib";
+import { PDFDocument, rgb, pushGraphicsState, popGraphicsState, concatTransformationMatrix, StandardFonts, BlendMode, degrees, PDFPage, PDFName, PDFDict, moveTo, lineTo, fillAndStroke, stroke, closePath, setFillingRgbColor, setStrokingRgbColor, setLineWidth, setGraphicsState } from "pdf-lib";
 import { calcularMatrizTransformacao } from "@/components/compatibilizacao/math";
+import type { ChoqueItem, PlantaItem, TarefaItem } from "@/components/compatibilizacao/visualizador-compatibilizacao";
 
 const CORES_STATUS_HEX: Record<string, string> = {
   pendente: "#94a3b8",
@@ -12,9 +13,9 @@ const CORES_STATUS_HEX: Record<string, string> = {
 };
 
 export async function exportarCompatibilizacaoPdf(
-  plantasComp: any[],
-  tarefas: any[],
-  choques: any[],
+  plantasComp: PlantaItem[],
+  tarefas: TarefaItem[],
+  choques: ChoqueItem[],
   compatibilizacaoNome: string,
   obraNome: string,
   transparenciaTarefas = 0,
@@ -31,7 +32,15 @@ export async function exportarCompatibilizacaoPdf(
   const sobrepostas = plantasComp.filter(p => !p.e_base && p.visivel && p.urlPdf);
   const totalPlantas = 1 + sobrepostas.length;
   
-  const renderedPlans: any[] = [];
+  type RenderedPlan = {
+    isBase: boolean;
+    p: PlantaItem;
+    doc: PDFDocument;
+    pdfPage: PDFPage;
+    dim: { largura: number; altura: number; angle: number };
+    mat?: { a: number; b: number; c: number; d: number; e: number; f: number };
+  };
+  const renderedPlans: RenderedPlan[] = [];
   
   notificar("Baixando planta base...", 5);
   const getPageDimensions = (page: PDFPage) => {
@@ -45,7 +54,9 @@ export async function exportarCompatibilizacaoPdf(
     return { largura: w, altura: h, angle };
   };
 
-  const baseBytes = await fetch(plantaBase.urlPdf).then(res => res.arrayBuffer());
+  if (!plantaBase.urlPdf) throw new Error("URL da planta base não encontrada");
+  const baseUrlPdf = plantaBase.urlPdf;
+  const baseBytes = await fetch(baseUrlPdf).then(res => res.arrayBuffer());
   const baseDoc = await PDFDocument.load(baseBytes);
   const basePdfPage = baseDoc.getPage(plantaBase.pagina - 1);
   const bH_orig = getPageDimensions(basePdfPage);
@@ -57,7 +68,9 @@ export async function exportarCompatibilizacaoPdf(
     index++;
     notificar(`Baixando sobreposição ${index}/${sobrepostas.length}...`, 5 + (30 * index / totalPlantas));
     
-    const pBytes = await fetch(p.urlPdf).then(res => res.arrayBuffer());
+    if (!p.urlPdf) continue;
+    const urlPdf = p.urlPdf;
+    const pBytes = await fetch(urlPdf).then(res => res.arrayBuffer());
     const pDoc = await PDFDocument.load(pBytes);
     const pPdfPage = pDoc.getPage(p.pagina - 1);
     const pDim = getPageDimensions(pPdfPage);
@@ -141,15 +154,15 @@ export async function exportarCompatibilizacaoPdf(
     // O flush() é vital pois processa e cria a referência do XObject internamente.
     try {
       await finalDoc.flush();
-      const xobj = finalDoc.context.lookup(embeddedPage.ref) as any;
-      if (xobj && xobj.dict) {
+      const xobj = finalDoc.context.lookupMaybe(embeddedPage.ref, PDFDict);
+      if (xobj) {
         const groupDict = finalDoc.context.obj({
           Type: 'Group',
           S: 'Transparency',
           I: true,
           K: false
         });
-        xobj.dict.set(PDFName.of('Group'), groupDict);
+        xobj.set(PDFName.of('Group'), groupDict);
       }
     } catch (e) {
       console.warn("Aviso: Falha ao aplicar Transparency Group", e);

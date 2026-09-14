@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Botao } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { AreaCompatibilizacao } from "@/components/compatibilizacao/area-compatibilizacao";
+import type { TarefaItem, PlantaItem } from "@/components/compatibilizacao/visualizador-compatibilizacao";
 
 interface CompatibilizacaoDetalhePageProps {
   params: Promise<{ id: string; compatId: string }>;
@@ -39,13 +40,13 @@ export default async function CompatibilizacaoDetalhePage({ params }: Compatibil
   // Buscar todas as tarefas de todas as plantas incluídas na compatibilização
   const plantaIds = compatPlantas.map((cp) => cp.planta_id);
   
-  let tarefas: Record<string, unknown>[] = [];
+  let tarefas: TarefaItem[] = [];
   if (plantaIds.length > 0) {
     const { data } = await supabase
       .from("tarefas")
       .select("*, executores(id, nome)")
       .in("planta_id", plantaIds);
-    tarefas = (data || []) as unknown as Record<string, unknown>[];
+    tarefas = (data || []) as unknown as TarefaItem[];
   }
 
   const { data: choquesData } = await supabase
@@ -63,11 +64,11 @@ export default async function CompatibilizacaoDetalhePage({ params }: Compatibil
     
   const { urlAssinada } = await import("@/lib/armazenamento");
   
-  const plantasComUrls = await Promise.all(
+  const plantasComUrls: PlantaItem[] = await Promise.all(
     compatPlantas.map(async (cp) => {
       const resultado = await urlAssinada("plantas", cp.plantas.arquivo_path, 3600);
       const urlPdf = resultado as string;
-      return { ...cp, urlPdf, dimensoes: null };
+      return { ...cp, urlPdf, dimensoes: null } as unknown as PlantaItem;
     })
   );
 

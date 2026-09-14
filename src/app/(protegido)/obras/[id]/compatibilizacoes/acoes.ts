@@ -144,7 +144,7 @@ export async function criarChoqueCompatibilizacao(compatId: string, ponto_x: num
   return { error };
 }
 
-export async function atualizarCompatibilizacao(estadoAntigo: any, formData: FormData) {
+export async function atualizarCompatibilizacao(_estadoAntigo: { erro: string | null } | null, formData: FormData) {
   const supabase = await createClient();
   const id = formData.get("id") as string;
   const obra_id = formData.get("obra_id") as string;
@@ -157,7 +157,7 @@ export async function atualizarCompatibilizacao(estadoAntigo: any, formData: For
   return { erro: null };
 }
 
-export async function apagarCompatibilizacaoDireto(estadoAntigo: any, formData: FormData) {
+export async function apagarCompatibilizacaoDireto(_estadoAntigo: { erro: string | null } | null, formData: FormData) {
   const supabase = await createClient();
   const id = formData.get("id") as string;
   const obra_id = formData.get("obra_id") as string;
