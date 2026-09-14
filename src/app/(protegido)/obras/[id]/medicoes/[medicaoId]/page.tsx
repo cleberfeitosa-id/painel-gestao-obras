@@ -18,6 +18,7 @@ import type {
   StatusTarefa,
   TarefaMedicaoRow,
 } from "@/lib/supabase/database.types";
+import type { ItemOrcamentoParaCatalogo } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
 
 export interface TarefaMedicao {
   id: string;
@@ -44,7 +45,10 @@ export interface ItemMedicao {
   pesoPercentual: number;
   progressoPercentual: number;
   contribuicaoProgresso: number;
+  orcamentoItens: ItemOrcamentoParaCatalogo[];
   tarefas: TarefaMedicao[];
+  /** Custo por categoria (mao_de_obra, equipamento) da composicao vinculada */
+  composicaoCustos: Record<string, number>;
 }
 
 interface TarefaComRelacoes {
@@ -59,6 +63,21 @@ interface TarefaComRelacoes {
   tarefa_medicoes: (TarefaMedicaoRow & { catalogo_precos: CatalogoPrecoRow })[];
 }
 
+function agregarComposicaoCustos(
+  itensOrc: ItemOrcamentoParaCatalogo[],
+  mapCustosPorItem: Map<string, Record<string, number>>,
+): Record<string, number> {
+  const total: Record<string, number> = {};
+  for (const item of itensOrc) {
+    const custos = item.id ? mapCustosPorItem.get(item.id) : undefined;
+    if (!custos) continue;
+    for (const [cat, val] of Object.entries(custos)) {
+      total[cat] = (total[cat] ?? 0) + val;
+    }
+  }
+  return total;
+}
+
 async function buscarDados(
   obraId: string,
   medicaoId: string,
@@ -70,7 +89,7 @@ async function buscarDados(
     .from("tarefas")
     .select(
       `id, titulo, status, prazo, planta_id, responsavel_id, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome),
-       tarefa_medicoes(catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id))`,
+       tarefa_medicoes(catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
     )
     .eq("obra_id", obraId)
     .eq("tarefa_medicoes.catalogo_precos.medicao_id", medicaoId);
@@ -104,6 +123,78 @@ async function buscarDados(
         .order("data_pagamento", { ascending: false }),
     ]);
 
+  const catalogoIds = (catalogo ?? []).map((c) => c.id);
+  let vinculosCatalogo: { catalogo_id: string; orcamento_item_id: string }[] = [];
+  if (catalogoIds.length > 0) {
+    const { data: vinculos } = await supabase
+      .from("catalogo_precos_orcamento_itens")
+      .select("catalogo_id, orcamento_item_id")
+      .in("catalogo_id", catalogoIds);
+    vinculosCatalogo = vinculos ?? [];
+  }
+
+  const idsOrcamentoDoCatalogo = [...new Set(vinculosCatalogo.map((v) => v.orcamento_item_id))];
+
+  const mapaItens = new Map<string, ItemOrcamentoParaCatalogo>();
+  const mapaItensPorCatalogo = new Map<string, ItemOrcamentoParaCatalogo[]>();
+  const mapCustosPorItem = new Map<string, Record<string, number>>();
+
+  if (idsOrcamentoDoCatalogo.length > 0) {
+    const { data: dadosItens } = await supabase
+      .from("orcamento_itens")
+      .select("id, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id")
+      .in("id", idsOrcamentoDoCatalogo);
+    const itensOrcamento: ItemOrcamentoParaCatalogo[] = (dadosItens ?? []).map((item) => ({
+      id: item.id,
+      codigo: item.codigo,
+      descricao: item.descricao,
+      unidade: item.unidade,
+      quantidade: item.quantidade,
+      valor_unitario: item.valor_unitario,
+      valor_total: item.valor_total,
+      composicao_id: item.composicao_id,
+      valor_mao_obra: 0,
+    }));
+
+    for (const item of itensOrcamento) mapaItens.set(item.id, item);
+
+    for (const v of vinculosCatalogo) {
+      const item = mapaItens.get(v.orcamento_item_id);
+      if (!item) continue;
+      const atual = mapaItensPorCatalogo.get(v.catalogo_id) ?? [];
+      atual.push(item);
+      mapaItensPorCatalogo.set(v.catalogo_id, atual);
+    }
+
+    const composicaoIds = [...new Set(itensOrcamento.map((i) => i.composicao_id).filter((id): id is string => Boolean(id)))];
+    if (composicaoIds.length > 0) {
+      const { data: custosPorCat } = await supabase.rpc("custo_composicoes", {
+        p_obra_id: obraId,
+      });
+
+      const custosPorComposicao = new Map<string, Record<string, number>>();
+      for (const row of custosPorCat ?? []) {
+        if (!composicaoIds.includes(row.composicao_id)) continue;
+        const atual = custosPorComposicao.get(row.composicao_id) ?? {};
+        atual[row.categoria] = (atual[row.categoria] ?? 0) + row.total;
+        custosPorComposicao.set(row.composicao_id, atual);
+      }
+      for (const item of itensOrcamento) {
+        if (item.composicao_id) {
+          mapCustosPorItem.set(item.id, custosPorComposicao.get(item.composicao_id) ?? {});
+        }
+      }
+    }
+
+    // Enriquecer itens com valor de mao de obra
+    for (const item of itensOrcamento) {
+      const custosItem = mapCustosPorItem.get(item.id);
+      item.valor_mao_obra = custosItem?.mao_de_obra != null
+        ? Number(item.quantidade) * custosItem.mao_de_obra
+        : 0;
+    }
+  }
+
   return {
     medicao: (medicao ?? null) as Pick<MedicaoRow, "id" | "obra_id" | "titulo" | "valor_contrato"> | null,
     catalogo: (catalogo ?? []) as CatalogoPrecoRow[],
@@ -111,6 +202,8 @@ async function buscarDados(
     plantas: (plantas ?? []) as Pick<PlantaRow, "id" | "nome">[],
     perfis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
     pagamentos: (pagamentos ?? []) as ItemPagamento[],
+    mapaItensPorCatalogo,
+    mapCustosPorItem,
   };
 }
 
@@ -139,15 +232,13 @@ export default async function MedicaoDetalhePage({
     redirect(`/obras/${id}`);
   }
 
-  const { medicao, catalogo, tarefas, plantas, perfis, pagamentos } = await buscarDados(
-    id,
-    medicaoId,
-    filtros,
-  );
+  const { medicao, catalogo, tarefas, plantas, perfis, pagamentos, mapaItens, mapaItensPorCatalogo, mapCustosPorItem } =
+    await buscarDados(id, medicaoId, filtros);
   if (!medicao) notFound();
 
   const itens = new Map<string, ItemMedicao>();
   for (const c of catalogo) {
+    const itensOrc = mapaItensPorCatalogo.get(c.id) ?? [];
     itens.set(c.id, {
       catalogoId: c.id,
       nome: c.nome,
@@ -162,7 +253,9 @@ export default async function MedicaoDetalhePage({
       pesoPercentual: 0,
       progressoPercentual: 0,
       contribuicaoProgresso: 0,
+      orcamentoItens: itensOrc,
       tarefas: [],
+      composicaoCustos: agregarComposicaoCustos(itensOrc, mapCustosPorItem),
     });
   }
 
@@ -189,7 +282,9 @@ export default async function MedicaoDetalhePage({
         pesoPercentual: 0,
         progressoPercentual: 0,
         contribuicaoProgresso: 0,
+        orcamentoItens: [],
         tarefas: [],
+        composicaoCustos: {},
       };
 
       item.tarefas.push({
@@ -397,9 +492,11 @@ export default async function MedicaoDetalhePage({
         <CartaoConteudo className="p-0">
           <TabelaMedicao
             medicaoId={medicao.id}
+            obraId={medicao.obra_id}
             itens={listaItens}
             catalogo={catalogo}
             temFiltros={temFiltros}
+            mapCustosPorItem={mapCustosPorItem}
           />
         </CartaoConteudo>
       </Cartao>

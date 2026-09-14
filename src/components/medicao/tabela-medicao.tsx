@@ -22,16 +22,22 @@ import { formatarData } from "@/lib/datas";
 import { STATUS_TAREFA } from "@/lib/domain/rotulos";
 import {
   atualizarPrecoCatalogo,
+  buscarItensOrcamento,
   criarPrecoCatalogo,
   salvarMedicaoTarefa,
 } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
+import type { ItemOrcamentoParaCatalogo } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
 import type { ItemMedicao, TarefaMedicao } from "@/app/(protegido)/obras/[id]/medicoes/[medicaoId]/page";
+
+import { CATEGORIA_COMPOSICAO } from "@/lib/domain/rotulos";
 
 interface TabelaMedicaoProps {
   medicaoId: string;
+  obraId: string;
   itens: ItemMedicao[];
   temFiltros?: boolean;
   catalogo?: unknown[];
+  mapCustosPorItem?: Map<string, Record<string, number>>;
 }
 
 function parsearNumero(valor: string): number | null {
@@ -41,7 +47,148 @@ function parsearNumero(valor: string): number | null {
   return Number.isFinite(numero) ? numero : null;
 }
 
-export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoProps) {
+function valorPrevistoDoItem(item: ItemOrcamentoParaCatalogo): number {
+  return item.valor_mao_obra ?? 0;
+}
+
+function somarPrevisto(itens: ItemOrcamentoParaCatalogo[]): number {
+  return itens.reduce((acc, item) => acc + valorPrevistoDoItem(item), 0);
+}
+
+function SeletorItemOrcamento({
+  obraId,
+  selecionados,
+  aoAdicionar,
+  aoRemover,
+}: {
+  obraId: string;
+  selecionados: ItemOrcamentoParaCatalogo[];
+  aoAdicionar: (item: ItemOrcamentoParaCatalogo) => void;
+  aoRemover: (itemId: string) => void;
+}) {
+  const [termo, setTermo] = useState("");
+  const [resultados, setResultados] = useState<ItemOrcamentoParaCatalogo[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [mostrarResultados, setMostrarResultados] = useState(false);
+  const [erroBusca, setErroBusca] = useState<string | null>(null);
+
+  const idsSelecionados = new Set(selecionados.map((s) => s.id));
+
+  async function buscar() {
+    const termoLimpo = termo.trim();
+    if (!termoLimpo) return;
+    setBuscando(true);
+    setErroBusca(null);
+    const resultado = await buscarItensOrcamento({ obraId, termo: termoLimpo });
+    if ("erro" in resultado) {
+      setErroBusca(resultado.erro);
+      setResultados([]);
+    } else {
+      setResultados(resultado.itens);
+    }
+    setMostrarResultados(true);
+    setBuscando(false);
+  }
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-superficie-500">
+        Itens do orçamento
+      </p>
+      {selecionados.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {selecionados.map((item) => (
+            <span
+              key={item.id}
+              className="inline-flex items-center gap-1 rounded-full border border-azul-200 bg-azul-50/50 px-2.5 py-1 text-xs"
+            >
+              <span className="max-w-[200px] truncate font-medium text-superficie-900">
+                {item.codigo ?? "—"} · {item.descricao ?? "Sem descrição"}
+              </span>
+              <span className="text-[10px] text-superficie-500">
+                {formatarMoeda(valorPrevistoDoItem(item))}
+              </span>
+              <button
+                type="button"
+                onClick={() => aoRemover(item.id)}
+                className="ml-0.5 shrink-0 text-xs leading-none text-perigo hover:text-perigo/80"
+                aria-label={`Remover ${item.codigo ?? item.descricao ?? "item"}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-superficie-400">Nenhum item vinculado</p>
+      )}
+      <div className="flex gap-1.5">
+        <input
+          value={termo}
+          onChange={(e) => setTermo(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              buscar();
+            }
+          }}
+          placeholder="Buscar por código ou descrição"
+          className="min-w-0 flex-1 rounded-lg border border-borda px-2.5 py-1.5 text-xs text-superficie-900 placeholder:text-superficie-400 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
+        />
+        <Botao
+          type="button"
+          variante="contorno"
+          tamanho="sm"
+          onClick={buscar}
+          disabled={buscando}
+        >
+          {buscando ? "Buscando..." : "Buscar"}
+        </Botao>
+      </div>
+      {mostrarResultados && (
+        <div className="max-h-40 overflow-y-auto rounded-lg border border-borda bg-white">
+          {resultados.length === 0 && !buscando ? (
+            <p className="px-2.5 py-2 text-xs text-superficie-500">
+              Nenhum item encontrado.
+            </p>
+          ) : (
+            <ul className="divide-y divide-superficie-100">
+              {resultados.map((item) => {
+                const jaVinculado = idsSelecionados.has(item.id);
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!jaVinculado) aoAdicionar(item);
+                        setMostrarResultados(false);
+                        setTermo("");
+                      }}
+                      disabled={jaVinculado}
+                      className="w-full px-2.5 py-2 text-left hover:bg-superficie-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <p className="text-xs font-medium text-superficie-900">
+                        {item.codigo ?? "—"} · {item.descricao ?? "Sem descrição"} ·{" "}
+                        {item.unidade ?? "—"}
+                      </p>
+                      <p className="text-[11px] text-superficie-500">
+                        Previsto: {formatarMoeda(valorPrevistoDoItem(item))}
+                        {jaVinculado && " (já vinculado)"}
+                      </p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+      {erroBusca && <p className="text-xs text-perigo">{erroBusca}</p>}
+    </div>
+  );
+}
+
+export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMedicaoProps) {
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [precos, setPrecos] = useState<Record<string, { nome: string; valorUnitario: string; unidade: string }>>(
     () =>
@@ -56,6 +203,9 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
         ]),
       ),
   );
+  const [vinculosOrcamento, setVinculosOrcamento] = useState<
+    Record<string, ItemOrcamentoParaCatalogo[]>
+  >(() => Object.fromEntries(itens.map((item) => [item.catalogoId, item.orcamentoItens ?? []])));
   const [quantidades, setQuantidades] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       itens.flatMap((item) =>
@@ -69,7 +219,12 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
   const [erro, setErro] = useState<string | null>(null);
   const [pendente, iniciarTransicao] = useTransition();
   const [modalNovoItemAberto, setModalNovoItemAberto] = useState(false);
-  const [novoItemForm, setNovoItemForm] = useState({ nome: "", valorUnitario: "", unidade: "" });
+  const [novoItemForm, setNovoItemForm] = useState<{
+    nome: string;
+    valorUnitario: string;
+    unidade: string;
+    orcamentoItens: ItemOrcamentoParaCatalogo[];
+  }>({ nome: "", valorUnitario: "", unidade: "", orcamentoItens: [] });
 
   function obterPreco(item: ItemMedicao) {
     return (
@@ -109,6 +264,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
         nome: bruto.nome.trim(),
         valorUnitario,
         unidade: bruto.unidade.trim() || "m",
+        orcamentoItemId: vinculosOrcamento[item.catalogoId]?.map((i) => i.id).filter(Boolean) as string[] | undefined,
       });
       if (resultado.erro) setErro(resultado.erro);
     });
@@ -144,7 +300,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
   }
 
   function abrirModalNovoItem() {
-    setNovoItemForm({ nome: "", valorUnitario: "", unidade: "" });
+    setNovoItemForm({ nome: "", valorUnitario: "", unidade: "", orcamentoItens: [] });
     setModalNovoItemAberto(true);
   }
 
@@ -174,6 +330,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
         nome: novoItemForm.nome.trim(),
         valorUnitario,
         unidade: novoItemForm.unidade.trim(),
+        orcamentoItemId: novoItemForm.orcamentoItens.map((i) => i.id).filter(Boolean) as string[] | undefined,
       });
       if (resultado.erro) {
         setErro(resultado.erro);
@@ -221,6 +378,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
             <CelulaCabecalho>Item</CelulaCabecalho>
             <CelulaCabecalho>Unidade</CelulaCabecalho>
             <CelulaCabecalho>Valor unitário</CelulaCabecalho>
+            <CelulaCabecalho className="text-right">Previsto</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. total</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. executada</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Valor total</CelulaCabecalho>
@@ -233,6 +391,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
           {itens.map((item) => {
             const expandido = expandidos.has(item.catalogoId);
             const preco = obterPreco(item);
+            const vinculo = vinculosOrcamento[item.catalogoId] ?? [];
             return (
               <Fragment key={item.catalogoId}>
                 <Linha>
@@ -266,6 +425,42 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                       placeholder="Nome do item"
                       className="w-full min-w-[150px] rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-superficie-900 focus:border-azul-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-azul-500 hover:border-borda"
                     />
+                    <SeletorItemOrcamento
+                      obraId={obraId}
+                      selecionados={vinculo}
+                      aoAdicionar={(itemOrcamento) =>
+                        setVinculosOrcamento((atual) => {
+                          const atualLista = atual[item.catalogoId] ?? [];
+                          if (atualLista.some((i) => i.id === itemOrcamento.id)) {
+                            return atual;
+                          }
+                          return {
+                            ...atual,
+                            [item.catalogoId]: [...atualLista, itemOrcamento],
+                          };
+                        })
+                      }
+                      aoRemover={(itemId) =>
+                        setVinculosOrcamento((atual) => ({
+                          ...atual,
+                          [item.catalogoId]: (atual[item.catalogoId] ?? []).filter(
+                            (i) => i.id !== itemId,
+                          ),
+                        }))
+                      }
+                    />
+                    {Object.keys(item.composicaoCustos).length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {Object.entries(item.composicaoCustos).map(([cat, total]) => (
+                          <span
+                            key={cat}
+                            className="inline-flex items-center gap-1 rounded-full bg-superficie-100 px-2 py-0.5 text-[10px] font-medium text-superficie-600"
+                          >
+                            {CATEGORIA_COMPOSICAO[cat]?.rotulo ?? cat}: {formatarMoeda(total)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </Celula>
                   <Celula>
                     <input
@@ -299,6 +494,21 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                       inputMode="decimal"
                       className="w-28 rounded-lg border border-borda px-3 py-1.5 text-sm text-superficie-900 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
                     />
+                  </Celula>
+                  <Celula className="text-right whitespace-nowrap">
+                    {vinculo.length > 0 ? (
+                      <div>
+                        <p className="font-medium text-superficie-900">
+                          {formatarMoeda(somarPrevisto(vinculo))}
+                        </p>
+                        <p className="text-xs text-superficie-500">
+                          {vinculo.length}{" "}
+                          {vinculo.length === 1 ? "item vinculado" : "itens vinculados"}
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="text-superficie-400">—</span>
+                    )}
                   </Celula>
                   <Celula className="text-right font-medium text-superficie-900 whitespace-nowrap">
                     {item.quantidadeTotal}
@@ -354,7 +564,7 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
                 </Linha>
                 {expandido && (
                   <Linha className="bg-superficie-50/60 hover:bg-superficie-50/60">
-                    <Celula colSpan={10} className="p-0">
+                    <Celula colSpan={11} className="p-0">
                       <div className="px-6 py-4">
                         {item.tarefas.length === 0 ? (
                           <p className="text-sm text-superficie-500">
@@ -507,6 +717,24 @@ export function TabelaMedicao({ medicaoId, itens, temFiltros }: TabelaMedicaoPro
               placeholder="m³"
             />
           </div>
+          <SeletorItemOrcamento
+            obraId={obraId}
+            selecionados={novoItemForm.orcamentoItens}
+            aoAdicionar={(item) =>
+              setNovoItemForm((a) => ({
+                ...a,
+                orcamentoItens: a.orcamentoItens.some((i) => i.id === item.id)
+                  ? a.orcamentoItens
+                  : [...a.orcamentoItens, item],
+              }))
+            }
+            aoRemover={(itemId) =>
+              setNovoItemForm((a) => ({
+                ...a,
+                orcamentoItens: a.orcamentoItens.filter((i) => i.id !== itemId),
+              }))
+            }
+          />
         </div>
         <div className="mt-6 flex justify-end gap-3">
           <Botao variante="contorno" onClick={fecharModalNovoItem}>

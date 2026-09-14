@@ -45,6 +45,10 @@ const esquemaPrecoCatalogo = z.object({
     .trim()
     .min(1, "Informe a unidade.")
     .max(20, "A unidade deve ter no maximo 20 caracteres."),
+  orcamentoItemId: z
+    .array(z.string().uuid("Item do orcamento invalido."))
+    .max(100)
+    .optional(),
 });
 
 const esquemaPrecoCatalogoUpdate = z.object({
@@ -64,6 +68,10 @@ const esquemaPrecoCatalogoUpdate = z.object({
     .trim()
     .min(1, "Informe a unidade.")
     .max(20, "A unidade deve ter no maximo 20 caracteres."),
+  orcamentoItemId: z
+    .array(z.string().uuid("Item do orcamento invalido."))
+    .max(100)
+    .optional(),
 });
 
 // Atualiza a entrada do catalogo de precos da medicao.
@@ -73,6 +81,7 @@ export async function atualizarPrecoCatalogo(dados: {
   nome: string;
   valorUnitario: number;
   unidade: string;
+  orcamentoItemId?: string[];
 }): Promise<Resultado> {
   const negado = await verificarGestor();
   if (negado) return negado;
@@ -83,6 +92,25 @@ export async function atualizarPrecoCatalogo(dados: {
   }
 
   const supabase = await createClient();
+
+  // Valida que o item do orcamento pertence a mesma obra da medicao.
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .select("obra_id")
+    .eq("id", resultado.data.medicaoId)
+    .single();
+  if (!medicao) return { erro: "Medicao nao encontrada." };
+
+  const ids = [...new Set(resultado.data.orcamentoItemId ?? [])];
+  if (ids.length > 0) {
+    const { data: itensOrcamento, error: erroItens } = await supabase
+      .from("orcamento_itens")
+      .select("orcamentos!inner(obra_id)")
+      .in("id", ids);
+    if (erroItens || (itensOrcamento ?? []).some((item) => item.orcamentos?.obra_id !== medicao.obra_id)) {
+      return { erro: "Um item do orçamento não pertence a esta obra." };
+    }
+  }
 
   const { error } = await supabase.from("catalogo_precos").update({
     nome: resultado.data.nome,
@@ -97,6 +125,13 @@ export async function atualizarPrecoCatalogo(dados: {
     return { erro: "Nao foi possivel atualizar o preco do catalogo. Tente novamente." };
   }
 
+  await supabase.from("catalogo_precos_orcamento_itens").delete().eq("catalogo_id", resultado.data.catalogoId);
+  if (ids.length > 0) {
+    await supabase.from("catalogo_precos_orcamento_itens").insert(
+      ids.map((orcamentoItemId) => ({ catalogo_id: resultado.data.catalogoId, orcamento_item_id: orcamentoItemId })),
+    );
+  }
+
   revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
   return {};
 }
@@ -107,6 +142,7 @@ export async function criarPrecoCatalogo(dados: {
   nome: string;
   valorUnitario: number;
   unidade: string;
+  orcamentoItemId?: string[];
 }): Promise<Resultado> {
   const negado = await verificarGestor();
   if (negado) return negado;
@@ -117,22 +153,42 @@ export async function criarPrecoCatalogo(dados: {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const { error } = await supabase.from("catalogo_precos").insert({
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .select("obra_id")
+    .eq("id", resultado.data.medicaoId)
+    .single();
+  if (!medicao) return { erro: "Medicao nao encontrada." };
+
+  const ids = [...new Set(resultado.data.orcamentoItemId ?? [])];
+  if (ids.length > 0) {
+    const { data: itensOrcamento, error: erroItens } = await supabase
+      .from("orcamento_itens")
+      .select("orcamentos!inner(obra_id)")
+      .in("id", ids);
+    if (erroItens || (itensOrcamento ?? []).some((item) => item.orcamentos?.obra_id !== medicao.obra_id)) {
+      return { erro: "Um item do orçamento não pertence a esta obra." };
+    }
+  }
+
+  const { error: erroInsert, data: catalogo } = await supabase.from("catalogo_precos").insert({
     medicao_id: resultado.data.medicaoId,
     nome: resultado.data.nome,
     valor_unitario: resultado.data.valorUnitario,
     unidade: resultado.data.unidade,
     criado_por: user?.id ?? null,
-  });
+  }).select("id").single();
 
-  if (error) {
-    // Se ja existe um item com esse nome na medicao, o upsert seria mais
-    // apropriado, mas mantemos insert para forcar nomes unicos por medicao.
+  if (erroInsert || !catalogo) {
     return { erro: "Nao foi possivel criar o item do catalogo. Verifique se o nome ja existe." };
+  }
+
+  if (ids.length > 0) {
+    await supabase.from("catalogo_precos_orcamento_itens").insert(
+      ids.map((orcamentoItemId) => ({ catalogo_id: catalogo.id, orcamento_item_id: orcamentoItemId })),
+    );
   }
 
   revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
@@ -446,5 +502,93 @@ export async function excluirPagamento(dados: {
   revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
   revalidatePath(`/obras/[id]/medicoes`);
   return {};
+}
+
+export type ItemOrcamentoParaCatalogo = {
+  id: string;
+  codigo: string | null;
+  descricao: string | null;
+  unidade: string | null;
+  quantidade: number;
+  valor_unitario: number;
+  valor_total: number;
+  composicao_id: string | null;
+  valor_mao_obra: number;
+};
+
+export type ResultadoBuscaItensOrcamento =
+  | { itens: ItemOrcamentoParaCatalogo[] }
+  | { erro: string };
+
+const esquemaBuscarItensOrcamento = z.object({
+  obraId: z.string().uuid("Obra invalida."),
+  termo: z.string().trim().max(100, "Termo de busca muito longo."),
+});
+
+// Busca itens do orcamento da obra para vincular ao catalogo de precos.
+export async function buscarItensOrcamento(dados: {
+  obraId: string;
+  termo: string;
+}): Promise<ResultadoBuscaItensOrcamento> {
+  const negado = await verificarGestor();
+  if (negado) return negado;
+
+  const resultado = esquemaBuscarItensOrcamento.safeParse(dados);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
+  }
+
+  // Remove caracteres que quebram a sintaxe do filtro .or() do PostgREST.
+  const termo = resultado.data.termo.replace(/[,()"]/g, "");
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("orcamento_itens")
+    .select(
+      "id, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id, orcamentos!inner(obra_id)",
+    )
+    .eq("orcamentos.obra_id", resultado.data.obraId)
+    .eq("ativo", true)
+    .eq("tipo", "item")
+    .or(`codigo.ilike.%${termo}%,descricao.ilike.%${termo}%`)
+    .limit(20);
+
+  if (error) {
+    return { erro: "Nao foi possivel buscar os itens do orcamento." };
+  }
+
+  const itens: (ItemOrcamentoParaCatalogo & { composicao_id: string | null })[] = (data ?? []).map((item) => ({
+    id: item.id,
+    codigo: item.codigo,
+    descricao: item.descricao,
+    unidade: item.unidade,
+    quantidade: item.quantidade,
+    valor_unitario: item.valor_unitario,
+    valor_total: item.valor_total,
+    composicao_id: item.composicao_id,
+    valor_mao_obra: 0,
+  }));
+
+  // Enriquecer com valor de mao de obra via custo_composicoes RPC
+  const composicaoIds = [...new Set(itens.map((i) => i.composicao_id).filter((id): id is string => Boolean(id)))];
+  if (composicaoIds.length > 0) {
+    const { data: custos } = await supabase.rpc("custo_composicoes", {
+      p_obra_id: resultado.data.obraId,
+    });
+    const maoDeObraPorComposicao = new Map<string, number>();
+    for (const row of custos ?? []) {
+      if (row.categoria === "mao_de_obra") {
+        maoDeObraPorComposicao.set(row.composicao_id, row.total);
+      }
+    }
+    for (const item of itens) {
+      if (item.composicao_id) {
+        const perUnit = maoDeObraPorComposicao.get(item.composicao_id) ?? 0;
+        item.valor_mao_obra = Number(item.quantidade) * perUnit;
+      }
+    }
+  }
+
+  return { itens };
 }
 
