@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { chaveDia, paraData } from "@/lib/datas";
-import type { PapelUsuario, TarefaRow } from "@/lib/supabase/database.types";
+import type { PapelUsuario } from "@/lib/supabase/database.types";
 
 export type ResultadoReagendamento = { erro?: string };
 

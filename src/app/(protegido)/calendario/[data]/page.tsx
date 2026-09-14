@@ -19,7 +19,6 @@ import {
 } from "@/components/ui";
 import { PRIORIDADE_TAREFA, STATUS_TAREFA } from "@/lib/domain/rotulos";
 import type {
-  ObraRow,
   PerfilRow,
   TarefaRow,
 } from "@/lib/supabase/database.types";

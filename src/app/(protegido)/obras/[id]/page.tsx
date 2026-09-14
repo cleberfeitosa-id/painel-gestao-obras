@@ -6,7 +6,6 @@ import {
   Plus,
   MapPin,
   FileText,
-  CheckSquare,
   AlertTriangle,
   Clock,
   Hammer,
@@ -18,7 +17,7 @@ import {
   Calculator,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { STATUS_OBRA, STATUS_TAREFA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
+import { STATUS_OBRA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
 import { formatarData, situacaoPrazo, hojeChave } from "@/lib/datas";
 import { formatarMoeda } from "@/lib/utils";
 import {
