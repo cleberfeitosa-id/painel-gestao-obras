@@ -232,7 +232,7 @@ export default async function MedicaoDetalhePage({
     redirect(`/obras/${id}`);
   }
 
-  const { medicao, catalogo, tarefas, plantas, perfis, pagamentos, mapaItens, mapaItensPorCatalogo, mapCustosPorItem } =
+  const { medicao, catalogo, tarefas, plantas, perfis, pagamentos, mapaItensPorCatalogo, mapCustosPorItem } =
     await buscarDados(id, medicaoId, filtros);
   if (!medicao) notFound();
 
