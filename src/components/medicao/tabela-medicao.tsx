@@ -48,7 +48,11 @@ function parsearNumero(valor: string): number | null {
 }
 
 function valorPrevistoDoItem(item: ItemOrcamentoParaCatalogo): number {
-  return item.valor_mao_obra ?? 0;
+  return item.valor_composicao * Number(item.quantidade);
+}
+
+function valorUnitarioComposicao(item: ItemOrcamentoParaCatalogo): number {
+  return item.valor_composicao;
 }
 
 function somarPrevisto(itens: ItemOrcamentoParaCatalogo[]): number {
@@ -106,7 +110,7 @@ function SeletorItemOrcamento({
                 {item.codigo ?? "—"} · {item.descricao ?? "Sem descrição"}
               </span>
               <span className="text-[10px] text-superficie-500">
-                {formatarMoeda(valorPrevistoDoItem(item))}
+                {formatarMoeda(valorUnitarioComposicao(item))}/un · qtd. {item.quantidade} · total {formatarMoeda(valorPrevistoDoItem(item))}
               </span>
               <button
                 type="button"
@@ -172,7 +176,7 @@ function SeletorItemOrcamento({
                         {item.unidade ?? "—"}
                       </p>
                       <p className="text-[11px] text-superficie-500">
-                        Previsto: {formatarMoeda(valorPrevistoDoItem(item))}
+                        Composição: {formatarMoeda(valorUnitarioComposicao(item))}/un · Previsto: {formatarMoeda(valorPrevistoDoItem(item))}
                         {jaVinculado && " (já vinculado)"}
                       </p>
                     </button>
@@ -378,7 +382,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
             <CelulaCabecalho>Item</CelulaCabecalho>
             <CelulaCabecalho>Unidade</CelulaCabecalho>
             <CelulaCabecalho>Valor unitário</CelulaCabecalho>
-            <CelulaCabecalho className="text-right">Previsto</CelulaCabecalho>
+            <CelulaCabecalho className="text-right">Orçamento vinculado</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. total</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. executada</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Valor total</CelulaCabecalho>
@@ -449,6 +453,19 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                         }))
                       }
                     />
+                    {item.composicaoComponentes.length > 0 && (
+                      <div className="mt-2 rounded-lg border border-superficie-200 bg-superficie-50 p-2 text-xs">
+                        <p className="font-semibold text-superficie-700">Componentes da composição</p>
+                        <ul className="mt-1 space-y-0.5 text-superficie-600">
+                          {item.composicaoComponentes.map((componente, indice) => (
+                            <li key={`${componente.nome}-${indice}`} className="flex flex-wrap justify-between gap-x-3">
+                              <span>{componente.nome} ({CATEGORIA_COMPOSICAO[componente.categoria]?.rotulo ?? componente.categoria})</span>
+                              <span>{formatarMoeda(componente.valorUnitario)}/un · {formatarMoeda(componente.valorContribuicao)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {Object.keys(item.composicaoCustos).length > 0 && (
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {Object.entries(item.composicaoCustos).map(([cat, total]) => (
@@ -505,6 +522,8 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                           {vinculo.length}{" "}
                           {vinculo.length === 1 ? "item vinculado" : "itens vinculados"}
                         </p>
+                        <p className="text-xs text-superficie-500">Cobrado: {formatarMoeda(item.valorTotal)}</p>
+                        <p className="text-xs text-emerald-600">Executado: {formatarMoeda(item.valorExecutado)}</p>
                       </div>
                     ) : (
                       <span className="text-superficie-400">—</span>
