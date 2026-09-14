@@ -62,6 +62,19 @@ export type InsumoCompra = {
   categoria: "mao_de_obra" | "material" | "equipamento" | "outro";
   quantidadeReal: number;
   valorUnitarioReal: number;
+  quantidadeComprada: number;
+  valorComprado: number;
+  comprasAnteriores: CompraAnterior[];
+};
+
+export type CompraAnterior = {
+  id: string;
+  dataCompra: string;
+  fornecedor: string | null;
+  documento: string | null;
+  quantidade: number;
+  valorUnitario: number;
+  valorTotal: number;
 };
 
 export async function buscarInsumosCompra(obraId: string, termo: string): Promise<Resultado & { insumos?: InsumoCompra[] }> {
@@ -92,9 +105,14 @@ export async function buscarInsumosCompra(obraId: string, termo: string): Promis
     composicaoCodigo: item.composicao_codigo as string | null,
     composicaoNome: item.composicao_nome as string,
      categoria: item.categoria as InsumoCompra["categoria"],
-     quantidadeReal: 0,
-     valorUnitarioReal: 0,
-  })) };
+      quantidadeReal: 0,
+      valorUnitarioReal: 0,
+      quantidadeComprada: Number(item.quantidade_comprada ?? 0),
+      valorComprado: Number(item.valor_comprado ?? 0),
+      comprasAnteriores: Array.isArray(item.compras_anteriores)
+        ? (item.compras_anteriores as CompraAnterior[])
+        : [],
+   })) };
 }
 
 export async function buscarComponentesComposicao(composicaoId: string): Promise<Resultado & { componentes?: Array<{ componenteId: string; codigo: string | null; nome: string; categoria: string; unidade: string; quantidade: number; custoUnitario: number; custoTotal: number }> }> {

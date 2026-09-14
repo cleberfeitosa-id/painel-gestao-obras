@@ -1746,6 +1746,9 @@ export type Database = {
            nome: string; unidade: string; coeficiente: number; custo_unitario: number
            composicao_id: string; composicao_codigo: string | null; composicao_nome: string
            categoria: string
+           quantidade_comprada: number
+           valor_comprado: number
+           compras_anteriores: Json
          }[]
       }
       limpar_dados_importados_obra: {
