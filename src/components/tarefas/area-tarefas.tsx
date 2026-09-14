@@ -82,7 +82,7 @@ export function AreaTarefas({
   const temPlanta = Boolean(dadosPlanta && tarefasPlanta);
 
   return (
-    <div className={temPlanta ? "xl:grid xl:grid-cols-[minmax(0,1fr)_480px] xl:gap-6" : ""}>
+    <div className={temPlanta ? "lg:grid lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-6" : ""}>
       <div className="min-w-0">
         <ListaTarefas
           tarefas={tarefas}
@@ -104,7 +104,7 @@ export function AreaTarefas({
       </div>
 
       {temPlanta && (
-        <div className="hidden xl:block mt-6 xl:mt-0">
+        <div className="mt-6 lg:mt-0">
           <PlantaLateralDinamica
             planta={dadosPlanta!.planta}
             calibracoes={dadosPlanta!.calibracoes}

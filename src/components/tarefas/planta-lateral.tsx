@@ -172,11 +172,12 @@ export function PlantaLateral({
   const [escala, setEscala] = useState(1);
   const [pagina, setPagina] = useState(paginaInicial || 1);
   const [dimensoes, setDimensoes] = useState<{ largura: number; altura: number } | null>(null);
+  const [erroPdf, setErroPdf] = useState(false);
 
   const tarefasDaPagina = tarefas.filter((t) => t.pagina === pagina);
 
   return (
-    <div className="sticky top-6 flex h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-lg border border-borda bg-superficie-100 shadow-sm">
+    <div className="sticky top-6 flex h-[70vh] min-h-[420px] flex-col overflow-hidden rounded-lg border border-borda bg-superficie-100 shadow-sm lg:h-[calc(100dvh-3rem)]">
       <div className="flex items-center justify-between border-b border-borda bg-white px-3 py-2">
         <span className="text-sm font-medium text-superficie-700 truncate max-w-[200px]" title={planta.nome}>
           {planta.nome}
@@ -195,13 +196,22 @@ export function PlantaLateral({
         </div>
       </div>
       
-      <div className="relative flex-1 overflow-auto bg-superficie-200 p-4 select-none touch-none">
+      <div className="relative flex-1 overflow-auto bg-superficie-200 p-4 select-none touch-pan-x touch-pan-y">
         <div className="relative m-auto shadow-md shrink-0 bg-white w-fit">
           <Document
             file={urlPdf}
+            onLoadSuccess={() => setErroPdf(false)}
+            onLoadError={() => setErroPdf(true)}
             loading={
               <div className="flex items-center justify-center p-8">
                 <Spinner className="h-6 w-6 text-azul-600" />
+                </div>
+            }
+            error={
+              <div className="flex min-h-64 min-w-[280px] items-center justify-center p-8 text-center text-xs text-perigo">
+                {erroPdf
+                  ? "Não foi possível carregar a planta. Tente recarregar a página."
+                  : "Não foi possível carregar a planta."}
               </div>
             }
           >
