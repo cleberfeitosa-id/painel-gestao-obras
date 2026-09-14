@@ -327,8 +327,6 @@ export function MiniVisualizadorPlanta({
   const panRef = useRef<{ x: number; y: number; sl: number; st: number; moveu: boolean } | null>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<{ distancia: number; escala: number } | null>(null);
-  const timerDicaRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const pinoDragRef = useRef<{ ancora: PontoPdf } | null>(null);
   const cantoDragRef = useRef<{ canto: Canto } | null>(null);
   const regiaoCorpoDragRef = useRef<{ ancora: PontoPdf; regiaoInicial: RegiaoPdf } | null>(null);
@@ -429,19 +427,6 @@ export function MiniVisualizadorPlanta({
     },
     [pontoFocoTarefaAtual],
   );
-
-  const aoEntrarPino = useCallback((id: string) => {
-    if (modoEdicao) return;
-    if (timerDicaRef.current) clearTimeout(timerDicaRef.current);
-    setDicaTarefa(null);
-    timerDicaRef.current = setTimeout(() => setDicaTarefa(id), 300);
-  }, [modoEdicao]);
-
-  const aoSairPino = useCallback(() => {
-    if (timerDicaRef.current) clearTimeout(timerDicaRef.current);
-    timerDicaRef.current = null;
-    setDicaTarefa(null);
-  }, []);
 
   function pontoDoEvento(
     e: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>,

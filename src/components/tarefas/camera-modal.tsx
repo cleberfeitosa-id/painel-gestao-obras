@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, RefreshCw, X, AlertCircle } from "lucide-react";
 import { Botao, Modal } from "@/components/ui";
 
@@ -24,7 +24,7 @@ export function CameraModal({
   const [iniciando, setIniciando] = useState(false);
   const [capturando, setCapturando] = useState(false);
 
-  function pararStream() {
+  const pararStream = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -32,9 +32,9 @@ export function CameraModal({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-  }
+  }, []);
 
-  async function iniciarCamera(facingMode: "environment" | "user") {
+  const iniciarCamera = useCallback(async (facingMode: "environment" | "user") => {
     pararStream();
     setErroCamera(null);
     setIniciando(true);
@@ -84,19 +84,22 @@ export function CameraModal({
     } finally {
       setIniciando(false);
     }
-  }
+  }, [pararStream]);
 
   useEffect(() => {
+    let temporizador: number | null = null;
     if (aberto) {
-      void iniciarCamera(modoCamera);
+      temporizador = window.setTimeout(() => {
+        void iniciarCamera(modoCamera);
+      }, 0);
     } else {
       pararStream();
-      setErroCamera(null);
     }
     return () => {
+      if (temporizador !== null) window.clearTimeout(temporizador);
       pararStream();
     };
-  }, [aberto, modoCamera]);
+  }, [aberto, modoCamera, iniciarCamera, pararStream]);
 
   function alternarCamera() {
     setModoCamera((atual) => (atual === "environment" ? "user" : "environment"));

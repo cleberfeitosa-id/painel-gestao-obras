@@ -161,7 +161,6 @@ interface PlantaLateralProps {
 
 export function PlantaLateral({
   planta,
-  calibracoes,
   urlPdf,
   tarefas,
   paginaInicial,
