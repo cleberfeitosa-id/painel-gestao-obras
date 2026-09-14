@@ -604,7 +604,7 @@ export async function buscarItensOrcamento(dados: {
         const custos = custosPorComposicao.get(item.composicao_id) ?? {};
         item.valor_mao_obra = custos.mao_de_obra ?? 0;
         item.valor_equipamento = custos.equipamento ?? 0;
-        const valorComposicao = item.valor_mao_obra + item.valor_equipamento;
+        const valorComposicao = Object.values(custos).reduce((total, valor) => total + valor, 0);
         item.valor_composicao = valorComposicao > 0 ? valorComposicao : item.valor_unitario;
       }
     }

@@ -42,6 +42,8 @@ export interface ItemMedicao {
   quantidadePendente: number;
   valorTotal: number;
   valorExecutado: number;
+  valorContabilizado: number;
+  valorUnitarioMaoObra: number;
   valorPendente: number;
   pesoPercentual: number;
   progressoPercentual: number;
@@ -51,6 +53,7 @@ export interface ItemMedicao {
   /** Custo por categoria (mao_de_obra, equipamento) da composicao vinculada */
   composicaoCustos: Record<string, number>;
   composicaoComponentes: ComponenteComposicao[];
+  temBaseMaoObra: boolean;
 }
 
 export interface ComponenteComposicao {
@@ -88,6 +91,36 @@ function agregarComposicaoCustos(
     }
   }
   return total;
+}
+
+function valorUnitarioMaoObraDoItem(
+  itensOrc: ItemOrcamentoParaCatalogo[],
+  mapCustosPorItem: Map<string, Record<string, number>>,
+): number {
+  const itensComComposicao = itensOrc.filter((item) => {
+    const custos = item.id ? mapCustosPorItem.get(item.id) : undefined;
+    return Boolean(item.composicao_id && custos && Object.keys(custos).length > 0);
+  });
+  // Sem composição não existe uma base confiável para separar mão de obra
+  // do preço total do catálogo. Não atribuir o valor integral como mão de obra.
+  if (itensComComposicao.length === 0) return 0;
+
+  const quantidadeTotal = itensComComposicao.reduce(
+    (total, item) => total + Number(item.quantidade),
+    0,
+  );
+  const valor = quantidadeTotal > 0
+    ? itensComComposicao.reduce(
+        (total, item) =>
+          total + (mapCustosPorItem.get(item.id)?.mao_de_obra ?? 0) * Number(item.quantidade),
+        0,
+      ) / quantidadeTotal
+    : itensComComposicao.reduce(
+        (total, item) => total + (mapCustosPorItem.get(item.id)?.mao_de_obra ?? 0),
+        0,
+      );
+
+  return Math.round(valor * 100) / 100;
 }
 
 async function buscarDados(
@@ -181,7 +214,8 @@ async function buscarDados(
       const item = mapaItens.get(v.orcamento_item_id);
       if (!item) continue;
       const atual = mapaItensPorCatalogo.get(v.catalogo_id) ?? [];
-      atual.push(item);
+       if (atual.some((itemVinculado) => itemVinculado.id === item.id)) continue;
+       atual.push(item);
       mapaItensPorCatalogo.set(v.catalogo_id, atual);
     }
 
@@ -212,7 +246,7 @@ async function buscarDados(
           mapCustosPorItem.set(item.id, custos);
           item.valor_mao_obra = custos.mao_de_obra ?? 0;
           item.valor_equipamento = custos.equipamento ?? 0;
-          const valorComposicao = item.valor_mao_obra + item.valor_equipamento;
+           const valorComposicao = Object.values(custos).reduce((total, valor) => total + valor, 0);
           item.valor_composicao = valorComposicao > 0 ? valorComposicao : item.valor_composicao;
         }
       }
@@ -299,6 +333,14 @@ export default async function MedicaoDetalhePage({
   const itens = new Map<string, ItemMedicao>();
   for (const c of catalogo) {
     const itensOrc = mapaItensPorCatalogo.get(c.id) ?? [];
+    const valorUnitarioMaoObra = valorUnitarioMaoObraDoItem(
+      itensOrc,
+      mapCustosPorItem,
+    );
+    const temBaseMaoObra = itensOrc.some((item) => {
+      const custos = item.id ? mapCustosPorItem.get(item.id) : undefined;
+      return Boolean(item.composicao_id && custos && Object.keys(custos).length > 0);
+    });
     itens.set(c.id, {
       catalogoId: c.id,
       nome: c.nome,
@@ -309,6 +351,8 @@ export default async function MedicaoDetalhePage({
       quantidadePendente: 0,
       valorTotal: 0,
       valorExecutado: 0,
+      valorContabilizado: 0,
+      valorUnitarioMaoObra,
       valorPendente: 0,
       pesoPercentual: 0,
       progressoPercentual: 0,
@@ -317,6 +361,7 @@ export default async function MedicaoDetalhePage({
       tarefas: [],
        composicaoCustos: agregarComposicaoCustos(itensOrc, mapCustosPorItem),
        composicaoComponentes: itensOrc.flatMap((item) => mapComponentesPorItem.get(item.id) ?? []),
+       temBaseMaoObra,
     });
   }
 
@@ -339,6 +384,8 @@ export default async function MedicaoDetalhePage({
         quantidadePendente: 0,
         valorTotal: 0,
         valorExecutado: 0,
+        valorContabilizado: 0,
+        valorUnitarioMaoObra: 0,
         valorPendente: 0,
         pesoPercentual: 0,
         progressoPercentual: 0,
@@ -347,6 +394,7 @@ export default async function MedicaoDetalhePage({
         tarefas: [],
         composicaoCustos: {},
         composicaoComponentes: [],
+        temBaseMaoObra: false,
       };
 
       item.tarefas.push({
@@ -369,6 +417,7 @@ export default async function MedicaoDetalhePage({
       if (tarefa.status === "concluido") {
         item.quantidadeExecutada += qtd;
         item.valorExecutado += valor;
+        item.valorContabilizado += qtd * item.valorUnitarioMaoObra;
         valorExecutado += valor;
       } else {
         item.quantidadePendente += qtd;
