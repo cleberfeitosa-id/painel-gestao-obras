@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { EsqueletoLinha } from "@/components/ui/carregando";
+import type { ChoqueItem, PlantaItem, TarefaItem } from "./visualizador-compatibilizacao";
 
 const VisualizadorCompatibilizacao = dynamic(
   () => import("./visualizador-compatibilizacao"),
@@ -22,10 +23,10 @@ export function AreaCompatibilizacao(props: {
   obraId: string;
   obraNome: string;
   compatibilizacao: { id: string; nome: string; [key: string]: unknown };
-  plantasPreCarregadas: any[];
-  plantasDisponiveis: any[];
-  tarefas: any[];
-  choques: any[];
+  plantasPreCarregadas: PlantaItem[];
+  plantasDisponiveis: { id: string; nome: string }[];
+  tarefas: TarefaItem[];
+  choques: ChoqueItem[];
 }) {
-  return <VisualizadorCompatibilizacao {...(props as any)} />;
+  return <VisualizadorCompatibilizacao {...props} />;
 }

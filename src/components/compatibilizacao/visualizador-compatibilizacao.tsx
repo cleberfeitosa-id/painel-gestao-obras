@@ -9,6 +9,13 @@ import dynamic from "next/dynamic";
 
 import { Botao, Cartao } from "@/components/ui";
 import { CORES_CORREDOR, situacaoDaTarefa } from "@/lib/domain/rotulos";
+import type {
+  AprovacaoTarefa,
+  RegiaoPdf,
+  StatusTarefa,
+  TipoLocalizacao,
+} from "@/lib/supabase/database.types";
+import type { DetalheLocalizacaoLevantamento } from "@/components/plantas/tipos";
 
 const ModalExportarCompatibilizacao = dynamic(
   () => import("./modal-exportar-compatibilizacao").then((m) => m.ModalExportarCompatibilizacao),
@@ -37,14 +44,14 @@ function hexParaRgbaCompor(hex: string, alfa: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alfa})`;
 }
 
-interface TarefaItem {
+export interface TarefaItem {
   id: string;
   titulo: string;
-  status: string;
-  aprovacao?: string;
-  localizacao_tipo?: string;
-  regiao?: any;
-  localizacao_detalhe?: any;
+  status: StatusTarefa;
+  aprovacao: AprovacaoTarefa;
+  localizacao_tipo?: TipoLocalizacao;
+  regiao?: RegiaoPdf;
+  localizacao_detalhe?: DetalheLocalizacaoLevantamento;
   executor_id: string | null;
   planta_id: string;
   ponto_x: number | null;
@@ -56,7 +63,7 @@ interface TarefaItem {
   [key: string]: unknown;
 }
 
-interface ChoqueItem {
+export interface ChoqueItem {
   id: string;
   ponto_x: number;
   ponto_y: number;
@@ -64,7 +71,7 @@ interface ChoqueItem {
   status?: string;
 }
 
-interface PlantaItem {
+export interface PlantaItem {
   id: string;
   planta_id: string;
   pagina: number;
@@ -648,7 +655,7 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
                       };
                     };
 
-                    const sit = situacaoDaTarefa({ status: t.status as any, aprovacao: t.aprovacao as any || "pendente" });
+                    const sit = situacaoDaTarefa({ status: t.status, aprovacao: t.aprovacao });
                     const corStatus = CORES_CORREDOR[sit] || "#2563eb";
                     const corPlanta = plantaDaTarefa.cor_identificacao || "#cbd5e1";
 
@@ -723,7 +730,7 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
                   const esq = (px / bDimensoes.largura) * 100;
                   const topo = (py / bDimensoes.altura) * 100;
 
-                  const sit = situacaoDaTarefa({ status: t.status as any, aprovacao: t.aprovacao as any || "pendente" });
+                  const sit = situacaoDaTarefa({ status: t.status, aprovacao: t.aprovacao });
                   const corStatus = CORES_CORREDOR[sit] || "#2563eb";
                   const isConcluido = t.status === 'concluido';
 

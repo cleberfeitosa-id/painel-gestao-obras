@@ -12,13 +12,14 @@ import {
   exportarCompatibilizacaoPdf,
 } from "@/lib/pdf/exportador-compatibilizacao-pdf";
 import { baixarArquivoBlob } from "@/lib/pdf/exportador-planta-pdf";
+import type { ChoqueItem, PlantaItem, TarefaItem } from "./visualizador-compatibilizacao";
 
 interface ModalExportarProps {
   aberto: boolean;
   aoFechar: () => void;
-  plantasComp: any[];
-  tarefas: any[];
-  choques: any[];
+  plantasComp: PlantaItem[];
+  tarefas: TarefaItem[];
+  choques: ChoqueItem[];
   compatibilizacaoNome: string;
   obraNome: string;
   transparenciaTarefas?: number;
