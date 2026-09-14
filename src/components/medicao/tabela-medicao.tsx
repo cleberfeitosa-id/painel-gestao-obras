@@ -382,11 +382,18 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
             <CelulaCabecalho>Item</CelulaCabecalho>
             <CelulaCabecalho>Unidade</CelulaCabecalho>
             <CelulaCabecalho>Valor unitário</CelulaCabecalho>
-            <CelulaCabecalho className="text-right">Orçamento vinculado</CelulaCabecalho>
+            <CelulaCabecalho className="text-right" title="Mão de obra prevista = custo unitário da composição × quantidade do orçamento">
+              Orçamento vinculado
+            </CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. total</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. executada</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Valor total</CelulaCabecalho>
-            <CelulaCabecalho className="text-right">Valor executado</CelulaCabecalho>
+            <CelulaCabecalho className="text-right" title="Preço unitário do catálogo × quantidade das tarefas concluídas">
+              Cobrado executado
+            </CelulaCabecalho>
+            <CelulaCabecalho className="text-right" title="Custo unitário de mão de obra da composição × quantidade das tarefas concluídas">
+              Custo de mão de obra
+            </CelulaCabecalho>
             <CelulaCabecalho className="text-right">Valor pendente</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Ações</CelulaCabecalho>
           </LinhaCabecalho>
@@ -515,15 +522,28 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                   <Celula className="text-right whitespace-nowrap">
                     {vinculo.length > 0 ? (
                       <div>
-                        <p className="font-medium text-superficie-900">
-                          {formatarMoeda(somarPrevisto(vinculo))}
-                        </p>
+                        {item.temBaseMaoObra ? (
+                          <p className="font-semibold text-azul-700">
+                            Mão de obra prevista: {formatarMoeda(item.composicaoCustos.mao_de_obra ?? 0)}
+                          </p>
+                        ) : (
+                          <p className="font-medium text-superficie-500">Sem composição de mão de obra</p>
+                        )}
                         <p className="text-xs text-superficie-500">
                           {vinculo.length}{" "}
                           {vinculo.length === 1 ? "item vinculado" : "itens vinculados"}
                         </p>
+                        <p className="mt-1 text-[10px] leading-tight text-superficie-400">
+                          Orçamento total: {formatarMoeda(somarPrevisto(vinculo))}
+                          {item.composicaoCustos.material != null && (
+                            <> · Material: {formatarMoeda(item.composicaoCustos.material)}</>
+                          )}
+                        </p>
                         <p className="text-xs text-superficie-500">Cobrado: {formatarMoeda(item.valorTotal)}</p>
-                        <p className="text-xs text-emerald-600">Executado: {formatarMoeda(item.valorExecutado)}</p>
+                        <p className="text-xs text-emerald-600">Cobrado executado: {formatarMoeda(item.valorExecutado)}</p>
+                        <p className="text-xs text-azul-600">
+                          Custo de mão de obra executado: {item.temBaseMaoObra ? formatarMoeda(item.valorContabilizado) : "—"}
+                        </p>
                       </div>
                     ) : (
                       <span className="text-superficie-400">—</span>
@@ -532,8 +552,8 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                   <Celula className="text-right font-medium text-superficie-900 whitespace-nowrap">
                     {item.quantidadeTotal}
                   </Celula>
-                  <Celula className="text-right font-medium whitespace-nowrap">
-                    <span
+                   <Celula className="text-right font-medium whitespace-nowrap">
+                     <span
                       className={
                         item.quantidadeExecutada > 0
                           ? "font-semibold text-emerald-600"
@@ -541,11 +561,11 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                       }
                     >
                       {item.quantidadeExecutada}
-                    </span>
-                  </Celula>
-                  <Celula className="text-right font-medium text-superficie-900 whitespace-nowrap">
-                    {formatarMoeda(item.valorTotal)}
-                  </Celula>
+                     </span>
+                   </Celula>
+                   <Celula className="text-right font-medium text-superficie-900 whitespace-nowrap">
+                     {formatarMoeda(item.valorTotal)}
+                   </Celula>
                   <Celula className="text-right font-medium whitespace-nowrap">
                     <span
                       className={
@@ -553,10 +573,21 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                           ? "font-semibold text-emerald-600"
                           : "text-superficie-500"
                       }
-                    >
-                      {formatarMoeda(item.valorExecutado)}
-                    </span>
-                  </Celula>
+                     >
+                       {formatarMoeda(item.valorExecutado)}
+                     </span>
+                   </Celula>
+                   <Celula className="text-right font-medium whitespace-nowrap">
+                     <span
+                       className={
+                         item.valorContabilizado > 0
+                           ? "font-semibold text-azul-600"
+                           : "text-superficie-500"
+                       }
+                      >
+                        {item.temBaseMaoObra ? formatarMoeda(item.valorContabilizado) : "—"}
+                      </span>
+                    </Celula>
                   <Celula className="text-right font-medium whitespace-nowrap">
                     <span
                       className={
@@ -583,7 +614,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                 </Linha>
                 {expandido && (
                   <Linha className="bg-superficie-50/60 hover:bg-superficie-50/60">
-                    <Celula colSpan={11} className="p-0">
+                     <Celula colSpan={12} className="p-0">
                       <div className="px-6 py-4">
                         {item.tarefas.length === 0 ? (
                           <p className="text-sm text-superficie-500">
@@ -628,11 +659,18 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                                           ? `Prazo: ${formatarData(tarefa.prazo)}`
                                           : "Sem prazo"}
                                       </span>
-                                      {tarefa.quantidade != null && tarefa.quantidade > 0 && (
-                                        <span className="font-medium text-superficie-700">
-                                          Subtotal: {formatarMoeda(tarefa.quantidade * item.valorUnitario)}
-                                        </span>
-                                      )}
+                                       {tarefa.quantidade != null && tarefa.quantidade > 0 && (
+                                         <>
+                                           <span className="font-medium text-superficie-700">
+                                             Subtotal: {formatarMoeda(tarefa.quantidade * item.valorUnitario)}
+                                           </span>
+                                           {tarefa.status === "concluido" && (
+                                             <span className="font-medium text-azul-600">
+                                                Custo de mão de obra: {formatarMoeda(tarefa.quantidade * item.valorUnitarioMaoObra)}
+                                             </span>
+                                           )}
+                                         </>
+                                       )}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-2">
