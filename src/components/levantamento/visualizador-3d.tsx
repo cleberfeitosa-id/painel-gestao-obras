@@ -29,6 +29,15 @@ import type {
   ResumoLevantamento,
 } from "@/lib/levantamento/tipos";
 
+function escaparHtml(valor: unknown): string {
+  return String(valor ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 interface Visualizador3DProps {
   itens: ItemLevantamento[];
   resumo: ResumoLevantamento;
@@ -789,11 +798,10 @@ export function Visualizador3D({
       <div class="header">
         <div>
           <h1>Levantamento de Quantidades - Perspectiva Isométrica 3D${sufixoFiltro}</h1>
-          <p>Obra: <strong>${obraNome}</strong> | Planta: <strong>${plantaNome}</strong> (Página ${pagina})</p>
+           <p>Obra: <strong>${escaparHtml(obraNome)}</strong> | Planta: <strong>${escaparHtml(plantaNome)}</strong> (Página ${pagina})</p>
         </div>
         <div style="text-align: right;">
           <p>Data: ${new Date().toLocaleDateString("pt-BR")}</p>
-          <p>Vasconcelos Engenharia</p>
         </div>
       </div>
 
@@ -813,8 +821,8 @@ export function Visualizador3D({
                 .map(
                   (el) => `
                 <tr>
-                  <td><span class="badge-cor" style="background:${el.cor}"></span>${el.nome}</td>
-                  <td>${el.nivelNome ?? "-"}</td>
+                   <td><span class="badge-cor" style="background:${escaparHtml(el.cor)}"></span>${escaparHtml(el.nome)}</td>
+                   <td>${escaparHtml(el.nivelNome ?? "-")}</td>
                   <td class="text-right">${el.quantidade} un</td>
                 </tr>
               `,
@@ -824,7 +832,7 @@ export function Visualizador3D({
                 .map(
                   (desc) => `
                 <tr>
-                  <td><span class="badge-cor" style="background:${desc.cor}"></span>Descida/Subida (${desc.nome})</td>
+                   <td><span class="badge-cor" style="background:${escaparHtml(desc.cor)}"></span>Descida/Subida (${escaparHtml(desc.nome)})</td>
                   <td>Vertical</td>
                   <td class="text-right">${formatarMetros(desc.alturaTotal)}</td>
                 </tr>
@@ -853,7 +861,7 @@ export function Visualizador3D({
                 .map(
                   (d) => `
                 <tr>
-                  <td><span class="badge-cor" style="background:${d.cor}"></span>${d.nome}</td>
+                   <td><span class="badge-cor" style="background:${escaparHtml(d.cor)}"></span>${escaparHtml(d.nome)}</td>
                   <td class="text-right">${formatarMetros(d.totalMetros)}</td>
                 </tr>
               `,
@@ -864,9 +872,9 @@ export function Visualizador3D({
                   (c) => `
                 <tr>
                   <td>
-                    ${c.corCabo ? `<span class="badge-cor" style="background:${c.corCabo};"></span>` : ""}
-                    ${c.circuito} · ${rotuloCondutor(c.funcao)}${c.fase ? ` (${c.fase})` : ""}
-                    — ${c.tipoCabo} (${c.quantidadeCondutores}x)${c.tipoCondutor ? `, ${c.tipoCondutor}` : ""}${c.corCabo ? `, ${obterNomeCorCabo(c.corCabo)}` : ""}
+                     ${c.corCabo ? `<span class="badge-cor" style="background:${escaparHtml(c.corCabo)};"></span>` : ""}
+                     ${escaparHtml(c.circuito)} · ${escaparHtml(rotuloCondutor(c.funcao))}${c.fase ? ` (${escaparHtml(c.fase)})` : ""}
+                     — ${escaparHtml(c.tipoCabo)} (${c.quantidadeCondutores}x)${c.tipoCondutor ? `, ${escaparHtml(c.tipoCondutor)}` : ""}${c.corCabo ? `, ${escaparHtml(obterNomeCorCabo(c.corCabo))}` : ""}
                   </td>
                   <td class="text-right">${formatarMetros(c.comprimentoTotal)}</td>
                 </tr>
@@ -900,7 +908,7 @@ export function Visualizador3D({
                 .map(
                   (a) => `
                 <tr>
-                  <td><span class="badge-cor" style="background:${a.cor}"></span>${a.nome}</td>
+                   <td><span class="badge-cor" style="background:${escaparHtml(a.cor)}"></span>${escaparHtml(a.nome)}</td>
                   <td class="text-right">${formatarMetrosQuadrados(a.totalArea)}</td>
                 </tr>
               `,
@@ -924,7 +932,7 @@ export function Visualizador3D({
 
     exportarParaPdfViaImpressao(
       html,
-      `Levantamento-3D-${obraNome}-Pag${pagina}`,
+       `Levantamento-3D-${escaparHtml(obraNome)}-Pag${pagina}`,
     );
   }
 

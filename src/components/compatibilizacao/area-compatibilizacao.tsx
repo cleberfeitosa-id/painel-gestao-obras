@@ -20,6 +20,7 @@ const VisualizadorCompatibilizacao = dynamic(
 
 export function AreaCompatibilizacao(props: {
   obraId: string;
+  obraNome: string;
   compatibilizacao: { id: string; nome: string; [key: string]: unknown };
   plantasPreCarregadas: any[];
   plantasDisponiveis: any[];

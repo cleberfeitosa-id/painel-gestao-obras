@@ -86,6 +86,7 @@ interface PlantaItem {
 }
 
 interface Props {
+  obraNome: string;
   compatibilizacao: {
     id: string;
     nome: string;
@@ -97,7 +98,7 @@ interface Props {
   choques: ChoqueItem[];
 }
 
-export default function VisualizadorCompatibilizacao({ compatibilizacao, plantasPreCarregadas, plantasDisponiveis, tarefas, choques: choquesIniciais }: Props) {
+export default function VisualizadorCompatibilizacao({ obraNome, compatibilizacao, plantasPreCarregadas, plantasDisponiveis, tarefas, choques: choquesIniciais }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   
   const [plantasComp, setPlantasComp] = useState<PlantaItem[]>(
@@ -792,7 +793,7 @@ export default function VisualizadorCompatibilizacao({ compatibilizacao, plantas
           tarefas={tarefasFiltradas}
           choques={choques}
           compatibilizacaoNome={compatibilizacao.nome}
-          obraNome={"Obras Vasconcelos"}
+            obraNome={obraNome}
           transparenciaTarefas={transparenciaTarefas}
           transparenciaBordas={transparenciaBordas}
         />

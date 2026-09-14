@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain/rotulos";
 import { formatarData, formatarDataHora } from "@/lib/datas";
 import { formatarMoeda } from "@/lib/utils";
+import { CONFIGURACAO_APLICACAO } from "@/lib/configuracao-aplicacao";
 import {
   formatarMetros,
   formatarMetrosQuadrados,
@@ -435,6 +436,24 @@ function renderizarCartaoTarefaGrade(
 
   let yAtual = y + 124;
 
+  function desenharImagemContida(
+    imagem: HTMLCanvasElement,
+    xDestino: number,
+    yDestino: number,
+    larguraDestino: number,
+    alturaDestino: number,
+  ) {
+    const proporcao = imagem.width / Math.max(imagem.height, 1);
+    const proporcaoDestino = larguraDestino / Math.max(alturaDestino, 1);
+    const larguraImagem = proporcao > proporcaoDestino ? larguraDestino : alturaDestino * proporcao;
+    const alturaImagem = proporcao > proporcaoDestino ? larguraDestino / Math.max(proporcao, 0.01) : alturaDestino;
+    const xImagem = xDestino + (larguraDestino - larguraImagem) / 2;
+    const yImagem = yDestino + (alturaDestino - alturaImagem) / 2;
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(xDestino, yDestino, larguraDestino, alturaDestino);
+    ctx.drawImage(imagem, xImagem, yImagem, larguraImagem, alturaImagem);
+  }
+
   const todasImagensParaExibir: { canvas: HTMLCanvasElement; rotulo: string }[] = [];
   if (cropCanvas) {
     todasImagensParaExibir.push({ canvas: cropCanvas, rotulo: "Planta (Zoom)" });
@@ -453,7 +472,7 @@ function renderizarCartaoTarefaGrade(
 
       todasImagensParaExibir.forEach((imgObj, i) => {
         const xImg = x + 18 + i * (wImg + gapImg);
-        ctx.drawImage(imgObj.canvas, xImg, yAtual, wImg, hImg);
+        desenharImagemContida(imgObj.canvas, xImg, yAtual, wImg, hImg);
         ctx.strokeStyle = "#cbd5e1";
         ctx.lineWidth = 1.5;
         ctx.strokeRect(xImg, yAtual, wImg, hImg);
@@ -478,7 +497,7 @@ function renderizarCartaoTarefaGrade(
         const xImg = x + 18 + cIdx * (wImg + 16);
         const yImgPos = yAtual + rIdx * (hImg + 14);
 
-        ctx.drawImage(imgObj.canvas, xImg, yImgPos, wImg, hImg);
+        desenharImagemContida(imgObj.canvas, xImg, yImgPos, wImg, hImg);
         ctx.strokeStyle = "#cbd5e1";
         ctx.lineWidth = 1.5;
         ctx.strokeRect(xImg, yImgPos, wImg, hImg);
@@ -557,6 +576,7 @@ function gerarPaginaGradeDinamicaCanvas(
   totalPaginasDoc: number,
   tituloDocumento: string,
   opcoes: OpcoesExportacaoPlanta,
+  _rotuloDocumento = "PLANTA ANOTADA",
 ): string {
   const canvas = document.createElement("canvas");
   canvas.width = 2480;
@@ -574,9 +594,9 @@ function gerarPaginaGradeDinamicaCanvas(
   ctx.font = "bold 32px sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText("VASCONCELOS ENGENHARIA", 60, 70);
+  ctx.fillText("PLANTA ANOTADA", 60, 70);
 
-  ctx.fillStyle = "#38bdf8";
+  ctx.fillStyle = CONFIGURACAO_APLICACAO.corDestaque;
   ctx.font = "bold 24px sans-serif";
   ctx.textAlign = "right";
   ctx.fillText(`${tituloDocumento.toUpperCase()} · FICHAS TÉCNICAS (PÁGINA ${numeroPaginaDoc}/${totalPaginasDoc})`, 2420, 70);
@@ -608,11 +628,6 @@ function gerarPaginaGradeDinamicaCanvas(
       opcoes,
     );
   });
-
-  ctx.fillStyle = "#64748b";
-  ctx.font = "18px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(`Painel de Gestão de Obras · Vasconcelos Engenharia · Página ${numeroPaginaDoc} de ${totalPaginasDoc}`, 1240, 3460);
 
   return canvas.toDataURL("image/jpeg", 0.94);
 }
@@ -1058,6 +1073,7 @@ export async function exportarPlantaIluminadaPdf(
         totalPaginasDetalhes,
         plantaNome,
         opcoes,
+        "PLANTA ANOTADA",
       );
 
       const taskPage = pdfDoc.addPage([DIMENSOES_A4_PT.largura, DIMENSOES_A4_PT.altura]);
@@ -1289,11 +1305,11 @@ export async function exportarLevantamentoIluminadoPdf(
   const swatchGapEsc = Math.round(swatchGap * escalaFonte);
   const paddingPainelEsc = Math.round(paddingPainel * escalaFonte);
 
-  ctx.fillStyle = "#38bdf8";
+  ctx.fillStyle = CONFIGURACAO_APLICACAO.corDestaque;
   ctx.font = `bold ${fonteCabecalho}px sans-serif`;
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  ctx.fillText("VASCONCELOS ENGENHARIA", painelX + paddingPainelEsc, yAtual);
+  ctx.fillText(CONFIGURACAO_APLICACAO.nomeEmpresa.toUpperCase(), painelX + paddingPainelEsc, yAtual);
   yAtual += Math.round(28 * escalaFonte);
 
   ctx.fillStyle = "#ffffff";
@@ -1486,33 +1502,6 @@ export async function exportarLevantamentoIluminadoPdf(
     ctx.fillText("Nenhuma marcação no levantamento.", painelX + painelLargura / 2, yAtual + linhaAlturaEsc / 2);
   }
 
-  const seloW = 460;
-  const seloH = 180;
-  const seloX = compositeCanvas.width - seloW - 40;
-  const seloY = compositeCanvas.height - seloH - 40;
-
-  ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
-  desenharRetanguloArredondado(ctx, seloX, seloY, seloW, seloH, 12);
-  ctx.fill();
-
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  ctx.fillStyle = "#38bdf8";
-  ctx.font = "bold 18px sans-serif";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.fillText("VASCONCELOS ENGENHARIA", seloX + 28, seloY + 22);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 20px sans-serif";
-  ctx.fillText(`LEVANTAMENTO: ${nomeLevantamento.toUpperCase()}`, seloX + 28, seloY + 52);
-
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = "14px sans-serif";
-  ctx.fillText(`Obra: ${obraNome} · Planta: ${plantaNome} (Pág. ${paginaNumero})`, seloX + 28, seloY + 82);
-
   notificar("Inicializando documento PDF...", 40);
   const pdfDoc = await PDFDocument.create();
   const dims = DIMENSOES_FOLHA_PT[opcoes.tamanhoFolha];
@@ -1618,6 +1607,7 @@ export async function exportarLevantamentoIluminadoPdf(
         totalPaginasDetalhes,
         nomeLevantamento,
         opcoes,
+        "LEVANTAMENTO",
       );
 
       const taskPage = pdfDoc.addPage([DIMENSOES_A4_PT.largura, DIMENSOES_A4_PT.altura]);
@@ -1667,9 +1657,9 @@ export async function exportarRelatorioRdoCompletoPdf(
   ctxCapa.fillStyle = "#0f172a";
   ctxCapa.fillRect(0, 0, 2480, 180);
 
-  ctxCapa.fillStyle = "#38bdf8";
+  ctxCapa.fillStyle = CONFIGURACAO_APLICACAO.corDestaque;
   ctxCapa.font = "bold 26px sans-serif";
-  ctxCapa.fillText("VASCONCELOS ENGENHARIA", 80, 70);
+  ctxCapa.fillText(CONFIGURACAO_APLICACAO.nomeEmpresa.toUpperCase(), 80, 70);
 
   ctxCapa.fillStyle = "#ffffff";
   ctxCapa.font = "bold 42px sans-serif";
@@ -1919,11 +1909,11 @@ export async function exportarRelatorioRdoCompletoPdf(
     compCtx.lineWidth = 2;
     compCtx.stroke();
 
-    compCtx.fillStyle = "#38bdf8";
+    compCtx.fillStyle = CONFIGURACAO_APLICACAO.corDestaque;
     compCtx.font = "bold 18px sans-serif";
     compCtx.textAlign = "left";
     compCtx.textBaseline = "top";
-    compCtx.fillText("VASCONCELOS ENGENHARIA", sX + 28, sY + 22);
+  compCtx.fillText(CONFIGURACAO_APLICACAO.nomeEmpresa.toUpperCase(), sX + 28, sY + 22);
 
     compCtx.fillStyle = "#ffffff";
     compCtx.font = "bold 20px sans-serif";
@@ -2086,6 +2076,7 @@ export async function exportarRelatorioRdoCompletoPdf(
         totalPaginasDetalhes,
         titulo,
         opcoes,
+        "RELATÓRIO",
       );
 
       const taskPage = pdfDoc.addPage([DIMENSOES_A4_PT.largura, DIMENSOES_A4_PT.altura]);

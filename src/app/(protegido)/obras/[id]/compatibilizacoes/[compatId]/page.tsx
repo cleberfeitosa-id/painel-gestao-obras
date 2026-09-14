@@ -23,13 +23,16 @@ export default async function CompatibilizacaoDetalhePage({ params }: Compatibil
   const { id, compatId } = await params;
   const supabase = await createClient();
 
-  const { data: compatibilizacao } = await supabase
+  const [{ data: obra }, { data: compatibilizacao }] = await Promise.all([
+    supabase.from("obras").select("nome").eq("id", id).single(),
+    supabase
     .from("compatibilizacoes")
     .select("*, compatibilizacao_plantas(*, plantas(*))")
     .eq("id", compatId)
-    .single();
+    .single(),
+  ]);
 
-  if (!compatibilizacao) notFound();
+  if (!compatibilizacao || !obra) notFound();
 
   const compatPlantas = (compatibilizacao.compatibilizacao_plantas || []) as unknown as PlantaCompatibilizada[];
 
@@ -83,8 +86,9 @@ export default async function CompatibilizacaoDetalhePage({ params }: Compatibil
       </div>
       
       <div className="flex-1 overflow-hidden">
-        <AreaCompatibilizacao
-          obraId={id}
+          <AreaCompatibilizacao
+            obraId={id}
+            obraNome={obra.nome}
           compatibilizacao={compatibilizacao}
           plantasPreCarregadas={plantasComUrls}
           plantasDisponiveis={plantasDisponiveis || []}
