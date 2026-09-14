@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Boxes, Plus, Upload } from "lucide-react";
+import { Boxes, Upload } from "lucide-react";
 import { Botao, Campo, Modal, Selecao } from "@/components/ui";
 import { criarNovoLevantamento } from "@/app/(protegido)/levantamento/acoes";
 import type { ObraRow, PlantaRow } from "@/lib/supabase/database.types";

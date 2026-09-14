@@ -4,24 +4,13 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Boxes,
-  Calendar,
   ChevronRight,
-  Copy,
-  Edit2,
-  FileSpreadsheet,
-  FileText,
-  Filter,
-  Layers,
-  MapPin,
   Plus,
-  Ruler,
   Scale,
-  Search,
   Trash2,
   Upload,
-  Zap,
 } from "lucide-react";
-import { Botao, Campo, Cartao, CartaoConteudo, EstadoVazio, Etiqueta, Modal, Selecao } from "@/components/ui";
+import { Botao, Campo, Cartao, CartaoConteudo, EstadoVazio, Selecao } from "@/components/ui";
 import { formatarMetros, formatarMetrosQuadrados } from "@/lib/levantamento/calculos";
 import { excluirLevantamento } from "@/app/(protegido)/levantamento/acoes";
 import { ModalNovoLevantamento } from "./modal-novo-levantamento";
@@ -33,7 +22,7 @@ import type {
   PlantaCalibracaoRow,
   PlantaRow,
 } from "@/lib/supabase/database.types";
-import type { ItemLevantamento, ResumoLevantamento } from "@/lib/levantamento/tipos";
+import type { ItemLevantamento } from "@/lib/levantamento/tipos";
 
 export interface LevantamentoComRelacoes extends LevantamentoRow {
   obras: { id: string; nome: string } | null;

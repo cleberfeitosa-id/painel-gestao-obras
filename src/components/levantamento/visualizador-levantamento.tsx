@@ -310,13 +310,10 @@ export function VisualizadorLevantamento({
     (levantamentoInicial?.itens as unknown as ItemLevantamento[]) ?? [],
   );
 
-  const getNextNumero = useCallback(
-    (subtipo: string) => {
-      const itensDoSubtipo = itens.filter((i) => i.subtipo === subtipo);
-      return itensDoSubtipo.length + 1;
-    },
-    [itens],
-  );
+  function getNextNumero(subtipo: string) {
+    const itensDoSubtipo = itens.filter((i) => i.subtipo === subtipo);
+    return itensDoSubtipo.length + 1;
+  }
 
   const [historicoDesfazer, setHistoricoDesfazer] = useState<
     ItemLevantamento[][]
@@ -459,11 +456,11 @@ export function VisualizadorLevantamento({
     } catch {}
   }
 
-  const registrarEstado = useCallback((novosItens: ItemLevantamento[]) => {
+  function registrarEstado(novosItens: ItemLevantamento[]) {
     setHistoricoDesfazer((prev) => [...prev.slice(-30), itens]);
     setHistoricoRefazer([]);
     setItens(novosItens);
-  }, [itens]);
+  }
 
   function excluirItem(id: string) {
     const novos = itens.filter((i) => i.id !== id);
