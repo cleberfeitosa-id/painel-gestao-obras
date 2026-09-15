@@ -95,7 +95,7 @@ if (!resposta.ok) {
   try {
     const erroJson = JSON.parse(corpo);
     mensagem = erroJson.message ?? corpo;
-  } catch (erro) {
+  } catch {
     mensagem = corpo;
   }
   throw new Error(`[HUV Crato] carga revertida: ${mensagem}`);
