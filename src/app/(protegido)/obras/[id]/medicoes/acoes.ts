@@ -93,6 +93,14 @@ export async function atualizarPrecoCatalogo(dados: {
 
   const supabase = await createClient();
 
+  const { data: catalogoExistente } = await supabase
+    .from("catalogo_precos")
+    .select("id")
+    .eq("id", resultado.data.catalogoId)
+    .eq("medicao_id", resultado.data.medicaoId)
+    .maybeSingle();
+  if (!catalogoExistente) return { erro: "Item do catalogo nao encontrado nesta medicao." };
+
   // Valida que o item do orcamento pertence a mesma obra da medicao.
   const { data: medicao } = await supabase
     .from("medicoes")
@@ -112,27 +120,67 @@ export async function atualizarPrecoCatalogo(dados: {
     }
   }
 
-  const { error } = await supabase.from("catalogo_precos").update({
-    nome: resultado.data.nome,
-    valor_unitario: resultado.data.valorUnitario,
-    unidade: resultado.data.unidade,
-  }).eq("id", resultado.data.catalogoId);
-
+  const { error } = await supabase.rpc("atualizar_catalogo_com_vinculos", {
+    p_catalogo_id: resultado.data.catalogoId,
+    p_medicao_id: resultado.data.medicaoId,
+    p_nome: resultado.data.nome,
+    p_valor_unitario: resultado.data.valorUnitario,
+    p_unidade: resultado.data.unidade,
+    p_orcamento_item_ids: ids,
+  });
   if (error) {
-    if (error.code === "23505") {
-      return { erro: "Ja existe um item com esse nome nesta medicao." };
-    }
-    return { erro: "Nao foi possivel atualizar o preco do catalogo. Tente novamente." };
-  }
-
-  await supabase.from("catalogo_precos_orcamento_itens").delete().eq("catalogo_id", resultado.data.catalogoId);
-  if (ids.length > 0) {
-    await supabase.from("catalogo_precos_orcamento_itens").insert(
-      ids.map((orcamentoItemId) => ({ catalogo_id: resultado.data.catalogoId, orcamento_item_id: orcamentoItemId })),
-    );
+    if (error.code === "23505") return { erro: "Ja existe um item com esse nome nesta medicao." };
+    return { erro: "Nao foi possivel atualizar o item e seus vinculos. Tente novamente." };
   }
 
   revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
+  return {};
+}
+
+const esquemaExcluirPrecoCatalogo = z.object({
+  catalogoId: z.string().uuid("Item do catalogo invalido."),
+  medicaoId: z.string().uuid("Medicao invalida."),
+});
+
+export async function excluirPrecoCatalogo(dados: {
+  catalogoId: string;
+  medicaoId: string;
+}): Promise<Resultado> {
+  const negado = await verificarGestor();
+  if (negado) return negado;
+
+  const resultado = esquemaExcluirPrecoCatalogo.safeParse(dados);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
+  }
+
+  const supabase = await createClient();
+  const { data: catalogo } = await supabase
+    .from("catalogo_precos")
+    .select("id")
+    .eq("id", resultado.data.catalogoId)
+    .eq("medicao_id", resultado.data.medicaoId)
+    .maybeSingle();
+  if (!catalogo) return { erro: "Item do catalogo nao encontrado nesta medicao." };
+
+  const { count, error: erroVinculos } = await supabase
+    .from("tarefa_medicoes")
+    .select("id", { count: "exact", head: true })
+    .eq("catalogo_id", resultado.data.catalogoId);
+  if (erroVinculos) return { erro: "Nao foi possivel verificar os vinculos do item." };
+  if ((count ?? 0) > 0) {
+    return { erro: "Nao e possivel excluir um item que possui tarefas medidas. Remova os vinculos das tarefas primeiro." };
+  }
+
+  const { error } = await supabase
+    .from("catalogo_precos")
+    .delete()
+    .eq("id", resultado.data.catalogoId)
+    .eq("medicao_id", resultado.data.medicaoId);
+  if (error) return { erro: "Nao foi possivel excluir o item do catalogo." };
+
+  revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
+  revalidatePath(`/obras/[id]/medicoes`);
   return {};
 }
 
@@ -173,23 +221,15 @@ export async function criarPrecoCatalogo(dados: {
     }
   }
 
-  const { error: erroInsert, data: catalogo } = await supabase.from("catalogo_precos").insert({
-    medicao_id: resultado.data.medicaoId,
-    nome: resultado.data.nome,
-    valor_unitario: resultado.data.valorUnitario,
-    unidade: resultado.data.unidade,
-    criado_por: user?.id ?? null,
-  }).select("id").single();
-
-  if (erroInsert || !catalogo) {
-    return { erro: "Nao foi possivel criar o item do catalogo. Verifique se o nome ja existe." };
-  }
-
-  if (ids.length > 0) {
-    await supabase.from("catalogo_precos_orcamento_itens").insert(
-      ids.map((orcamentoItemId) => ({ catalogo_id: catalogo.id, orcamento_item_id: orcamentoItemId })),
-    );
-  }
+  const { error: erroInsert } = await supabase.rpc("criar_catalogo_com_vinculos", {
+    p_medicao_id: resultado.data.medicaoId,
+    p_nome: resultado.data.nome,
+    p_valor_unitario: resultado.data.valorUnitario,
+    p_unidade: resultado.data.unidade,
+    p_criado_por: user?.id ?? null,
+    p_orcamento_item_ids: ids,
+  });
+  if (erroInsert) return { erro: "Nao foi possivel criar o item e seus vinculos. Verifique os dados e tente novamente." };
 
   revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
   return {};
@@ -208,8 +248,7 @@ const esquemaMedicao = z.object({
 // Salva (upsert) ou remove uma medicao de tarefa.
 // Se quantidade for null ou 0, remove a medicao.
 // Caso contrario, faz upsert na tabela tarefa_medicoes.
-// Nota: nao ha constraint unique em (tarefa_id, catalogo_id), entao
-// verificamos manualmente se ja existe para decidir entre insert/update.
+// A constraint unique em (tarefa_id, catalogo_id) permite um upsert atomico.
 export async function salvarMedicaoTarefa(dados: {
   tarefaId: string;
   catalogoId: string;
@@ -239,6 +278,14 @@ export async function salvarMedicaoTarefa(dados: {
 
   if (!catalogo) return { erro: "Item do catalogo nao encontrado." };
 
+  const [{ data: tarefa }, { data: medicao }] = await Promise.all([
+    supabase.from("tarefas").select("obra_id").eq("id", tarefaId).single(),
+    supabase.from("medicoes").select("obra_id").eq("id", catalogo.medicao_id).single(),
+  ]);
+  if (!tarefa || !medicao || tarefa.obra_id !== medicao.obra_id) {
+    return { erro: "A tarefa e o item do catalogo devem pertencer a mesma obra." };
+  }
+
   // Se quantidade e null ou 0, deletar a medicao
   if (quantidade == null || quantidade === 0) {
     const { error } = await supabase
@@ -255,32 +302,17 @@ export async function salvarMedicaoTarefa(dados: {
     return {};
   }
 
-  // Verificar se ja existe medicao para esta tarefa + catalogo
-  const { data: existente } = await supabase
+  const { error } = await supabase
     .from("tarefa_medicoes")
-    .select("id")
-    .eq("tarefa_id", tarefaId)
-    .eq("catalogo_id", catalogoId)
-    .maybeSingle();
-
-  let error;
-  if (existente) {
-    // Atualizar
-    const { error: updateError } = await supabase
-      .from("tarefa_medicoes")
-      .update({ quantidade, criado_por: user?.id ?? null })
-      .eq("id", existente.id);
-    error = updateError;
-  } else {
-    // Inserir
-    const { error: insertError } = await supabase.from("tarefa_medicoes").insert({
-      tarefa_id: tarefaId,
-      catalogo_id: catalogoId,
-      quantidade,
-      criado_por: user?.id ?? null,
-    });
-    error = insertError;
-  }
+    .upsert(
+      {
+        tarefa_id: tarefaId,
+        catalogo_id: catalogoId,
+        quantidade,
+        criado_por: user?.id ?? null,
+      },
+      { onConflict: "tarefa_id,catalogo_id" },
+    );
 
   if (error) {
     return { erro: "Nao foi possivel salvar a medicao. Tente novamente." };
@@ -516,6 +548,8 @@ export type ItemOrcamentoParaCatalogo = {
   valor_mao_obra: number;
   valor_equipamento: number;
   valor_composicao: number;
+  ativo: boolean;
+  tipo: string;
 };
 
 export type ResultadoBuscaItensOrcamento =
@@ -523,12 +557,14 @@ export type ResultadoBuscaItensOrcamento =
   | { erro: string };
 
 const esquemaBuscarItensOrcamento = z.object({
+  medicaoId: z.string().uuid("Medicao invalida."),
   obraId: z.string().uuid("Obra invalida."),
   termo: z.string().trim().max(100, "Termo de busca muito longo."),
 });
 
 // Busca itens do orcamento da obra para vincular ao catalogo de precos.
 export async function buscarItensOrcamento(dados: {
+  medicaoId: string;
   obraId: string;
   termo: string;
 }): Promise<ResultadoBuscaItensOrcamento> {
@@ -541,13 +577,20 @@ export async function buscarItensOrcamento(dados: {
   }
 
   // Remove caracteres que quebram a sintaxe do filtro .or() do PostgREST.
-  const termo = resultado.data.termo.replace(/[,()"]/g, "");
+  const termo = resultado.data.termo.replace(/[\\%_(),"]/g, (valor) => `\\${valor}`);
 
   const supabase = await createClient();
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .select("obra_id")
+    .eq("id", resultado.data.medicaoId)
+    .eq("obra_id", resultado.data.obraId)
+    .single();
+  if (!medicao) return { erro: "Medicao nao encontrada nesta obra." };
   const { data, error } = await supabase
     .from("orcamento_itens")
     .select(
-      "id, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id, orcamentos!inner(obra_id)",
+      "id, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id, ativo, tipo, orcamentos!inner(obra_id)",
     )
     .eq("orcamentos.obra_id", resultado.data.obraId)
     .eq("ativo", true)
@@ -583,8 +626,10 @@ export async function buscarItensOrcamento(dados: {
     valor_composicao: item.valor_unitario > 0
       ? item.valor_unitario
       : item.quantidade > 0
-        ? item.valor_total / item.quantidade
-        : item.valor_total,
+          ? item.valor_total / item.quantidade
+          : item.valor_total,
+    ativo: item.ativo,
+    tipo: item.tipo,
   })).slice(0, 20);
 
   // Enriquecer com valor de mao de obra via custo_composicoes RPC

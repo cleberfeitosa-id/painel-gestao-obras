@@ -49,6 +49,10 @@ export interface TarefaComDados extends TarefaRow {
   }[];
 }
 
+function escaparBuscaIlike(valor: string): string {
+  return valor.replace(/[\\%_(),]/g, (caractere) => `\\${caractere}`);
+}
+
 async function buscarTarefas(params: Record<string, string | undefined>) {
   const supabase = await createClient();
 
@@ -60,7 +64,85 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
 
   const busca = params.busca?.trim();
   if (busca) {
-    query = query.or(`titulo.ilike.%${busca}%,descricao.ilike.%${busca}%`);
+    const buscaEscapada = escaparBuscaIlike(busca);
+    let consultaItens = supabase
+      .from("orcamento_itens")
+      .select("id, catalogo_precos_orcamento_itens(catalogo_id), orcamentos!inner(obra_id)")
+      .eq("ativo", true)
+      .eq("tipo", "item")
+      .or(`codigo.ilike.%${buscaEscapada}%,descricao.ilike.%${buscaEscapada}%`);
+    if (params.obra) consultaItens = consultaItens.eq("orcamentos.obra_id", params.obra);
+
+    const { data: itensOrcamento, error: erroItensOrcamento } = await consultaItens;
+    if (erroItensOrcamento) {
+      console.error("Erro ao buscar itens orcamentarios para a busca de tarefas:", erroItensOrcamento);
+    }
+    const idsItensOrcamento = (itensOrcamento ?? []).map((item) => item.id);
+    let consultaComposicoes = supabase
+      .from("composicoes")
+      .select("id")
+      .or(`codigo.ilike.%${buscaEscapada}%,nome.ilike.%${buscaEscapada}%`);
+    if (params.obra) consultaComposicoes = consultaComposicoes.eq("obra_id", params.obra);
+    const { data: composicoesEncontradas, error: erroComposicoes } = await consultaComposicoes;
+    if (erroComposicoes && params.obra) {
+      console.error("Erro ao buscar composicoes para a busca de tarefas:", erroComposicoes);
+    }
+    const idsComposicoes = (composicoesEncontradas ?? []).map((composicao) => composicao.id);
+    const { data: itensPorComposicao } = idsComposicoes.length > 0
+      ? await supabase
+          .from("orcamento_itens")
+          .select("id")
+          .in("composicao_id", idsComposicoes)
+          .eq("ativo", true)
+          .eq("tipo", "item")
+      : { data: [] as { id: string }[] };
+    const idsItens = [...new Set([
+      ...idsItensOrcamento,
+      ...(itensPorComposicao ?? []).map((item) => item.id),
+    ])];
+    const { data: vinculosLegados } = idsItens.length > 0
+      ? await supabase.from("catalogo_precos").select("id").in("orcamento_item_id", idsItens)
+      : { data: [] as { id: string }[] };
+    const catalogoIds = (itensOrcamento ?? []).flatMap((item) =>
+      (item.catalogo_precos_orcamento_itens ?? []).map((vinculo) => vinculo.catalogo_id),
+    );
+    catalogoIds.push(...(vinculosLegados ?? []).map((item) => item.id));
+    if (idsItens.length > 0) {
+      const { data: vinculos } = await supabase
+        .from("catalogo_precos_orcamento_itens")
+        .select("catalogo_id")
+        .in("orcamento_item_id", idsItens);
+      catalogoIds.push(...(vinculos ?? []).map((vinculo) => vinculo.catalogo_id));
+    }
+    let idsTarefasPorOrcamento: string[] = [];
+    if (catalogoIds.length > 0) {
+      const idsCatalogo = [...new Set(catalogoIds)];
+      const resultados = await Promise.all(
+        Array.from({ length: Math.ceil(idsCatalogo.length / 500) }, (_, indice) =>
+          supabase
+            .from("tarefa_medicoes")
+            .select("tarefa_id, tarefas!inner(obra_id)")
+            .in("catalogo_id", idsCatalogo.slice(indice * 500, (indice + 1) * 500)),
+        ),
+      );
+      for (const resultado of resultados) {
+        if (resultado.error) {
+          console.error("Erro ao buscar tarefas vinculadas aos itens orcamentarios:", resultado.error);
+          continue;
+        }
+        idsTarefasPorOrcamento.push(
+          ...(resultado.data ?? [])
+            .filter((item) => !params.obra || item.tarefas?.obra_id === params.obra)
+            .map((item) => item.tarefa_id),
+        );
+      }
+      idsTarefasPorOrcamento = [...new Set(idsTarefasPorOrcamento)];
+    }
+    const filtrosBusca = [`titulo.ilike.%${buscaEscapada}%`, `descricao.ilike.%${buscaEscapada}%`];
+    if (idsTarefasPorOrcamento.length > 0) {
+      filtrosBusca.push(`id.in.(${idsTarefasPorOrcamento.join(",")})`);
+    }
+    query = query.or(filtrosBusca.join(","));
   }
   if (params.obra) query = query.eq("obra_id", params.obra);
   if (params.responsavel) query = query.eq("responsavel_id", params.responsavel);

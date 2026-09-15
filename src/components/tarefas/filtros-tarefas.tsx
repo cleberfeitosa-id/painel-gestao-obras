@@ -83,6 +83,7 @@ export function FiltrosTarefas({
         "ordenar",
       ];
       for (const chave of chaves) {
+        if (chave === "medicao" && mudancas.obra !== undefined) continue;
         const valor = mudancas[chave] ?? searchParams.get(chave) ?? "";
         if (valor) params.set(chave, valor);
       }
@@ -114,8 +115,8 @@ export function FiltrosTarefas({
                 aplicar({ busca });
               }
             }}
-            placeholder="Titulo ou descricao"
-            dica="Pressione Enter para buscar."
+            placeholder="Titulo, descricao ou codigo"
+            dica="Pressione Enter para buscar por titulo, descricao ou codigo orcamentario."
           />
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:flex lg:flex-wrap lg:items-end">
