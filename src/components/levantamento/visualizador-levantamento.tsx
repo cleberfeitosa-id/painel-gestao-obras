@@ -445,6 +445,8 @@ export function VisualizadorLevantamento({
       }
       return "sem_circuitos";
     });
+  const [filtroItensAberto, setFiltroItensAberto] = useState(false);
+  const [gruposItensOcultos, setGruposItensOcultos] = useState<string[]>([]);
 
   function alternarExibicaoMedidas(novoModo: ModoExibicaoMedidas) {
     setModoExibicaoMedidas(novoModo);
@@ -914,11 +916,6 @@ export function VisualizadorLevantamento({
     } as Calibracao;
   }, [calibracoes, plantaSelecionadaId, pagina]);
 
-  const resumo = useMemo(
-    () => calcularResumoLevantamento(itens, calibracaoPagina, niveis),
-    [itens, calibracaoPagina, niveis],
-  );
-
   const gruposItens = useMemo(() => {
     const map = new Map<
       string,
@@ -949,6 +946,37 @@ export function VisualizadorLevantamento({
 
     return Array.from(map.values());
   }, [itens]);
+
+  const itensVisiveis = useMemo(
+    () =>
+      itens.filter(
+        (item) => !gruposItensOcultos.includes(`${item.tipo}:::${item.nome}`),
+      ),
+    [gruposItensOcultos, itens],
+  );
+
+  const resumoVisivel = useMemo(
+    () => calcularResumoLevantamento(itensVisiveis, calibracaoPagina, niveis),
+    [itensVisiveis, calibracaoPagina, niveis],
+  );
+
+  function alternarGrupoVisibilidade(chave: string) {
+    if (
+      itemSelecionado &&
+      `${itemSelecionado.tipo}:::${itemSelecionado.nome}` === chave
+    ) {
+      setItemSelecionado(null);
+    }
+    setGruposItensOcultos((prev) =>
+      prev.includes(chave)
+        ? prev.filter((item) => item !== chave)
+        : [...prev, chave],
+    );
+  }
+
+  function mostrarTodosOsGrupos() {
+    setGruposItensOcultos([]);
+  }
 
   async function salvarLevantamentoAtual() {
     if (!podeEditar) return;
@@ -985,6 +1013,8 @@ export function VisualizadorLevantamento({
       setObraSelecionadaId(p.obra_id);
       setPagina(1);
       setItens([]);
+      setGruposItensOcultos([]);
+      setItemSelecionado(null);
       setHistoricoDesfazer([]);
       setHistoricoRefazer([]);
       setLevantamentoId(undefined);
@@ -1555,8 +1585,8 @@ export function VisualizadorLevantamento({
       obraNome: obraAtual?.nome ?? "Obra",
       plantaNome: plantaAtual?.nome ?? "Planta",
       pagina,
-      itens,
-      resumo,
+      itens: itensVisiveis,
+      resumo: resumoVisivel,
       niveis,
       calibracao: calibracaoPagina,
     });
@@ -1655,6 +1685,77 @@ export function VisualizadorLevantamento({
               Relatório PDF
             </Botao>
           </div>
+        </div>
+
+        <div className="border-t border-superficie-100 pt-3">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setFiltroItensAberto((aberto) => !aberto)}
+              className="flex items-center gap-2 text-xs font-semibold text-superficie-700 hover:text-azul-700"
+              aria-expanded={filtroItensAberto}
+            >
+              {filtroItensAberto ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+              <Layers className="h-4 w-4 text-azul-600" />
+              Itens exibidos na planta
+              <span className="rounded-full bg-superficie-100 px-2 py-0.5 text-[10px] font-medium text-superficie-600">
+                {itensVisiveis.length}/{itens.length}
+              </span>
+            </button>
+            {gruposItensOcultos.length > 0 && (
+              <button
+                type="button"
+                onClick={mostrarTodosOsGrupos}
+                className="text-[11px] font-semibold text-azul-700 hover:underline"
+              >
+                Mostrar todos
+              </button>
+            )}
+          </div>
+          {filtroItensAberto && (
+            <div className="mt-2 flex flex-wrap gap-2 rounded-xl border border-superficie-200 bg-superficie-50 p-2.5">
+              {gruposItens.length === 0 ? (
+                <span className="text-xs text-superficie-500">
+                  Nenhum item medido para filtrar.
+                </span>
+              ) : (
+                gruposItens.map((grupo) => {
+                  const visivel = !gruposItensOcultos.includes(grupo.chave);
+                  return (
+                    <button
+                      key={grupo.chave}
+                      type="button"
+                      onClick={() => alternarGrupoVisibilidade(grupo.chave)}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        visivel
+                          ? "border-azul-200 bg-white text-superficie-800"
+                          : "border-superficie-200 bg-superficie-100 text-superficie-400 line-through"
+                      }`}
+                      aria-pressed={visivel}
+                    >
+                      {visivel ? (
+                        <Eye className="h-3.5 w-3.5 text-azul-600" />
+                      ) : (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      )}
+                      <span
+                        className="h-2.5 w-2.5 rounded-full border border-black/20"
+                        style={{ backgroundColor: grupo.cor }}
+                      />
+                      {grupo.nome}
+                      <span className="text-[10px] text-superficie-400">
+                        ({grupo.itens.length})
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
 
         {mensagemSucesso && (
@@ -2530,7 +2631,11 @@ export function VisualizadorLevantamento({
                     <button
                       type="button"
                       disabled={pagina <= 1}
-                      onClick={() => setPagina((p) => Math.max(1, p - 1))}
+                      onClick={() => {
+                        setPagina((p) => Math.max(1, p - 1));
+                        setGruposItensOcultos([]);
+                        setItemSelecionado(null);
+                      }}
                       className="p-0.5 rounded hover:bg-superficie-200 disabled:opacity-30"
                     >
                       <ChevronLeft className="h-4 w-4" />
@@ -2541,9 +2646,11 @@ export function VisualizadorLevantamento({
                     <button
                       type="button"
                       disabled={pagina >= totalPaginas}
-                      onClick={() =>
-                        setPagina((p) => Math.min(totalPaginas, p + 1))
-                      }
+                      onClick={() => {
+                        setPagina((p) => Math.min(totalPaginas, p + 1));
+                        setGruposItensOcultos([]);
+                        setItemSelecionado(null);
+                      }}
                       className="p-0.5 rounded hover:bg-superficie-200 disabled:opacity-30"
                     >
                       <ChevronRight className="h-4 w-4" />
@@ -2758,7 +2865,7 @@ export function VisualizadorLevantamento({
                         );
                       })()}
 
-                      {itens.map((item) => {
+                      {itensVisiveis.map((item) => {
                         if (
                           item.tipo === "distancia" ||
                           item.tipo === "tubulacao_cabo"
@@ -3032,7 +3139,7 @@ export function VisualizadorLevantamento({
                       )}
                     </svg>
 
-                    {itens.map((item) => {
+                    {itensVisiveis.map((item) => {
                       if (item.tipo === "ponto") {
                         const p = item.pontos[0];
                         if (!p) return null;
@@ -3157,7 +3264,7 @@ export function VisualizadorLevantamento({
                   </div>
 
                   <LegendaDinamica
-                    resumo={resumo}
+                    resumo={resumoVisivel}
                     config={configLegenda}
                     aoMudarConfig={setConfigLegenda}
                   />
@@ -3301,8 +3408,8 @@ export function VisualizadorLevantamento({
 
       {modo === "3d" && (
         <Visualizador3D
-          itens={itens}
-          resumo={resumo}
+          itens={itensVisiveis}
+          resumo={resumoVisivel}
           niveis={niveis}
           configLegenda={configLegenda}
           aoMudarConfigLegenda={setConfigLegenda}
@@ -3323,10 +3430,10 @@ export function VisualizadorLevantamento({
                 Total de Elementos
               </span>
               <div className="text-2xl font-bold text-azul-700 mt-1">
-                {resumo.totalGeralElementos} un
+                {resumoVisivel.totalGeralElementos} un
               </div>
               <p className="text-xs text-superficie-500 mt-0.5">
-                Em {resumo.elementos.length} tipos de itens
+                Em {resumoVisivel.elementos.length} tipos de itens
               </p>
             </div>
 
@@ -3335,7 +3442,7 @@ export function VisualizadorLevantamento({
                 Tubulações / Distâncias
               </span>
               <div className="text-2xl font-bold text-cyan-700 mt-1">
-                {formatarMetros(resumo.totalGeralDistancias)}
+                {formatarMetros(resumoVisivel.totalGeralDistancias)}
               </div>
               <p className="text-xs text-superficie-500 mt-0.5">
                 Linhas + descidas verticais
@@ -3347,7 +3454,7 @@ export function VisualizadorLevantamento({
                 Cabos e Fiação
               </span>
               <div className="text-2xl font-bold text-amber-700 mt-1">
-                {formatarMetros(resumo.totalGeralCabos)}
+                {formatarMetros(resumoVisivel.totalGeralCabos)}
               </div>
               <p className="text-xs text-superficie-500 mt-0.5">
                 Soma de fases, neutros, terras, retornos
@@ -3359,10 +3466,10 @@ export function VisualizadorLevantamento({
                 Áreas Medidas
               </span>
               <div className="text-2xl font-bold text-pink-700 mt-1">
-                {formatarMetrosQuadrados(resumo.totalGeralAreas)}
+                {formatarMetrosQuadrados(resumoVisivel.totalGeralAreas)}
               </div>
               <p className="text-xs text-superficie-500 mt-0.5">
-                {resumo.areas.length} polígonos delimitados
+                {resumoVisivel.areas.length} polígonos delimitados
               </p>
             </div>
           </div>
@@ -3382,7 +3489,7 @@ export function VisualizadorLevantamento({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-superficie-100">
-                  {resumo.elementos.map((el) => (
+                  {resumoVisivel.elementos.map((el) => (
                     <tr key={`${el.subtipo}_${el.nivelNome ?? ""}`}>
                       <td className="p-3 flex items-center gap-2 font-medium text-superficie-900">
                         <span
@@ -3400,7 +3507,7 @@ export function VisualizadorLevantamento({
                       </td>
                     </tr>
                   ))}
-                  {resumo.elementos.length === 0 && (
+                  {resumoVisivel.elementos.length === 0 && (
                     <tr>
                       <td
                         colSpan={4}
@@ -3433,7 +3540,7 @@ export function VisualizadorLevantamento({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-superficie-100">
-                  {resumo.cabos.map((c, idx) => (
+                  {resumoVisivel.cabos.map((c, idx) => (
                     <tr key={`${c.circuito}_${c.tipoCabo}_${c.funcao}_${c.fase ?? ""}_${c.corCabo ?? ""}_${idx}`}>
                       <td className="p-3 font-bold text-azul-700">
                         <div className="flex items-center gap-2">
@@ -3488,7 +3595,7 @@ export function VisualizadorLevantamento({
                       </td>
                     </tr>
                   ))}
-                  {resumo.cabos.length === 0 && (
+                  {resumoVisivel.cabos.length === 0 && (
                     <tr>
                       <td
                         colSpan={7}
@@ -3598,8 +3705,8 @@ export function VisualizadorLevantamento({
           plantaNome={plantaAtual.nome}
           modo="levantamento"
           levantamentoId={levantamentoId}
-          itensLevantamento={itens}
-          resumoLevantamento={resumo}
+          itensLevantamento={itensVisiveis}
+          resumoLevantamento={resumoVisivel}
           nomeLevantamento={nomeLevantamento}
         />
       )}
