@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Palette,
 } from "lucide-react";
 import { Modal, Botao } from "@/components/ui";
 import {
@@ -192,6 +193,31 @@ export function ModalExportarPlanta({
             ))}
           </div>
         </div>
+
+        {modo === "planta" && (
+          <div className="space-y-3">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-superficie-600">
+              Aparência das marcações
+            </label>
+            <div className="space-y-3 rounded-xl border border-superficie-200 bg-superficie-50/50 p-3.5">
+              <div>
+                <label className="flex items-center justify-between text-xs text-superficie-800">
+                  <span className="flex items-center gap-1.5"><Palette className="h-3.5 w-3.5 text-azul-600" />Transparência do interior</span>
+                  <span className="font-semibold">{opcoes.transparenciaTarefas}%</span>
+                </label>
+                <input type="range" min="0" max="90" step="5" disabled={exportando} value={opcoes.transparenciaTarefas} onChange={(e) => setOpcoes((prev) => ({ ...prev, transparenciaTarefas: Number(e.target.value) }))} className="mt-1 w-full accent-azul-600" />
+              </div>
+              <div>
+                <label className="flex items-center justify-between text-xs text-superficie-800">
+                  <span>Transparência das bordas</span>
+                  <span className="font-semibold">{opcoes.transparenciaBordas}%</span>
+                </label>
+                <input type="range" min="0" max="90" step="5" disabled={exportando} value={opcoes.transparenciaBordas} onChange={(e) => setOpcoes((prev) => ({ ...prev, transparenciaBordas: Number(e.target.value) }))} className="mt-1 w-full accent-azul-600" />
+              </div>
+              <p className="text-[11px] text-superficie-500">A cor da borda identifica o tipo de tarefa pelo nome; a cor do interior indica o status.</p>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-3">
           <label className="block text-xs font-semibold uppercase tracking-wider text-superficie-600">
