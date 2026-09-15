@@ -219,6 +219,8 @@ export type Database = {
           criado_por: string | null
           criado_em: string
           atualizado_em: string
+          chave_importacao: string | null
+          hash_importacao: string | null
           versao: number
         }
         Insert: {
@@ -233,6 +235,8 @@ export type Database = {
           criado_por?: string | null
           criado_em?: string
           atualizado_em?: string
+          chave_importacao?: string | null
+          hash_importacao?: string | null
           versao?: number
         }
         Update: {
@@ -247,6 +251,8 @@ export type Database = {
           criado_por?: string | null
           criado_em?: string
           atualizado_em?: string
+          chave_importacao?: string | null
+          hash_importacao?: string | null
           versao?: number
         }
         Relationships: []
@@ -1709,6 +1715,10 @@ export type Database = {
       [_ in never]: never
     }
       Functions: {
+      importar_huv_crato: {
+        Args: { p_chave_importacao: string; p_composicoes: Json; p_hash_pacote: string; p_obra_id: string; p_orcamento: Json; p_referencias: Json }
+        Returns: Json
+      }
       compras_por_item_orcamento: {
         Args: { p_obra_id: string }
         Returns: { orcamento_item_id: string; comprado: number }[]
