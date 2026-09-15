@@ -41,6 +41,8 @@ export interface OpcoesExportacaoPlanta {
   incluirItensMedicao: boolean;
   incluirValoresFinanceiros: boolean;
   qualidadeImagens: "otimizada" | "alta";
+  transparenciaTarefas: number;
+  transparenciaBordas: number;
   tarefaIdsFiltro?: string[];
   aoProgresso?: (etapa: string, percentual: number) => void;
 }
@@ -53,6 +55,8 @@ export const OPCOES_EXPORTACAO_PADRAO: OpcoesExportacaoPlanta = {
   incluirItensMedicao: true,
   incluirValoresFinanceiros: false,
   qualidadeImagens: "otimizada",
+  transparenciaTarefas: 0,
+  transparenciaBordas: 0,
 };
 
 const DIMENSOES_FOLHA_PT: Record<TamanhoFolhaPdf, { largura: number; altura: number }> = {
@@ -82,6 +86,107 @@ function hexParaRgba(hex: string, alfa = 1): string {
   const g = (num >> 8) & 255;
   const b = num & 255;
   return `rgba(${r}, ${g}, ${b}, ${alfa})`;
+}
+
+const CORES_TIPO_TAREFA = [
+  "#2563eb", "#7c3aed", "#db2777", "#0891b2", "#ea580c",
+  "#16a34a", "#ca8a04", "#4f46e5", "#be123c", "#0f766e",
+];
+
+function corDoTipoTarefa(nome: string): string {
+  let hash = 0;
+  for (let i = 0; i < nome.length; i += 1) {
+    hash = (hash * 31 + nome.charCodeAt(i)) | 0;
+  }
+  return CORES_TIPO_TAREFA[Math.abs(hash) % CORES_TIPO_TAREFA.length];
+}
+
+function alfaDaTransparencia(transparencia: number): number {
+  return Math.max(0, Math.min(1, 1 - transparencia / 100));
+}
+
+function formatarQuantidadeLegenda(valor: number): string {
+  return valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
+function truncarTextoCanvas(
+  ctx: CanvasRenderingContext2D,
+  texto: string,
+  larguraMaxima: number,
+): string {
+  if (ctx.measureText(texto).width <= larguraMaxima) return texto;
+  let resultado = texto;
+  while (resultado.length > 1 && ctx.measureText(`${resultado}…`).width > larguraMaxima) {
+    resultado = resultado.slice(0, -1);
+  }
+  return `${resultado}…`;
+}
+
+function detalhesDeMediacaoLegenda(
+  tarefa: TarefaExportacaoCompleta,
+  incluirItensMedicao: boolean,
+): string[] {
+  const detalhes: string[] = [];
+  const medicoes = new Map<string, { nome: string; unidade: string; quantidade: number }>();
+
+  if (incluirItensMedicao) {
+    for (const medicao of tarefa.medicoes) {
+      const chave = `${medicao.nome}\u0000${medicao.unidade}`;
+      const atual = medicoes.get(chave) ?? {
+        nome: medicao.nome,
+        unidade: medicao.unidade,
+        quantidade: 0,
+      };
+      atual.quantidade += medicao.quantidade;
+      medicoes.set(chave, atual);
+    }
+  }
+
+  for (const medicao of medicoes.values()) {
+    detalhes.push(
+      `${medicao.nome}: ${formatarQuantidadeLegenda(medicao.quantidade)} ${medicao.unidade}`,
+    );
+  }
+
+  if (tarefa.localizacao_tipo === "distancia") {
+    const detalhe = tarefa.localizacao_detalhe;
+    const comprimentoDireto = detalhe?.comprimento;
+    const comprimentoSegmentos = detalhe?.segmentos?.reduce(
+      (total, segmento) => total + (segmento.comprimento ?? 0), 0) ?? 0;
+    const comprimento = typeof comprimentoDireto === "number" && Number.isFinite(comprimentoDireto) && comprimentoDireto > 0
+      ? comprimentoDireto
+      : comprimentoSegmentos;
+    if (typeof comprimento === "number" && comprimento > 0) {
+      detalhes.push(`Distância: ${formatarMetros(comprimento)}`);
+    }
+  }
+
+  return detalhes;
+}
+
+function tarefaTemGeometriaExportavel(t: TarefaExportacaoCompleta): boolean {
+  if (t.localizacao_tipo === "ponto" || t.localizacao_tipo === "descida") {
+    return t.ponto_x != null && t.ponto_y != null;
+  }
+  if (t.localizacao_tipo === "regiao") {
+    return t.regiao !== null && limitesDaRegiao(t.regiao) !== null;
+  }
+  if (t.localizacao_tipo === "distancia" || t.localizacao_tipo === "area") {
+    return Boolean(
+      t.localizacao_detalhe?.pontos &&
+        t.localizacao_detalhe.pontos.length >= (t.localizacao_tipo === "area" ? 3 : 2),
+    );
+  }
+  if (t.localizacao_tipo === "circuito") {
+    const detalhe = t.localizacao_detalhe as
+      | { pontos?: PontoPdf[]; segmentos?: Array<{ pontos: PontoPdf[] }> }
+      | null;
+    return Boolean(
+      detalhe?.pontos?.length && detalhe.pontos.length >= 2 ||
+      detalhe?.segmentos?.some((segmento) => segmento.pontos.length >= 2),
+    );
+  }
+  return false;
 }
 
 function desenharRetanguloArredondado(
@@ -662,6 +767,8 @@ export async function exportarPlantaIluminadaPdf(
   const tarefasParaExportar = (opcoes.tarefaIdsFiltro && opcoes.tarefaIdsFiltro.length > 0)
     ? tarefas.filter((t) => opcoes.tarefaIdsFiltro?.includes(t.id))
     : tarefas;
+  const alfaInterior = alfaDaTransparencia(opcoes.transparenciaTarefas);
+  const alfaBorda = alfaDaTransparencia(opcoes.transparenciaBordas);
 
   const coordenadasClickA0: {
     tarefaId: string;
@@ -674,7 +781,9 @@ export async function exportarPlantaIluminadaPdf(
 
   // Remover badge de texto e pinos numerados
   tarefasParaExportar.forEach((t) => {
-    const cor = CORES_STATUS_HEX[t.status] ?? "#2563eb";
+    const situacao = situacaoDaTarefa(t);
+    const cor = CORES_STATUS_HEX[situacao] ?? "#2563eb";
+    const corTipo = corDoTipoTarefa(t.titulo);
 
     if (t.localizacao_tipo === "ponto" && t.ponto_x != null && t.ponto_y != null) {
       const pct = pdfParaPercentual(
@@ -688,8 +797,11 @@ export async function exportarPlantaIluminadaPdf(
 
       ctx.beginPath();
       ctx.arc(px, py, 9, 0, Math.PI * 2);
-      ctx.fillStyle = hexParaRgba(cor, 0.6);
+      ctx.fillStyle = hexParaRgba(cor, 0.6 * alfaInterior);
       ctx.fill();
+      ctx.strokeStyle = hexParaRgba(corTipo, alfaBorda);
+      ctx.lineWidth = 3;
+      ctx.stroke();
 
 
       coordenadasClickA0.push({
@@ -717,8 +829,11 @@ export async function exportarPlantaIluminadaPdf(
       const rw = ((maxLeft - minLeft) / 100) * compositeCanvas.width;
       const rh = ((maxTop - minTop) / 100) * compositeCanvas.height;
 
-      ctx.fillStyle = hexParaRgba(cor, 0.4);
+      ctx.fillStyle = hexParaRgba(cor, 0.4 * alfaInterior);
       ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeStyle = hexParaRgba(corTipo, 0.8 * alfaBorda);
+      ctx.lineWidth = 5;
+      ctx.strokeRect(rx, ry, rw, rh);
 
       coordenadasClickA0.push({
         tarefaId: t.id,
@@ -744,8 +859,11 @@ export async function exportarPlantaIluminadaPdf(
           else ctx.lineTo(px, py);
         });
         ctx.closePath();
-        ctx.fillStyle = hexParaRgba(cor, 0.45);
-        ctx.fill();
+         ctx.fillStyle = hexParaRgba(cor, 0.45 * alfaInterior);
+         ctx.fill();
+         ctx.strokeStyle = hexParaRgba(corTipo, alfaBorda);
+         ctx.lineWidth = 3;
+         ctx.stroke();
       }
     } else if (t.localizacao_tipo === "circuito") {
       const segmentos: PontoPdf[][] = [];
@@ -871,8 +989,11 @@ export async function exportarPlantaIluminadaPdf(
               else ctx.lineTo(px, py);
             });
             ctx.closePath();
-            ctx.fillStyle = hexParaRgba(cor, 0.55);
-            ctx.fill();
+             ctx.fillStyle = hexParaRgba(cor, 0.55 * alfaInterior);
+             ctx.fill();
+             ctx.strokeStyle = hexParaRgba(corTipo, alfaBorda);
+             ctx.lineWidth = 3;
+             ctx.stroke();
           }
 
           linhas.forEach((linha, idx) => {
@@ -892,12 +1013,12 @@ export async function exportarPlantaIluminadaPdf(
                 else ctx.lineTo(px, py);
               });
               if (linha.strokeContrast) {
-                ctx.strokeStyle = "rgba(15, 23, 42, 0.7)";
+                 ctx.strokeStyle = hexParaRgba("#0f172a", 0.7 * alfaBorda);
                 ctx.lineWidth = 3;
                 ctx.setLineDash([]);
                 ctx.stroke();
               }
-              ctx.strokeStyle = linha.cor;
+               ctx.strokeStyle = hexParaRgba(linha.cor, alfaBorda);
               ctx.lineWidth = 2;
               ctx.setLineDash(linha.dash || []);
               ctx.stroke();
@@ -920,9 +1041,9 @@ export async function exportarPlantaIluminadaPdf(
         else ctx.lineTo(px, py);
       });
       ctx.closePath();
-      ctx.fillStyle = hexParaRgba(cor, 0.35);
-      ctx.fill();
-      ctx.strokeStyle = hexParaRgba(cor, 0.8);
+       ctx.fillStyle = hexParaRgba(cor, 0.35 * alfaInterior);
+       ctx.fill();
+       ctx.strokeStyle = hexParaRgba(corTipo, 0.8 * alfaBorda);
       ctx.lineWidth = 2;
       ctx.stroke();
     } else if (
@@ -940,10 +1061,113 @@ export async function exportarPlantaIluminadaPdf(
 
       ctx.beginPath();
       ctx.arc(px, py, 9, 0, Math.PI * 2);
-      ctx.fillStyle = hexParaRgba(cor, 0.8);
-      ctx.fill();
+        ctx.fillStyle = hexParaRgba(cor, 0.8 * alfaInterior);
+        ctx.fill();
+       ctx.strokeStyle = hexParaRgba(corTipo, alfaBorda);
+       ctx.lineWidth = 3;
+       ctx.stroke();
     }
   });
+
+  const gruposLegenda = new Map<string, { cor: string; status: Map<string, number> }>();
+  for (const tarefa of tarefasParaExportar.filter(tarefaTemGeometriaExportavel)) {
+    const grupo = gruposLegenda.get(tarefa.titulo) ?? {
+      cor: corDoTipoTarefa(tarefa.titulo),
+      status: new Map<string, number>(),
+    };
+    const situacao = situacaoDaTarefa(tarefa);
+    grupo.status.set(situacao, (grupo.status.get(situacao) ?? 0) + 1);
+    gruposLegenda.set(tarefa.titulo, grupo);
+  }
+
+  const linhasLegenda = Array.from(gruposLegenda.entries()).flatMap(([nome, grupo]) =>
+    Array.from(grupo.status.entries()).map(([situacao, quantidade]) => ({
+      nome,
+      cor: CORES_STATUS_HEX[situacao] ?? "#cbd5e1",
+      corBorda: grupo.cor,
+      situacao,
+      quantidade,
+    })),
+  );
+  const detalhesLegenda = tarefasParaExportar
+    .filter(tarefaTemGeometriaExportavel)
+    .map((tarefa) => ({ tarefa, detalhes: detalhesDeMediacaoLegenda(tarefa, opcoes.incluirItensMedicao) }))
+    .filter((item) => item.detalhes.length > 0);
+  if (linhasLegenda.length > 0) {
+    const margem = 40;
+    const largura = Math.min(920, Math.max(560, compositeCanvas.width * 0.24));
+    const alturaMaxima = Math.max(260, compositeCanvas.height - margem * 2);
+    const linhasStatusDisponiveis = Math.max(1, Math.floor((alturaMaxima - 130) / 34));
+    const linhasStatus = linhasLegenda.slice(0, linhasStatusDisponiveis);
+    const detalhesDisponiveis = Math.max(0, Math.floor((alturaMaxima - 100 - linhasStatus.length * 34) / 28));
+    const detalhesVisiveis = detalhesLegenda.slice(0, detalhesDisponiveis);
+    const totalOcultas = linhasLegenda.length - linhasStatus.length + detalhesLegenda.length - detalhesVisiveis.length;
+    const altura = Math.min(
+      alturaMaxima,
+      100 + linhasStatus.length * 34 + detalhesVisiveis.length * 28 + (totalOcultas > 0 ? 24 : 0),
+    );
+    const x = compositeCanvas.width - largura - margem;
+    const y = margem;
+    ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
+    desenharRetanguloArredondado(ctx, x, y, largura, altura, 14);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = CONFIGURACAO_APLICACAO.corDestaque;
+    ctx.font = "bold 22px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("LEGENDA DE TAREFAS", x + 24, y + 20);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("Borda = tipo · preenchimento = status", x + 24, y + 52);
+    linhasStatus.forEach((linha, index) => {
+      const linhaY = y + 82 + index * 34;
+      ctx.beginPath();
+      ctx.arc(x + 32, linhaY + 8, 8, 0, Math.PI * 2);
+      ctx.fillStyle = hexParaRgba(linha.cor, alfaInterior);
+      ctx.fill();
+      ctx.strokeStyle = hexParaRgba(linha.corBorda, alfaBorda);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "14px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(truncarTextoCanvas(ctx, linha.nome, largura - 260), x + 52, linhaY);
+      ctx.fillStyle = CORES_STATUS_HEX[linha.situacao] ?? "#cbd5e1";
+      ctx.textAlign = "right";
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillText(`${SITUACAO_TAREFA[linha.situacao as keyof typeof SITUACAO_TAREFA]?.rotulo ?? linha.situacao}: ${linha.quantidade}`, x + largura - 24, linhaY);
+    });
+
+    if (detalhesVisiveis.length > 0) {
+      const separadorY = y + 82 + linhasStatus.length * 34 - 8;
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 24, separadorY);
+      ctx.lineTo(x + largura - 24, separadorY);
+      ctx.stroke();
+
+      detalhesVisiveis.forEach(({ tarefa, detalhes }, index) => {
+        const linhaY = y + 82 + linhasStatus.length * 34 + index * 28;
+        ctx.fillStyle = "#cbd5e1";
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(truncarTextoCanvas(ctx, `#${tarefa.numero} ${tarefa.titulo}`, largura - 48), x + 24, linhaY);
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "11px sans-serif";
+        ctx.fillText(truncarTextoCanvas(ctx, detalhes.join(" · "), largura - 48), x + 24, linhaY + 15);
+      });
+    }
+    if (totalOcultas > 0) {
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(`+ ${totalOcultas} item(ns) não exibido(s) por falta de espaço`, x + 24, y + altura - 18);
+    }
+  }
 
 
   notificar("Inicializando documento PDF...", 35);
