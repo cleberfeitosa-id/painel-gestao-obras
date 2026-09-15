@@ -19,7 +19,7 @@ async function carregarEnvLocal() {
       const valor = valorBruto.trim().replace(/^(["'])(.*)\1$/u, "$2");
       process.env[nome] = valor;
     }
-  } catch (erro) {
+  } catch {
     if (erro?.code !== "ENOENT") throw erro;
   }
 }
