@@ -10,7 +10,7 @@ create unique index if not exists idx_orcamentos_obra_chave_importacao
   on public.orcamentos (obra_id, chave_importacao)
   where chave_importacao is not null;
 
-drop function if exists public.importar_huv_crato(uuid, text, jsonb, jsonb, jsonb);
+drop function if exists public.importar_huv_crato(uuid, text, text, jsonb, jsonb, jsonb);
 
 create or replace function public.importar_huv_crato(
   p_obra_id uuid,
