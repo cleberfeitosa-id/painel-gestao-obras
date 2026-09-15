@@ -37,7 +37,17 @@ const formatadorMoeda = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
+const formatadorQuantidade = new Intl.NumberFormat("pt-BR", {
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 0,
+});
+
 export function formatarMoeda(valor: number | null | undefined) {
   if (valor == null || Number.isNaN(valor)) return "—";
   return formatadorMoeda.format(valor);
+}
+
+export function formatarQuantidade(valor: number | null | undefined) {
+  if (valor == null || Number.isNaN(valor)) return "—";
+  return formatadorQuantidade.format(valor);
 }

@@ -12,6 +12,7 @@ import { ListaPagamentos, type ItemPagamento } from "@/components/medicao/lista-
 import { GraficosProgressoMedicao } from "@/components/medicao/graficos-progresso-medicao";
 import type {
   CatalogoPrecoRow,
+  AprovacaoTarefa,
   MedicaoRow,
   PlantaRow,
   PerfilRow,
@@ -20,15 +21,18 @@ import type {
   ComposicaoComponenteRow,
 } from "@/lib/supabase/database.types";
 import type { ItemOrcamentoParaCatalogo } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
+import { buscarResumoDaMedicao } from "@/lib/medicoes/resumo-da-medicao";
 
 export interface TarefaMedicao {
   id: string;
   titulo: string;
   quantidade: number | null;
   status: StatusTarefa;
+  aprovacao: AprovacaoTarefa;
   prazo: string | null;
   planta: { nome: string } | null;
   responsavel: { nome: string } | null;
+  executor: { nome: string } | null;
   catalogoId: string | null;
 }
 
@@ -37,12 +41,20 @@ export interface ItemMedicao {
   nome: string;
   unidade: string;
   valorUnitario: number;
+  valorUnitarioOrcamento: number;
+  valorUnitarioComposicao: number;
   quantidadeTotal: number;
   quantidadeExecutada: number;
   quantidadePendente: number;
   valorTotal: number;
   valorExecutado: number;
   valorContabilizado: number;
+  valorConstrutoraTotal: number;
+  valorConstrutoraExecutado: number;
+  valorConstrutoraPendente: number;
+  valorExecutorTotal: number;
+  valorExecutorExecutado: number;
+  valorExecutorPendente: number;
   valorUnitarioMaoObra: number;
   valorPendente: number;
   pesoPercentual: number;
@@ -69,12 +81,19 @@ interface TarefaComRelacoes {
   id: string;
   titulo: string;
   status: StatusTarefa;
+  aprovacao: AprovacaoTarefa;
   prazo: string | null;
   planta_id: string | null;
   responsavel_id: string | null;
   plantas: { nome: string } | null;
-  perfis: { nome: string } | null;
+   perfis: { nome: string } | null;
+  executor: { nome: string } | null;
+  localizacao_detalhe: Record<string, unknown> | null;
   tarefa_medicoes: (TarefaMedicaoRow & { catalogo_precos: CatalogoPrecoRow })[];
+}
+
+function temFiltrosAtivos(filtros: { planta?: string; responsavel?: string; de?: string; ate?: string }) {
+  return Boolean(filtros.planta || filtros.responsavel || filtros.de || filtros.ate);
 }
 
 function agregarComposicaoCustos(
@@ -123,6 +142,28 @@ function valorUnitarioMaoObraDoItem(
   return Math.round(valor * 100) / 100;
 }
 
+function precoEfetivoDoCatalogo(
+  valorUnitario: number | string | null | undefined,
+): number {
+  return Number(valorUnitario ?? 0);
+}
+
+function precoDoOrcamento(itensOrcamento: ItemOrcamentoParaCatalogo[]): number {
+  const itensAtivos = itensOrcamento
+    .filter((item) => item.ativo && item.tipo === "item")
+  if (itensAtivos.length === 0) return 0;
+  // Um contrato executor pode representar mais de uma linha do orçamento.
+  // O painel financeiro rateia a quantidade igualmente entre os vínculos;
+  // a taxa equivalente é, portanto, a média dos valores unitários vinculados.
+  return itensAtivos.reduce((total, item) => total + Number(item.valor_unitario), 0) / itensAtivos.length;
+}
+
+function precoDaComposicao(itensOrcamento: ItemOrcamentoParaCatalogo[]): number {
+  const itensAtivos = itensOrcamento.filter((item) => item.ativo && item.tipo === "item");
+  if (itensAtivos.length === 0) return 0;
+  return itensAtivos.reduce((total, item) => total + Number(item.valor_composicao), 0) / itensAtivos.length;
+}
+
 async function buscarDados(
   obraId: string,
   medicaoId: string,
@@ -133,11 +174,10 @@ async function buscarDados(
   let consulta = supabase
     .from("tarefas")
     .select(
-      `id, titulo, status, prazo, planta_id, responsavel_id, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome),
+        `id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome),
        tarefa_medicoes(catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
     )
-    .eq("obra_id", obraId)
-    .eq("tarefa_medicoes.catalogo_precos.medicao_id", medicaoId);
+    .eq("obra_id", obraId);
 
   if (filtros.planta) consulta = consulta.eq("planta_id", filtros.planta);
   if (filtros.responsavel) {
@@ -146,12 +186,13 @@ async function buscarDados(
   if (filtros.de) consulta = consulta.gte("prazo", filtros.de);
   if (filtros.ate) consulta = consulta.lte("prazo", filtros.ate);
 
-  const [{ data: medicao }, { data: catalogo }, { data: tarefas }, { data: plantas }, { data: perfis }, { data: pagamentos }] =
+  const [{ data: medicao }, { data: catalogo }, { data: tarefas }, { data: tarefasGlobais }, { data: plantas }, { data: perfis }, { data: pagamentos }] =
     await Promise.all([
       supabase
         .from("medicoes")
         .select("id, obra_id, titulo, valor_contrato")
         .eq("id", medicaoId)
+        .eq("obra_id", obraId)
         .single(),
       supabase
         .from("catalogo_precos")
@@ -159,6 +200,14 @@ async function buscarDados(
         .eq("medicao_id", medicaoId)
         .order("nome"),
       consulta.order("titulo"),
+      supabase
+        .from("tarefas")
+        .select(
+          `id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome),
+           tarefa_medicoes(catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
+        )
+        .eq("obra_id", obraId)
+        .order("titulo"),
       supabase.from("plantas").select("id, nome").eq("obra_id", obraId).order("nome"),
       supabase.from("perfis").select("id, nome").order("nome"),
       supabase
@@ -166,7 +215,47 @@ async function buscarDados(
         .select("id, valor, data_pagamento, descricao")
         .eq("medicao_id", medicaoId)
         .order("data_pagamento", { ascending: false }),
-    ]);
+     ]);
+
+  const catalogoIdsDaMedicao = (catalogo ?? []).map((item) => item.id);
+  const { data: vinculosDiretos } = catalogoIdsDaMedicao.length > 0
+    ? await supabase
+        .from("tarefa_medicoes")
+        .select(
+          "tarefa_id, catalogo_id, quantidade, tarefas!inner(id, obra_id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome)), catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id)",
+        )
+        .in("catalogo_id", catalogoIdsDaMedicao)
+        .eq("tarefas.obra_id", obraId)
+    : { data: [] };
+
+  const anexarVinculosDiretos = (lista: TarefaComRelacoes[]): TarefaComRelacoes[] => {
+    const porId = new Map(lista.map((tarefa) => [tarefa.id, tarefa]));
+    for (const vinculo of vinculosDiretos ?? []) {
+      const tarefa = vinculo.tarefas;
+      if (!tarefa) continue;
+      const existente = porId.get(tarefa.id);
+      const medicao = {
+        id: vinculo.tarefa_id,
+        tarefa_id: vinculo.tarefa_id,
+        catalogo_id: vinculo.catalogo_id,
+        quantidade: vinculo.quantidade,
+        criado_por: null,
+        criado_em: "",
+        catalogo_precos: vinculo.catalogo_precos,
+      } as TarefaMedicaoRow & { catalogo_precos: CatalogoPrecoRow };
+      if (existente) {
+        if (!existente.tarefa_medicoes.some((item) => item.catalogo_id === medicao.catalogo_id)) {
+          existente.tarefa_medicoes.push(medicao);
+        }
+      } else {
+        porId.set(tarefa.id, { ...tarefa, tarefa_medicoes: [medicao] } as TarefaComRelacoes);
+      }
+    }
+    return [...porId.values()];
+  };
+
+  const tarefasComVinculosDiretos = anexarVinculosDiretos((tarefas ?? []) as TarefaComRelacoes[]);
+  const tarefasGlobaisComVinculosDiretos = anexarVinculosDiretos((tarefasGlobais ?? []) as TarefaComRelacoes[]);
 
   const catalogoIds = (catalogo ?? []).map((c) => c.id);
   let vinculosCatalogo: { catalogo_id: string; orcamento_item_id: string }[] = [];
@@ -176,6 +265,21 @@ async function buscarDados(
       .select("catalogo_id, orcamento_item_id")
       .in("catalogo_id", catalogoIds);
     vinculosCatalogo = vinculos ?? [];
+    for (const item of catalogo ?? []) {
+      if (
+        item.orcamento_item_id &&
+        !vinculosCatalogo.some(
+          (vinculo) =>
+            vinculo.catalogo_id === item.id &&
+            vinculo.orcamento_item_id === item.orcamento_item_id,
+        )
+      ) {
+        vinculosCatalogo.push({
+          catalogo_id: item.id,
+          orcamento_item_id: item.orcamento_item_id,
+        });
+      }
+    }
   }
 
   const idsOrcamentoDoCatalogo = [...new Set(vinculosCatalogo.map((v) => v.orcamento_item_id))];
@@ -186,11 +290,13 @@ async function buscarDados(
   const mapComponentesPorItem = new Map<string, ComponenteComposicao[]>();
 
   if (idsOrcamentoDoCatalogo.length > 0) {
-    const { data: dadosItens } = await supabase
+     const { data: dadosItens } = await supabase
       .from("orcamento_itens")
-      .select("id, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id")
+      .select("id, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id, ativo, tipo, orcamentos!inner(obra_id)")
       .in("id", idsOrcamentoDoCatalogo);
-    const itensOrcamento: ItemOrcamentoParaCatalogo[] = (dadosItens ?? []).map((item) => ({
+     const itensOrcamento: ItemOrcamentoParaCatalogo[] = (dadosItens ?? [])
+       .filter((item) => item.orcamentos?.obra_id === medicao?.obra_id)
+       .map((item) => ({
       id: item.id,
       codigo: item.codigo,
       descricao: item.descricao,
@@ -206,7 +312,9 @@ async function buscarDados(
         : item.quantidade > 0
           ? item.valor_total / item.quantidade
           : item.valor_total,
-    }));
+      ativo: item.ativo,
+      tipo: item.tipo,
+       }));
 
     for (const item of itensOrcamento) mapaItens.set(item.id, item);
 
@@ -219,19 +327,103 @@ async function buscarDados(
       mapaItensPorCatalogo.set(v.catalogo_id, atual);
     }
 
-    const composicaoIds = [...new Set(itensOrcamento.map((i) => i.composicao_id).filter((id): id is string => Boolean(id)))];
-    if (composicaoIds.length > 0) {
-      const [{ data: custosPorCat }, { data: composicoes }] = await Promise.all([
-        supabase.rpc("custo_composicoes", { p_obra_id: obraId }),
-        supabase.from("composicoes").select("id, obra_id, codigo, nome, unidade, custo_unitario").eq("obra_id", obraId),
-      ]);
-      const idsComposicoesDaObra = (composicoes ?? []).map((composicao) => composicao.id);
-      const { data: componentes } = idsComposicoesDaObra.length > 0
-        ? await supabase
+     const [{ data: custosPorCat }, { data: composicoes }] = await Promise.all([
+       supabase.rpc("custo_composicoes", { p_obra_id: obraId }),
+       supabase.from("composicoes").select("id, obra_id, codigo, nome, unidade, custo_unitario").eq("obra_id", obraId),
+     ]);
+     const composicoesPorCodigo = new Map<string, string[]>();
+     for (const composicao of composicoes ?? []) {
+       const codigo = composicao.codigo?.trim();
+       if (!codigo) continue;
+       const ids = composicoesPorCodigo.get(codigo) ?? [];
+       ids.push(composicao.id);
+       composicoesPorCodigo.set(codigo, ids);
+     }
+
+     // Alguns itens antigos foram vinculados apenas pelo codigo. Recuperar a
+     // composicao aqui evita que a tela de medicao dependa de uma coluna
+     // relacional que pode estar desatualizada.
+       const composicaoPorId = new Map((composicoes ?? []).map((composicao) => [composicao.id, composicao]));
+       const composicaoIdsDosItens = new Set(
+         itensOrcamento
+           .map((item) => item.composicao_id)
+           .filter((id): id is string => Boolean(id)),
+       );
+       const codigosDosItens = new Set(
+         itensOrcamento
+           .map((item) => item.codigo?.trim())
+           .filter((codigo): codigo is string => Boolean(codigo)),
+       );
+       const idsComposicoesDaObra = (composicoes ?? [])
+         .filter((composicao) => codigosDosItens.has(composicao.codigo?.trim() ?? ""))
+         .map((composicao) => composicao.id);
+       const idsComposicoesParaComponentes = [...new Set([
+         ...composicaoIdsDosItens,
+         ...idsComposicoesDaObra,
+       ])];
+       let componentes: ComposicaoComponenteRow[] = [];
+       if (idsComposicoesParaComponentes.length > 0) {
+        const resultadoComponentes = await supabase
+          .from("composicao_componentes")
+          .select("id, composicao_id, nome, categoria, unidade, quantidade, custo_unitario, codigo, composicao_referencia_id, criado_em")
+           .in("composicao_id", idsComposicoesParaComponentes);
+
+        if (!resultadoComponentes.error) {
+          componentes = resultadoComponentes.data ?? [];
+        } else {
+          // Bases antigas podem ainda nao ter as colunas de referencias
+          // adicionadas na migracao 0020. Os componentes basicos continuam
+          // validos para a decomposicao da medicao.
+          const resultadoLegado = await supabase
             .from("composicao_componentes")
-            .select("id, composicao_id, nome, categoria, unidade, quantidade, custo_unitario, codigo, composicao_referencia_id, criado_em")
-            .in("composicao_id", idsComposicoesDaObra)
-        : { data: [] as ComposicaoComponenteRow[] };
+            .select("id, composicao_id, nome, categoria, unidade, quantidade, custo_unitario, criado_em")
+             .in("composicao_id", idsComposicoesParaComponentes);
+           if (resultadoLegado.error) {
+             console.error(
+               "Erro ao buscar componentes das composicoes:",
+               JSON.stringify({
+                 code: resultadoLegado.error.code,
+                 message: resultadoLegado.error.message,
+                 details: resultadoLegado.error.details,
+                 hint: resultadoLegado.error.hint,
+               }),
+             );
+          } else {
+            componentes = (resultadoLegado.data ?? []).map((componente) => ({
+              ...componente,
+              codigo: null,
+              composicao_referencia_id: null,
+            }));
+          }
+        }
+      }
+
+      const componentesPorComposicao = new Map<string, ComposicaoComponenteRow[]>();
+      for (const componente of componentes ?? []) {
+        const lista = componentesPorComposicao.get(componente.composicao_id) ?? [];
+        lista.push(componente);
+        componentesPorComposicao.set(componente.composicao_id, lista);
+      }
+
+      for (const item of itensOrcamento) {
+        const ids = item.codigo ? composicoesPorCodigo.get(item.codigo.trim()) : undefined;
+        const composicaoAtual = item.composicao_id ? composicaoPorId.get(item.composicao_id) : undefined;
+        const atualTemComponentes = item.composicao_id
+          ? (componentesPorComposicao.get(item.composicao_id)?.length ?? 0) > 0
+          : false;
+        const candidatasComComponentes = (ids ?? []).filter(
+          (id) => (componentesPorComposicao.get(id)?.length ?? 0) > 0,
+        );
+        if (composicaoAtual?.codigo?.trim() === item.codigo?.trim() && atualTemComponentes) continue;
+        item.composicao_id = candidatasComComponentes.length === 1
+          ? candidatasComComponentes[0]
+          : ids?.length === 1
+            ? ids[0]
+            : null;
+      }
+
+      const composicaoIds = [...new Set(itensOrcamento.map((i) => i.composicao_id).filter((id): id is string => Boolean(id)))];
+      if (composicaoIds.length > 0) {
 
       const custosPorComposicao = new Map<string, Record<string, number>>();
       for (const row of custosPorCat ?? []) {
@@ -240,10 +432,21 @@ async function buscarDados(
         atual[row.categoria] = (atual[row.categoria] ?? 0) + row.total;
         custosPorComposicao.set(row.composicao_id, atual);
       }
-      for (const item of itensOrcamento) {
-        if (item.composicao_id) {
-          const custos = custosPorComposicao.get(item.composicao_id) ?? {};
-          mapCustosPorItem.set(item.id, custos);
+       for (const item of itensOrcamento) {
+         if (item.composicao_id) {
+           const custosRpc = custosPorComposicao.get(item.composicao_id) ?? {};
+           const custos = Object.keys(custosRpc).length > 0
+             ? custosRpc
+             : (componentesPorComposicao.get(item.composicao_id) ?? []).reduce<Record<string, number>>(
+                 (acumulado, componente) => {
+                   acumulado[componente.categoria] =
+                     (acumulado[componente.categoria] ?? 0) +
+                     Number(componente.quantidade) * Number(componente.custo_unitario);
+                   return acumulado;
+                 },
+                 {},
+               );
+           mapCustosPorItem.set(item.id, custos);
           item.valor_mao_obra = custos.mao_de_obra ?? 0;
           item.valor_equipamento = custos.equipamento ?? 0;
            const valorComposicao = Object.values(custos).reduce((total, valor) => total + valor, 0);
@@ -251,13 +454,7 @@ async function buscarDados(
         }
       }
 
-      const composicaoIdsConhecidas = new Set((composicoes ?? []).map((composicao) => composicao.id));
-      const componentesPorComposicao = new Map<string, ComposicaoComponenteRow[]>();
-      for (const componente of componentes ?? []) {
-        const lista = componentesPorComposicao.get(componente.composicao_id) ?? [];
-        lista.push(componente);
-        componentesPorComposicao.set(componente.composicao_id, lista);
-      }
+       const composicaoIdsConhecidas = new Set((composicoes ?? []).map((composicao) => composicao.id));
 
       function expandirComposicao(composicaoId: string, fator = 1, visitados = new Set<string>()): ComponenteComposicao[] {
         if (visitados.has(composicaoId)) return [];
@@ -291,7 +488,8 @@ async function buscarDados(
   return {
     medicao: (medicao ?? null) as Pick<MedicaoRow, "id" | "obra_id" | "titulo" | "valor_contrato"> | null,
     catalogo: (catalogo ?? []) as CatalogoPrecoRow[],
-    tarefas: (tarefas ?? []) as TarefaComRelacoes[],
+     tarefas: tarefasComVinculosDiretos,
+     tarefasGlobais: tarefasGlobaisComVinculosDiretos,
     plantas: (plantas ?? []) as Pick<PlantaRow, "id" | "nome">[],
     perfis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
     pagamentos: (pagamentos ?? []) as ItemPagamento[],
@@ -326,13 +524,17 @@ export default async function MedicaoDetalhePage({
     redirect(`/obras/${id}`);
   }
 
-  const { medicao, catalogo, tarefas, plantas, perfis, pagamentos, mapaItensPorCatalogo, mapCustosPorItem, mapComponentesPorItem } =
+  const { medicao, catalogo, tarefas, tarefasGlobais, plantas, perfis, pagamentos, mapaItensPorCatalogo, mapCustosPorItem, mapComponentesPorItem } =
     await buscarDados(id, medicaoId, filtros);
   if (!medicao) notFound();
 
-  const itens = new Map<string, ItemMedicao>();
-  for (const c of catalogo) {
-    const itensOrc = mapaItensPorCatalogo.get(c.id) ?? [];
+  function criarItens(tarefasParaAgregar: TarefaComRelacoes[]) {
+    const itens = new Map<string, ItemMedicao>();
+    for (const c of catalogo) {
+      const itensOrc = mapaItensPorCatalogo.get(c.id) ?? [];
+      const valorUnitarioEfetivo = precoEfetivoDoCatalogo(c.valor_unitario);
+      const valorUnitarioOrcamento = precoDoOrcamento(itensOrc);
+      const valorUnitarioComposicao = precoDaComposicao(itensOrc);
     const valorUnitarioMaoObra = valorUnitarioMaoObraDoItem(
       itensOrc,
       mapCustosPorItem,
@@ -341,17 +543,25 @@ export default async function MedicaoDetalhePage({
       const custos = item.id ? mapCustosPorItem.get(item.id) : undefined;
       return Boolean(item.composicao_id && custos && Object.keys(custos).length > 0);
     });
-    itens.set(c.id, {
+      itens.set(c.id, {
       catalogoId: c.id,
       nome: c.nome,
       unidade: c.unidade,
-      valorUnitario: c.valor_unitario,
+       valorUnitario: valorUnitarioEfetivo,
+       valorUnitarioOrcamento,
+       valorUnitarioComposicao,
       quantidadeTotal: 0,
       quantidadeExecutada: 0,
       quantidadePendente: 0,
-      valorTotal: 0,
-      valorExecutado: 0,
-      valorContabilizado: 0,
+       valorTotal: 0,
+       valorExecutado: 0,
+       valorContabilizado: 0,
+       valorConstrutoraTotal: 0,
+       valorConstrutoraExecutado: 0,
+       valorConstrutoraPendente: 0,
+       valorExecutorTotal: 0,
+       valorExecutorExecutado: 0,
+       valorExecutorPendente: 0,
       valorUnitarioMaoObra,
       valorPendente: 0,
       pesoPercentual: 0,
@@ -362,29 +572,43 @@ export default async function MedicaoDetalhePage({
        composicaoCustos: agregarComposicaoCustos(itensOrc, mapCustosPorItem),
        composicaoComponentes: itensOrc.flatMap((item) => mapComponentesPorItem.get(item.id) ?? []),
        temBaseMaoObra,
-    });
-  }
+      });
+    }
 
-  let valorExecutado = 0;
-  let valorPendente = 0;
-  let valorTotalCadastrado = 0;
+    let valorExecutado = 0;
+    let valorPendente = 0;
+    let valorTotalCadastrado = 0;
+    let valorConstrutoraExecutado = 0;
+    let valorConstrutoraPendente = 0;
+    let valorConstrutoraTotal = 0;
 
-  for (const tarefa of tarefas) {
+    for (const tarefa of tarefasParaAgregar) {
     for (const medicaoTarefa of tarefa.tarefa_medicoes) {
       const catalogoItem = medicaoTarefa.catalogo_precos;
       if (!catalogoItem) continue;
+      // Uma tarefa pode estar vinculada a mais de um boletim. O filtro
+      // aninhado seleciona tarefas, mas nao e o filtro definitivo da relacao.
+      if (catalogoItem.medicao_id !== medicaoId) continue;
 
       const item = itens.get(catalogoItem.id) ?? {
         catalogoId: catalogoItem.id,
         nome: catalogoItem.nome,
         unidade: catalogoItem.unidade,
-        valorUnitario: catalogoItem.valor_unitario,
+          valorUnitario: precoEfetivoDoCatalogo(catalogoItem.valor_unitario),
+          valorUnitarioOrcamento: 0,
+          valorUnitarioComposicao: 0,
         quantidadeTotal: 0,
         quantidadeExecutada: 0,
         quantidadePendente: 0,
-        valorTotal: 0,
-        valorExecutado: 0,
-        valorContabilizado: 0,
+         valorTotal: 0,
+         valorExecutado: 0,
+         valorContabilizado: 0,
+         valorConstrutoraTotal: 0,
+         valorConstrutoraExecutado: 0,
+         valorConstrutoraPendente: 0,
+         valorExecutorTotal: 0,
+         valorExecutorExecutado: 0,
+         valorExecutorPendente: 0,
         valorUnitarioMaoObra: 0,
         valorPendente: 0,
         pesoPercentual: 0,
@@ -399,56 +623,97 @@ export default async function MedicaoDetalhePage({
 
       item.tarefas.push({
         id: tarefa.id,
-        titulo: tarefa.titulo,
-        quantidade: medicaoTarefa.quantidade,
-        status: tarefa.status,
-        prazo: tarefa.prazo,
+         titulo: tarefa.titulo,
+         quantidade: medicaoTarefa.quantidade,
+         status: tarefa.status,
+         aprovacao: tarefa.aprovacao,
+         prazo: tarefa.prazo,
         planta: tarefa.plantas,
-        responsavel: tarefa.perfis,
+         responsavel: tarefa.perfis,
+         executor: tarefa.executor,
         catalogoId: catalogoItem.id,
       });
 
-      const qtd = medicaoTarefa.quantidade ?? 0;
+      const qtd = Number(medicaoTarefa.quantidade ?? 0);
       const valor = qtd * item.valorUnitario;
+      const valorOrcamento = qtd * item.valorUnitarioOrcamento;
       item.quantidadeTotal += qtd;
       item.valorTotal += valor;
+      item.valorConstrutoraTotal += valorOrcamento;
+      item.valorExecutorTotal += valor;
       valorTotalCadastrado += valor;
+      valorConstrutoraTotal += valorOrcamento;
 
-      if (tarefa.status === "concluido") {
+       if (tarefa.status === "concluido" && tarefa.aprovacao === "aprovado") {
         item.quantidadeExecutada += qtd;
         item.valorExecutado += valor;
+        item.valorConstrutoraExecutado += valorOrcamento;
+        item.valorExecutorExecutado += valor;
         item.valorContabilizado += qtd * item.valorUnitarioMaoObra;
         valorExecutado += valor;
+        valorConstrutoraExecutado += valorOrcamento;
       } else {
         item.quantidadePendente += qtd;
         item.valorPendente += valor;
+        item.valorConstrutoraPendente += valorOrcamento;
+        item.valorExecutorPendente += valor;
         valorPendente += valor;
+        valorConstrutoraPendente += valorOrcamento;
       }
 
       itens.set(catalogoItem.id, item);
     }
-  }
+    }
 
-  for (const item of itens.values()) {
+    for (const item of itens.values()) {
     item.pesoPercentual =
-      valorTotalCadastrado > 0 ? (item.valorTotal / valorTotalCadastrado) * 100 : 0;
+      valorConstrutoraTotal > 0 ? (item.valorConstrutoraTotal / valorConstrutoraTotal) * 100 : 0;
     item.progressoPercentual =
-      item.valorTotal > 0 ? (item.valorExecutado / item.valorTotal) * 100 : 0;
+      item.valorConstrutoraTotal > 0
+        ? (item.valorConstrutoraExecutado / item.valorConstrutoraTotal) * 100
+        : 0;
     item.contribuicaoProgresso =
-      valorTotalCadastrado > 0 ? (item.valorExecutado / valorTotalCadastrado) * 100 : 0;
+      valorConstrutoraTotal > 0
+        ? (item.valorConstrutoraExecutado / valorConstrutoraTotal) * 100
+        : 0;
+    }
+
+    return {
+      itens: [...itens.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+      valorExecutado,
+      valorPendente,
+      valorTotalCadastrado,
+      valorConstrutoraTotal,
+      valorConstrutoraExecutado,
+      valorConstrutoraPendente,
+      valorExecutorExecutado: [...itens.values()].reduce((total, item) => total + item.valorExecutorExecutado, 0),
+    };
   }
 
-  const listaItens = [...itens.values()].sort((a, b) =>
-    a.nome.localeCompare(b.nome, "pt-BR"),
-  );
+  const agregadoGlobal = criarItens(tarefasGlobais);
+  const agregadoFiltrado = criarItens(tarefas);
+  const listaItens = temFiltrosAtivos(filtros)
+    ? agregadoFiltrado.itens.filter((item) => item.tarefas.length > 0)
+    : agregadoGlobal.itens;
 
-  const temFiltros = Boolean(
-    filtros.planta || filtros.responsavel || filtros.de || filtros.ate,
-  );
+  const temFiltros = temFiltrosAtivos(filtros);
 
-  const valorPago = pagamentos.reduce((acc, p) => acc + Number(p.valor), 0);
-  const saldoRestante =
-    medicao.valor_contrato != null ? medicao.valor_contrato - valorPago : null;
+  const resumoFonteDaVerdade = await buscarResumoDaMedicao(medicao.id, medicao.obra_id);
+  const valorPago = resumoFonteDaVerdade.pago;
+  const saldoExecutor = resumoFonteDaVerdade.executorExecutado - valorPago;
+  const custosOrcamento = [...agregadoGlobal.itens].reduce<Record<string, number>>((total, item) => {
+    for (const [categoria, valor] of Object.entries(item.composicaoCustos)) {
+      total[categoria] = (total[categoria] ?? 0) + valor;
+    }
+    return total;
+  }, {});
+  const orcamentoClienteTotal = agregadoGlobal.itens.reduce(
+    (total, item) => total + item.orcamentoItens.reduce(
+      (subtotal, orcamentoItem) => subtotal + Number(orcamentoItem.quantidade) * Number(orcamentoItem.valor_unitario),
+      0,
+    ),
+    0,
+  );
 
   return (
     <div className="space-y-6">
@@ -466,97 +731,183 @@ export default async function MedicaoDetalhePage({
           <span className="text-sm text-superficie-500">Medição</span>
         </div>
         <p className="mt-1 text-sm text-superficie-500">
-          Valores unitários do catálogo, quantidades medidas por tarefa e
-          progressão do valor a remunerar.
+           Acompanhe separadamente o orçamento do cliente, o valor medido pela construtora
+           e a remuneração do contrato executor definida no item de medição.
         </p>
       </div>
 
+      <Cartao>
+        <CartaoCabecalho>
+          <CartaoTitulo>Filtros da visualização</CartaoTitulo>
+        </CartaoCabecalho>
+        <CartaoConteudo>
+          <FiltrosMedicao plantas={plantas} responsaveis={perfis} ativos={filtros} />
+        </CartaoConteudo>
+      </Cartao>
+
+      <Cartao className="border-amber-200 bg-amber-50/40">
+        <CartaoCabecalho>
+          <CartaoTitulo>Como interpretar esta medição</CartaoTitulo>
+        </CartaoCabecalho>
+        <CartaoConteudo className="grid gap-3 text-sm text-superficie-700 md:grid-cols-3">
+          <div>
+            <p className="font-semibold text-superficie-900">Orçamento do cliente</p>
+            <p className="mt-1 text-xs">Quantidade e composição previstas, com mão de obra, materiais e equipamentos.</p>
+          </div>
+          <div>
+            <p className="font-semibold text-superficie-900">Medição da construtora</p>
+            <p className="mt-1 text-xs">Quantidade medida × valor unitário do orçamento/composição vinculado.</p>
+          </div>
+          <div>
+            <p className="font-semibold text-superficie-900">Contrato executor</p>
+            <p className="mt-1 text-xs">Quantidade executada × preço negociado no item de medição. O executor identificado na tarefa é apenas uma referência operacional.</p>
+          </div>
+        </CartaoConteudo>
+      </Cartao>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="col-span-full border-b border-azul-100 pb-1 text-sm font-semibold text-azul-700">
+          Contrato executor
+        </div>
         <ValorContrato medicaoId={medicao.id} valorContrato={medicao.valor_contrato} />
+        <div className="col-span-full mt-2 border-b border-superficie-200 pb-1 text-sm font-semibold text-superficie-700">
+          Orçamento e medição da construtora
+        </div>
         <Cartao>
           <CartaoCabecalho>
-            <CartaoTitulo>Valor pago</CartaoTitulo>
+            <CartaoTitulo>Total pago ao executor</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
             <p className="text-2xl font-bold text-emerald-600">
               {formatarMoeda(valorPago)}
             </p>
             <p className="mt-1 text-xs text-superficie-500">
-              Soma dos pagamentos realizados
+              Pagamentos registrados para o contrato executor
             </p>
           </CartaoConteudo>
         </Cartao>
         <Cartao>
           <CartaoCabecalho>
-            <CartaoTitulo>Saldo do contrato</CartaoTitulo>
+            <CartaoTitulo>Saldo do executor</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
             <p
               className={cn(
                 "text-2xl font-bold",
-                saldoRestante == null
-                  ? "text-superficie-900"
-                  : saldoRestante < 0
+                saldoExecutor < 0
                     ? "text-perigo"
                     : "text-azul-600",
               )}
             >
-              {formatarMoeda(saldoRestante)}
+              {formatarMoeda(saldoExecutor)}
             </p>
             <p className="mt-1 text-xs text-superficie-500">
-              {medicao.valor_contrato != null
-                ? "Valor do contrato deduzido o valor pago"
-                : "Defina o valor do contrato para calcular o saldo"}
+              Medição do executor menos pagamentos registrados
             </p>
           </CartaoConteudo>
         </Cartao>
         <Cartao>
           <CartaoCabecalho>
-            <CartaoTitulo>Valor executado</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-emerald-600">
-              {formatarMoeda(valorExecutado)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Soma das tarefas concluídas
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Valor pendente</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-amber-600">
-              {formatarMoeda(valorPendente)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Tarefas ainda não concluídas
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Valor total cadastrado</CartaoTitulo>
+            <CartaoTitulo>Orçamento do cliente</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
             <p className="text-2xl font-bold text-superficie-900">
-              {formatarMoeda(valorTotalCadastrado)}
+              {formatarMoeda(orcamentoClienteTotal)}
             </p>
             <p className="mt-1 text-xs text-superficie-500">
-              Caso todas as tarefas sejam concluídas
+              Soma dos valores orçamentários × quantidades previstas
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        <Cartao>
+          <CartaoCabecalho>
+            <CartaoTitulo>Valor medido executado</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className="text-2xl font-bold text-emerald-600">
+               {formatarMoeda(resumoFonteDaVerdade.construtoraExecutado)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Valor do orçamento × quantidade de tarefas concluídas
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        <Cartao>
+          <CartaoCabecalho>
+            <CartaoTitulo>Medido do executor</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className="text-2xl font-bold text-azul-600">
+               {formatarMoeda(resumoFonteDaVerdade.executorExecutado)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Quantidade executada × preço acordado no contrato executor
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        <Cartao>
+          <CartaoCabecalho>
+            <CartaoTitulo>A medir do executor</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className="text-2xl font-bold text-amber-600">
+               {formatarMoeda(resumoFonteDaVerdade.executorPendente)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Quantidade ainda não concluída × preço do executor
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        {(["mao_de_obra", "material", "equipamento"] as const).map((categoria) => (
+          <Cartao key={categoria}>
+            <CartaoCabecalho>
+              <CartaoTitulo>{categoria === "mao_de_obra" ? "Mão de obra prevista" : categoria === "material" ? "Material previsto" : "Equipamento previsto"}</CartaoTitulo>
+            </CartaoCabecalho>
+            <CartaoConteudo>
+              <p className="text-2xl font-bold text-superficie-900">
+                {formatarMoeda(custosOrcamento[categoria] ?? 0)}
+              </p>
+              <p className="mt-1 text-xs text-superficie-500">
+                Custo previsto nas composições do orçamento
+              </p>
+            </CartaoConteudo>
+          </Cartao>
+        ))}
+        <Cartao>
+          <CartaoCabecalho>
+            <CartaoTitulo>Valor a medir</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className="text-2xl font-bold text-amber-600">
+               {formatarMoeda(resumoFonteDaVerdade.construtoraPendente)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Valor do orçamento × quantidade ainda não concluída
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        <Cartao>
+          <CartaoCabecalho>
+            <CartaoTitulo>Total medido da construtora</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className="text-2xl font-bold text-superficie-900">
+              {formatarMoeda(agregadoGlobal.valorConstrutoraTotal)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Soma dos itens do orçamento para as quantidades cadastradas
             </p>
           </CartaoConteudo>
         </Cartao>
       </div>
 
       <GraficosProgressoMedicao
-        itens={listaItens}
-        valorExecutado={valorExecutado}
-        valorPendente={valorPendente}
-        valorTotalCadastrado={valorTotalCadastrado}
+        itens={agregadoGlobal.itens}
+        valorExecutado={resumoFonteDaVerdade.construtoraExecutado}
+        valorPendente={resumoFonteDaVerdade.construtoraPendente}
+        valorTotalCadastrado={agregadoGlobal.valorConstrutoraTotal}
         valorContrato={medicao.valor_contrato}
+        valorExecutorExecutado={resumoFonteDaVerdade.executorExecutado}
       />
 
       <Cartao>
@@ -579,19 +930,6 @@ export default async function MedicaoDetalhePage({
 
       <Cartao>
         <CartaoCabecalho>
-          <CartaoTitulo>Filtros</CartaoTitulo>
-        </CartaoCabecalho>
-        <CartaoConteudo>
-          <FiltrosMedicao
-            plantas={plantas}
-            responsaveis={perfis}
-            ativos={filtros}
-          />
-        </CartaoConteudo>
-      </Cartao>
-
-      <Cartao>
-        <CartaoCabecalho>
           <div className="flex items-center justify-between">
             <CartaoTitulo>Itens de medição</CartaoTitulo>
             <span className="text-xs text-superficie-500">
@@ -602,6 +940,7 @@ export default async function MedicaoDetalhePage({
         </CartaoCabecalho>
         <CartaoConteudo className="p-0">
           <TabelaMedicao
+            key={`${medicao.id}-${filtros.planta ?? ""}-${filtros.responsavel ?? ""}-${filtros.de ?? ""}-${filtros.ate ?? ""}`}
             medicaoId={medicao.id}
             obraId={medicao.obra_id}
             itens={listaItens}

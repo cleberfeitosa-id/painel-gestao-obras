@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import {
   Botao,
@@ -20,6 +21,7 @@ interface ValorContratoProps {
 }
 
 export function ValorContrato({ medicaoId, valorContrato }: ValorContratoProps) {
+  const router = useRouter();
   const [modalAberto, setModalAberto] = useState(false);
   const [valor, setValor] = useState(
     valorContrato == null ? "" : String(valorContrato),
@@ -47,7 +49,10 @@ export function ValorContrato({ medicaoId, valorContrato }: ValorContratoProps) 
         valorContrato: valorContratoNovo,
       });
       if (resultado.erro) setErro(resultado.erro);
-      else setModalAberto(false);
+      else {
+        setModalAberto(false);
+        router.refresh();
+      }
     });
   }
 
@@ -55,7 +60,7 @@ export function ValorContrato({ medicaoId, valorContrato }: ValorContratoProps) 
     <Cartao>
       <CartaoCabecalho>
         <div className="flex items-center justify-between">
-          <CartaoTitulo>Valor do contrato</CartaoTitulo>
+          <CartaoTitulo>Orçamento do executor</CartaoTitulo>
           <Botao type="button" variante="fantasma" tamanho="sm" onClick={abrir}>
             <Pencil className="h-3.5 w-3.5" />
             Editar
@@ -67,19 +72,19 @@ export function ValorContrato({ medicaoId, valorContrato }: ValorContratoProps) 
           {formatarMoeda(valorContrato)}
         </p>
         <p className="mt-1 text-xs text-superficie-500">
-          Valor total contratado da obra
+          Valor total acordado com o executor
         </p>
       </CartaoConteudo>
 
       <Modal
         aberto={modalAberto}
         aoFechar={() => setModalAberto(false)}
-        titulo="Valor do contrato"
-        descricao="Valor total contratado da obra."
+         titulo="Orçamento do executor"
+         descricao="Valor total acordado com o executor para esta medição."
       >
         <div className="space-y-4">
           <Campo
-            rotulo="Valor do contrato (R$)"
+             rotulo="Orçamento do executor (R$)"
             value={valor}
             onChange={(e) => setValor(e.target.value)}
             placeholder="Ex.: 1500000,00"

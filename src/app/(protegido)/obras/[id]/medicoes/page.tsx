@@ -6,12 +6,19 @@ import { formatarMoeda } from "@/lib/utils";
 import { Cartao, CartaoCabecalho, CartaoTitulo, CartaoConteudo, EstadoVazio } from "@/components/ui";
 import { NovaMedicaoModal } from "@/components/medicao/nova-medicao-modal";
 import type { MedicaoRow } from "@/lib/supabase/database.types";
+import { buscarResumoDaMedicao } from "@/lib/medicoes/resumo-da-medicao";
 
 interface MedicaoComValores extends MedicaoRow {
+  valor_executor_medido: number;
+  valor_executor_executado: number;
+  valor_executor_pendente: number;
+  valor_construtora_executado: number;
+  valor_construtora_pendente: number;
   valor_executado: number;
   valor_pendente: number;
   valor_pago: number;
 }
+
 
 export default async function MedicoesObraPage({
   params,
@@ -46,20 +53,22 @@ export default async function MedicoesObraPage({
     .eq("obra_id", id)
     .order("criado_em", { ascending: false });
 
-  const lista: MedicaoComValores[] = [];
-  for (const medicao of medicoes ?? []) {
-    const [executado, pendente, pago] = await Promise.all([
-      supabase.rpc("valor_executado_medicao", { p_medicao_id: medicao.id }),
-      supabase.rpc("valor_pendente_medicao", { p_medicao_id: medicao.id }),
-      supabase.rpc("valor_pago_medicao", { p_medicao_id: medicao.id }),
-    ]);
-    lista.push({
-      ...medicao,
-      valor_executado: (executado.data as number) ?? 0,
-      valor_pendente: (pendente.data as number) ?? 0,
-      valor_pago: (pago.data as number) ?? 0,
-    });
-  }
+  const lista = await Promise.all(
+    (medicoes ?? []).map(async (medicao): Promise<MedicaoComValores> => {
+      const resumo = await buscarResumoDaMedicao(medicao.id, id);
+      return {
+        ...medicao,
+        valor_executor_medido: resumo.executorMedido,
+        valor_executor_executado: resumo.executorExecutado,
+        valor_executor_pendente: resumo.executorPendente,
+        valor_construtora_executado: resumo.construtoraExecutado,
+        valor_construtora_pendente: resumo.construtoraPendente,
+        valor_executado: resumo.construtoraExecutado,
+        valor_pendente: resumo.construtoraPendente,
+        valor_pago: resumo.pago,
+      };
+    }),
+  );
 
   return (
     <div className="space-y-6">
@@ -79,8 +88,7 @@ export default async function MedicoesObraPage({
           {podeMedir && <NovaMedicaoModal obraId={obra.id} />}
         </div>
         <p className="mt-1 text-sm text-superficie-500">
-          Contratos de medição desta obra. Cada medição possui seu próprio
-          catálogo de preços e valores executados.
+           Orçamentos e medições desta obra, com os valores do cliente e dos contratos executores.
         </p>
       </div>
 
@@ -97,14 +105,11 @@ export default async function MedicoesObraPage({
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {lista.map((medicao) => {
-            const saldo =
-              medicao.valor_contrato != null
-                ? medicao.valor_contrato - medicao.valor_pago
-                : null;
-            const baseMedida = medicao.valor_executado + medicao.valor_pendente;
+            const saldoMedidoExecutor = medicao.valor_executor_executado - medicao.valor_pago;
+            const baseMedida = medicao.valor_construtora_executado + medicao.valor_construtora_pendente;
             const percentualExecutado =
               baseMedida > 0
-                ? Math.round((medicao.valor_executado / baseMedida) * 100)
+                ? Math.round((medicao.valor_construtora_executado / baseMedida) * 100)
                 : 0;
             return (
               <Link key={medicao.id} href={`/obras/${obra.id}/medicoes/${medicao.id}`}>
@@ -114,41 +119,53 @@ export default async function MedicoesObraPage({
                   </CartaoCabecalho>
                   <CartaoConteudo className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-superficie-500">Valor do contrato</span>
+                       <span className="text-sm text-superficie-500">Contrato executor</span>
                       <span className="text-sm font-semibold text-superficie-900">
-                        {formatarMoeda(medicao.valor_contrato)}
+                         {formatarMoeda(medicao.valor_contrato)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-superficie-500">Valor pago</span>
+                        <span className="text-sm text-superficie-500">Total pago ao executor</span>
                       <span className="text-sm font-semibold text-emerald-600">
                         {formatarMoeda(medicao.valor_pago)}
                       </span>
                     </div>
                     {medicao.valor_contrato != null && (
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-superficie-500">Saldo do contrato</span>
+                          <span className="text-sm text-superficie-500">Saldo medido do executor</span>
                         <span className="text-sm font-semibold text-azul-600">
-                          {formatarMoeda(saldo)}
+                           {formatarMoeda(saldoMedidoExecutor)}
                         </span>
                       </div>
                     )}
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-superficie-500">Valor executado</span>
+                        <span className="text-sm text-superficie-500">Medido executor</span>
                       <span className="text-sm font-semibold text-emerald-600">
-                        {formatarMoeda(medicao.valor_executado)}
+                        {formatarMoeda(medicao.valor_executor_executado)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-superficie-500">Valor pendente</span>
+                      <span className="text-sm text-superficie-500">A medir executor</span>
                       <span className="text-sm font-semibold text-amber-600">
-                        {formatarMoeda(medicao.valor_pendente)}
+                        {formatarMoeda(medicao.valor_executor_pendente)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-superficie-500">Medido construtora</span>
+                      <span className="text-sm font-semibold text-emerald-700">
+                        {formatarMoeda(medicao.valor_construtora_executado)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-superficie-500">A medir construtora</span>
+                      <span className="text-sm font-semibold text-amber-700">
+                        {formatarMoeda(medicao.valor_construtora_pendente)}
                       </span>
                     </div>
                     {baseMedida > 0 && (
                       <div className="space-y-1.5 pt-2 border-t border-superficie-100">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-superficie-500">Progresso físico-financeiro</span>
+                           <span className="text-superficie-500">Progresso construtora</span>
                           <span className="font-bold text-emerald-600">
                             {percentualExecutado}%
                           </span>

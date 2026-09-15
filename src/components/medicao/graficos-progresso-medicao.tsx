@@ -20,6 +20,7 @@ interface GraficosProgressoMedicaoProps {
   valorPendente: number;
   valorTotalCadastrado: number;
   valorContrato: number | null;
+  valorExecutorExecutado: number;
 }
 
 const PALETA_CORES = [
@@ -42,14 +43,15 @@ export function GraficosProgressoMedicao({
   valorPendente,
   valorTotalCadastrado,
   valorContrato,
+  valorExecutorExecutado,
 }: GraficosProgressoMedicaoProps) {
   const [itemSelecionadoId, setItemSelecionadoId] = useState<string | null>(null);
   const [visaoAtiva, setVisaoAtiva] = useState<"todos" | "barras" | "donut">("todos");
 
-  const itensComValor = itens.filter((item) => item.valorTotal > 0);
+  const itensComValor = itens.filter((item) => item.valorConstrutoraTotal > 0);
 
   const itensOrdenadosPorPeso = [...itensComValor].sort(
-    (a, b) => b.valorTotal - a.valorTotal,
+    (a, b) => b.valorConstrutoraTotal - a.valorConstrutoraTotal,
   );
 
   const progressoGlobal =
@@ -59,7 +61,7 @@ export function GraficosProgressoMedicao({
 
   const progressoContrato =
     valorContrato && valorContrato > 0
-      ? (valorExecutado / valorContrato) * 100
+       ? (valorExecutorExecutado / valorContrato) * 100
       : null;
 
   const itemAtivo = itemSelecionadoId
@@ -96,11 +98,11 @@ export function GraficosProgressoMedicao({
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-azul-600" />
             <h2 className="text-lg font-bold text-superficie-900">
-              Progresso Físico-Financeiro da Obra
+               Progresso físico-financeiro da medição
             </h2>
           </div>
           <p className="text-xs text-superficie-500">
-            Avanço ponderado pelo valor associado de cada item de medição.
+             Avanço calculado pelo valor medido da construtora em cada item.
           </p>
         </div>
 
@@ -160,13 +162,13 @@ export function GraficosProgressoMedicao({
                 </span>
               </div>
               <p className="mt-2 text-xs text-superficie-500 leading-relaxed">
-                Calculado com base no peso financeiro de cada serviço concluído
-                em relação ao total medido ({formatarMoeda(valorTotalCadastrado)}).
+                   Calculado pelo valor da medição executada em relação ao total
+                 medido da construtora ({formatarMoeda(valorTotalCadastrado)}).
               </p>
 
               {progressoContrato !== null && (
                 <div className="mt-3 pt-3 border-t border-superficie-100 flex items-center justify-between text-xs">
-                  <span className="text-superficie-500">Sobre o contrato:</span>
+                   <span className="text-superficie-500">Sobre o contrato executor:</span>
                   <span className="font-bold text-azul-600">
                     {progressoContrato.toFixed(1)}% executado
                   </span>
@@ -203,19 +205,19 @@ export function GraficosProgressoMedicao({
 
               <div className="grid grid-cols-3 gap-3 pt-2">
                 <div className="rounded-lg bg-emerald-50/70 p-2.5 border border-emerald-100">
-                  <p className="text-[11px] font-medium text-emerald-700">Valor Executado</p>
+                   <p className="text-[11px] font-medium text-emerald-700">Medição executada</p>
                   <p className="text-sm sm:text-base font-bold text-emerald-800">
                     {formatarMoeda(valorExecutado)}
                   </p>
                 </div>
                 <div className="rounded-lg bg-amber-50/70 p-2.5 border border-amber-100">
-                  <p className="text-[11px] font-medium text-amber-700">Valor Pendente</p>
+                   <p className="text-[11px] font-medium text-amber-700">A medir</p>
                   <p className="text-sm sm:text-base font-bold text-amber-800">
                     {formatarMoeda(valorPendente)}
                   </p>
                 </div>
                 <div className="rounded-lg bg-azul-50/70 p-2.5 border border-azul-100">
-                  <p className="text-[11px] font-medium text-azul-700">Base Total Medida</p>
+                   <p className="text-[11px] font-medium text-azul-700">Total da medição</p>
                   <p className="text-sm sm:text-base font-bold text-azul-800">
                     {formatarMoeda(valorTotalCadastrado)}
                   </p>
@@ -233,7 +235,7 @@ export function GraficosProgressoMedicao({
               <div className="flex items-center justify-between">
                 <CartaoTitulo className="text-base flex items-center gap-2">
                   <PieChartIcon className="h-4 w-4 text-azul-600" />
-                  Peso por Valor Associado
+                   Peso por valor da medição
                 </CartaoTitulo>
                 <span className="text-xs text-superficie-500">
                   {itensComValor.length} {itensComValor.length === 1 ? "item" : "itens"}
@@ -320,7 +322,7 @@ export function GraficosProgressoMedicao({
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="font-mono text-superficie-600">
-                          {formatarMoeda(item.valorTotal)}
+                           {formatarMoeda(item.valorConstrutoraTotal)}
                         </span>
                         <span className="rounded bg-superficie-100 px-1.5 py-0.5 text-[10px] font-bold text-superficie-700">
                           {item.pesoPercentual.toFixed(1)}%
@@ -408,14 +410,14 @@ export function GraficosProgressoMedicao({
                           <div className="flex items-center gap-3">
                             <span>
                               Executado:{" "}
-                              <strong className="text-emerald-700">
-                                {formatarMoeda(item.valorExecutado)}
+                               <strong className="text-emerald-700">
+                                 {formatarMoeda(item.valorConstrutoraExecutado)}
                               </strong>
                             </span>
                             <span>
                               Pendente:{" "}
                               <strong className="text-amber-700">
-                                {formatarMoeda(item.valorPendente)}
+                                 {formatarMoeda(item.valorConstrutoraPendente)}
                               </strong>
                             </span>
                             <span className="text-azul-700 font-medium">
@@ -439,7 +441,7 @@ export function GraficosProgressoMedicao({
             <div className="flex items-center justify-between">
               <CartaoTitulo className="text-base flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-azul-600" />
-                Quadro Completo de Avanço e Peso por Item
+                   Quadro completo de avanço por item da medição
               </CartaoTitulo>
               <span className="text-xs text-superficie-500">
                 {itensOrdenadosPorPeso.length} itens cadastrados
@@ -497,21 +499,21 @@ export function GraficosProgressoMedicao({
                           </span>
                         </div>
                         <div>
-                          <span className="text-superficie-500">Valor Total:</span>{" "}
+                           <span className="text-superficie-500">Total medido:</span>{" "}
                           <span className="font-semibold text-superficie-800">
-                            {formatarMoeda(item.valorTotal)}
+                             {formatarMoeda(item.valorConstrutoraTotal)}
                           </span>
                         </div>
                         <div>
-                          <span className="text-emerald-700">Executado:</span>{" "}
+                           <span className="text-emerald-700">Medição executada:</span>{" "}
                           <span className="font-bold text-emerald-800">
-                            {formatarMoeda(item.valorExecutado)}
+                             {formatarMoeda(item.valorConstrutoraExecutado)}
                           </span>
                         </div>
                         <div>
-                          <span className="text-amber-700">Pendente:</span>{" "}
+                           <span className="text-amber-700">A medir:</span>{" "}
                           <span className="font-bold text-amber-800">
-                            {formatarMoeda(item.valorPendente)}
+                             {formatarMoeda(item.valorConstrutoraPendente)}
                           </span>
                         </div>
                       </div>
@@ -529,10 +531,10 @@ export function GraficosProgressoMedicao({
           <div className="flex items-center justify-between">
             <CartaoTitulo className="text-base flex items-center gap-2">
               <Coins className="h-4 w-4 text-azul-600" />
-              Balanço Financeiro por Item de Medição
+                   Balanço da medição por item
             </CartaoTitulo>
             <span className="text-xs text-superficie-500">
-              Impacto no progresso global
+                   Valores da construtora e avanço físico
             </span>
           </div>
         </CartaoCabecalho>
@@ -542,10 +544,10 @@ export function GraficosProgressoMedicao({
               <thead className="bg-superficie-50 text-superficie-600 border-b border-superficie-200">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Item de Medição</th>
-                  <th className="px-4 py-3 font-semibold text-right">Peso no Orçamento</th>
-                  <th className="px-4 py-3 font-semibold text-right">Valor Total</th>
-                  <th className="px-4 py-3 font-semibold text-right">Valor Executado</th>
-                  <th className="px-4 py-3 font-semibold text-right">Valor Pendente</th>
+                   <th className="px-4 py-3 font-semibold text-right">Peso na medição</th>
+                   <th className="px-4 py-3 font-semibold text-right">Total medido</th>
+                   <th className="px-4 py-3 font-semibold text-right">Medido executado</th>
+                   <th className="px-4 py-3 font-semibold text-right">A medir</th>
                   <th className="px-4 py-3 font-semibold text-right">% Item Executado</th>
                   <th className="px-4 py-3 font-semibold text-right">Avanço na Obra</th>
                 </tr>
@@ -566,13 +568,13 @@ export function GraficosProgressoMedicao({
                         {item.pesoPercentual.toFixed(1)}%
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono text-superficie-900">
-                        {formatarMoeda(item.valorTotal)}
+                         {formatarMoeda(item.valorConstrutoraTotal)}
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono font-semibold text-emerald-600">
-                        {formatarMoeda(item.valorExecutado)}
+                         {formatarMoeda(item.valorConstrutoraExecutado)}
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono font-semibold text-amber-600">
-                        {formatarMoeda(item.valorPendente)}
+                         {formatarMoeda(item.valorConstrutoraPendente)}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <span className="inline-flex items-center rounded-full bg-superficie-100 px-2 py-0.5 text-[11px] font-bold text-superficie-800">
@@ -588,7 +590,7 @@ export function GraficosProgressoMedicao({
               </tbody>
               <tfoot className="bg-superficie-100/60 font-semibold text-superficie-900 border-t border-superficie-200">
                 <tr>
-                  <td className="px-4 py-3">Total Consolidado</td>
+                   <td className="px-4 py-3">Total da medição</td>
                   <td className="px-4 py-3 text-right">100,0%</td>
                   <td className="px-4 py-3 text-right font-mono">
                     {formatarMoeda(valorTotalCadastrado)}

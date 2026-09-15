@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Save, Plus, Trash2 } from "lucide-react";
 import {
   Botao,
@@ -17,13 +18,14 @@ import {
   EstadoVazio,
 } from "@/components/ui";
 import { Ruler } from "lucide-react";
-import { formatarMoeda } from "@/lib/utils";
+import { formatarMoeda, formatarQuantidade } from "@/lib/utils";
 import { formatarData } from "@/lib/datas";
 import { STATUS_TAREFA } from "@/lib/domain/rotulos";
 import {
   atualizarPrecoCatalogo,
   buscarItensOrcamento,
   criarPrecoCatalogo,
+  excluirPrecoCatalogo,
   salvarMedicaoTarefa,
 } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
 import type { ItemOrcamentoParaCatalogo } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
@@ -59,13 +61,150 @@ function somarPrevisto(itens: ItemOrcamentoParaCatalogo[]): number {
   return itens.reduce((acc, item) => acc + valorPrevistoDoItem(item), 0);
 }
 
+function escaparCsv(valor: string | number | boolean | null | undefined): string {
+  return `"${String(valor ?? "").replaceAll('"', '""')}"`;
+}
+
+function numeroCsv(valor: number): string {
+  return valor.toFixed(2).replace(".", ",");
+}
+
+function diagnosticoComposicao(item: ItemMedicao): string {
+  if (item.orcamentoItens.length === 0) return "Nenhum item orcamentario vinculado";
+  const semComposicao = item.orcamentoItens.filter((orcamento) => !orcamento.composicao_id);
+  if (semComposicao.length === item.orcamentoItens.length) {
+    return "Itens orcamentarios vinculados sem composicao_id";
+  }
+  if (item.composicaoComponentes.length === 0) {
+    return "Composicao vinculada sem componentes detalhados";
+  }
+  if (Object.keys(item.composicaoCustos).length === 0) {
+    return "Composicao sem custos agregados por categoria";
+  }
+  return "Decomposicao disponivel";
+}
+
+function baixarCsv(itens: ItemMedicao[], medicaoId: string) {
+  const linhas: string[][] = [
+    ["BLOCO", "ITENS"],
+    [
+      "catalogo_id",
+      "item",
+      "unidade",
+      "preco_executor_unitario",
+      "preco_orcamento_unitario",
+      "custo_composicao_unitario",
+      "valor_composicao_item_unitario",
+      "valor_composicao_item_total",
+      "composicao_ids",
+      "composicao_codigos",
+      "composicao_nomes",
+      "categorias_composicao",
+      "componentes_composicao",
+      "diagnostico_composicao",
+      "quantidade_total",
+      "quantidade_executada",
+      "quantidade_a_executar",
+      "valor_construtora_medido",
+      "valor_construtora_executado",
+      "valor_construtora_a_medir",
+      "valor_executor_medido",
+      "valor_executor_executado",
+      "valor_executor_a_medir",
+      "custo_mao_de_obra_previsto",
+      "custo_material_previsto",
+      "custo_equipamento_previsto",
+      "itens_orcamento",
+    ],
+    ...itens.map((item) => [
+      item.catalogoId,
+      item.nome,
+      item.unidade,
+      numeroCsv(item.valorUnitario),
+      numeroCsv(item.valorUnitarioOrcamento),
+      numeroCsv(item.valorUnitarioComposicao),
+      item.orcamentoItens.map((orcamento) => numeroCsv(Number(orcamento.valor_composicao))).join(" | "),
+      item.orcamentoItens.map((orcamento) => numeroCsv(valorPrevistoDoItem(orcamento))).join(" | "),
+      item.orcamentoItens.map((orcamento) => orcamento.composicao_id ?? "").join(" | "),
+      item.orcamentoItens.map((orcamento) => orcamento.codigo ?? "").join(" | "),
+      item.orcamentoItens.map((orcamento) => orcamento.descricao ?? "").join(" | "),
+      Object.entries(item.composicaoCustos)
+        .map(([categoria, valor]) => `${categoria}: ${numeroCsv(valor)}`)
+        .join(" | "),
+      item.composicaoComponentes
+        .map((componente) => `${componente.nome} [${componente.categoria}] qtd=${numeroCsv(componente.quantidade)} unit=${numeroCsv(componente.valorUnitario)} total=${numeroCsv(componente.valorContribuicao)}`)
+        .join(" | "),
+      diagnosticoComposicao(item),
+      numeroCsv(item.quantidadeTotal),
+      numeroCsv(item.quantidadeExecutada),
+      numeroCsv(item.quantidadePendente),
+      numeroCsv(item.valorConstrutoraTotal),
+      numeroCsv(item.valorConstrutoraExecutado),
+      numeroCsv(item.valorConstrutoraPendente),
+      numeroCsv(item.valorExecutorTotal),
+      numeroCsv(item.valorExecutorExecutado),
+      numeroCsv(item.valorExecutorPendente),
+      numeroCsv(item.composicaoCustos.mao_de_obra ?? 0),
+      numeroCsv(item.composicaoCustos.material ?? 0),
+      numeroCsv(item.composicaoCustos.equipamento ?? 0),
+      item.orcamentoItens.map((orcamento) => `${orcamento.codigo ?? ""} - ${orcamento.descricao ?? ""}`).join(" | "),
+    ]),
+    ["", ""],
+    ["BLOCO", "TAREFAS"],
+    [
+      "catalogo_id",
+      "item",
+      "tarefa_id",
+      "tarefa",
+      "quantidade",
+      "status",
+      "aprovacao",
+      "preco_executor_unitario",
+      "preco_orcamento_unitario",
+      "valor_executor",
+      "valor_construtora",
+      "valor_mao_de_obra_previsto",
+      "executor_identificado",
+      "responsavel",
+      "planta",
+    ],
+    ...itens.flatMap((item) => item.tarefas.map((tarefa) => [
+      item.catalogoId,
+      item.nome,
+      tarefa.id,
+      tarefa.titulo,
+      numeroCsv(Number(tarefa.quantidade ?? 0)),
+      tarefa.status,
+      tarefa.aprovacao,
+      numeroCsv(item.valorUnitario),
+      numeroCsv(item.valorUnitarioOrcamento),
+      numeroCsv(Number(tarefa.quantidade ?? 0) * item.valorUnitario),
+      numeroCsv(Number(tarefa.quantidade ?? 0) * item.valorUnitarioOrcamento),
+      numeroCsv(Number(tarefa.quantidade ?? 0) * item.valorUnitarioMaoObra),
+      tarefa.executor?.nome ?? "",
+      tarefa.responsavel?.nome ?? "",
+      tarefa.planta?.nome ?? "",
+    ])),
+  ];
+
+  const conteudo = "\uFEFF" + linhas.map((linha) => linha.map(escaparCsv).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([conteudo], { type: "text/csv;charset=utf-8;" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `medicao-${medicaoId}-itens.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function SeletorItemOrcamento({
   obraId,
+  medicaoId,
   selecionados,
   aoAdicionar,
   aoRemover,
 }: {
   obraId: string;
+  medicaoId: string;
   selecionados: ItemOrcamentoParaCatalogo[];
   aoAdicionar: (item: ItemOrcamentoParaCatalogo) => void;
   aoRemover: (itemId: string) => void;
@@ -83,7 +222,7 @@ function SeletorItemOrcamento({
     if (!termoLimpo) return;
     setBuscando(true);
     setErroBusca(null);
-    const resultado = await buscarItensOrcamento({ obraId, termo: termoLimpo });
+    const resultado = await buscarItensOrcamento({ medicaoId, obraId, termo: termoLimpo });
     if ("erro" in resultado) {
       setErroBusca(resultado.erro);
       setResultados([]);
@@ -110,7 +249,7 @@ function SeletorItemOrcamento({
                 {item.codigo ?? "—"} · {item.descricao ?? "Sem descrição"}
               </span>
               <span className="text-[10px] text-superficie-500">
-                {formatarMoeda(valorUnitarioComposicao(item))}/un · qtd. {item.quantidade} · total {formatarMoeda(valorPrevistoDoItem(item))}
+                {formatarMoeda(valorUnitarioComposicao(item))}/un · qtd. {formatarQuantidade(Number(item.quantidade))} · total {formatarMoeda(valorPrevistoDoItem(item))}
               </span>
               <button
                 type="button"
@@ -193,6 +332,7 @@ function SeletorItemOrcamento({
 }
 
 export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMedicaoProps) {
+  const router = useRouter();
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [precos, setPrecos] = useState<Record<string, { nome: string; valorUnitario: string; unidade: string }>>(
     () =>
@@ -271,6 +411,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
         orcamentoItemId: vinculosOrcamento[item.catalogoId]?.map((i) => i.id).filter(Boolean) as string[] | undefined,
       });
       if (resultado.erro) setErro(resultado.erro);
+      else router.refresh();
     });
   }
 
@@ -279,6 +420,10 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
     const valorBruto =
       quantidades[chave] ??
       (tarefa.quantidade == null ? "" : String(tarefa.quantidade));
+    if (valorBruto.trim() !== "" && parsearNumero(valorBruto) == null) {
+      setErro("Informe uma quantidade valida ou deixe o campo vazio para remover a medicao.");
+      return;
+    }
     const quantidade = parsearNumero(valorBruto);
     setErro(null);
     iniciarTransicao(async () => {
@@ -288,6 +433,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
         quantidade,
       });
       if (resultado.erro) setErro(resultado.erro);
+      else router.refresh();
     });
   }
 
@@ -299,7 +445,11 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
         catalogoId: tarefa.catalogoId!,
         quantidade: null,
       });
-      if (resultado.erro) setErro(resultado.erro);
+       if (resultado.erro) setErro(resultado.erro);
+       else {
+         setQuantidades((atual) => ({ ...atual, [`${tarefa.id}-${tarefa.catalogoId}`]: "" }));
+         router.refresh();
+       }
     });
   }
 
@@ -340,7 +490,18 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
         setErro(resultado.erro);
       } else {
         fecharModalNovoItem();
+        router.refresh();
       }
+    });
+  }
+
+  function excluirItem(item: ItemMedicao) {
+    if (!window.confirm(`Excluir o item "${item.nome}" do catalogo?`)) return;
+    setErro(null);
+    iniciarTransicao(async () => {
+      const resultado = await excluirPrecoCatalogo({ catalogoId: item.catalogoId, medicaoId });
+      if (resultado.erro) setErro(resultado.erro);
+      else router.refresh();
     });
   }
 
@@ -375,26 +536,37 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
           />
         </div>
       ) : (
+        <>
+        <div className="flex justify-end border-b border-borda px-6 py-3">
+          <Botao type="button" variante="contorno" tamanho="sm" onClick={() => baixarCsv(itens, medicaoId)}>
+            Exportar CSV
+          </Botao>
+        </div>
         <Tabela>
           <Cabecalho>
           <LinhaCabecalho>
             <CelulaCabecalho className="w-10" />
             <CelulaCabecalho>Item</CelulaCabecalho>
             <CelulaCabecalho>Unidade</CelulaCabecalho>
-            <CelulaCabecalho>Valor unitário</CelulaCabecalho>
-            <CelulaCabecalho className="text-right" title="Mão de obra prevista = custo unitário da composição × quantidade do orçamento">
-              Orçamento vinculado
+            <CelulaCabecalho title="Preço unitário negociado para o contrato executor deste item">Preço do contrato executor</CelulaCabecalho>
+            <CelulaCabecalho className="text-right" title="Custo previsto da composição = custo unitário dos componentes × quantidade prevista no orçamento">
+              Custo composição
             </CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. total</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. executada</CelulaCabecalho>
-            <CelulaCabecalho className="text-right">Valor total</CelulaCabecalho>
-            <CelulaCabecalho className="text-right" title="Preço unitário do catálogo × quantidade das tarefas concluídas">
-              Cobrado executado
+            <CelulaCabecalho className="text-right" title="Quantidade medida × valor unitário do orçamento/composição vinculado">
+              Total construtora
             </CelulaCabecalho>
-            <CelulaCabecalho className="text-right" title="Custo unitário de mão de obra da composição × quantidade das tarefas concluídas">
-              Custo de mão de obra
+            <CelulaCabecalho className="text-right" title="Preço do orçamento × quantidade das tarefas concluídas">
+              Medido construtora
             </CelulaCabecalho>
-            <CelulaCabecalho className="text-right">Valor pendente</CelulaCabecalho>
+            <CelulaCabecalho className="text-right" title="Preço do contrato executor × quantidade das tarefas concluídas">
+              Medido executor
+            </CelulaCabecalho>
+            <CelulaCabecalho className="text-right" title="Custo previsto de mão de obra da composição correspondente à quantidade concluída; não é pagamento do executor">
+              Custo MO executado
+            </CelulaCabecalho>
+            <CelulaCabecalho className="text-right">A medir construtora</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Ações</CelulaCabecalho>
           </LinhaCabecalho>
         </Cabecalho>
@@ -436,8 +608,9 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                       placeholder="Nome do item"
                       className="w-full min-w-[150px] rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-superficie-900 focus:border-azul-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-azul-500 hover:border-borda"
                     />
-                    <SeletorItemOrcamento
-                      obraId={obraId}
+                      <SeletorItemOrcamento
+                        obraId={obraId}
+                        medicaoId={medicaoId}
                       selecionados={vinculo}
                       aoAdicionar={(itemOrcamento) =>
                         setVinculosOrcamento((atual) => {
@@ -514,7 +687,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                           };
                         })
                       }
-                      placeholder="0,00"
+                      placeholder="Preço acordado"
                       inputMode="decimal"
                       className="w-28 rounded-lg border border-borda px-3 py-1.5 text-sm text-superficie-900 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
                     />
@@ -524,25 +697,29 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                       <div>
                         {item.temBaseMaoObra ? (
                           <p className="font-semibold text-azul-700">
-                            Mão de obra prevista: {formatarMoeda(item.composicaoCustos.mao_de_obra ?? 0)}
+                            Custo unitário da composição: {formatarMoeda(item.valorUnitarioComposicao)}
                           </p>
                         ) : (
-                          <p className="font-medium text-superficie-500">Sem composição de mão de obra</p>
+                          <p className="font-medium text-superficie-500">Decomposição de custos indisponível</p>
                         )}
                         <p className="text-xs text-superficie-500">
                           {vinculo.length}{" "}
                           {vinculo.length === 1 ? "item vinculado" : "itens vinculados"}
                         </p>
-                        <p className="mt-1 text-[10px] leading-tight text-superficie-400">
-                          Orçamento total: {formatarMoeda(somarPrevisto(vinculo))}
-                          {item.composicaoCustos.material != null && (
-                            <> · Material: {formatarMoeda(item.composicaoCustos.material)}</>
-                          )}
-                        </p>
-                        <p className="text-xs text-superficie-500">Cobrado: {formatarMoeda(item.valorTotal)}</p>
-                        <p className="text-xs text-emerald-600">Cobrado executado: {formatarMoeda(item.valorExecutado)}</p>
-                        <p className="text-xs text-azul-600">
-                          Custo de mão de obra executado: {item.temBaseMaoObra ? formatarMoeda(item.valorContabilizado) : "—"}
+                         <p className="mt-1 text-[10px] leading-tight text-superficie-400">
+                           Custo previsto total da composição: {formatarMoeda(somarPrevisto(vinculo))}
+                           {item.composicaoCustos.material != null && (
+                             <> · Material: {formatarMoeda(item.composicaoCustos.material)}</>
+                           )}
+                           {item.composicaoCustos.equipamento != null && (
+                             <> · Equipamento: {formatarMoeda(item.composicaoCustos.equipamento)}</>
+                           )}
+                         </p>
+                        <p className="text-xs text-superficie-500">Medição da construtora: {formatarMoeda(item.valorConstrutoraTotal)}</p>
+                         <p className="text-xs text-emerald-600">Medido construtora executado: {formatarMoeda(item.valorConstrutoraExecutado)}</p>
+                         <p className="text-xs text-azul-600">Medido executor executado: {formatarMoeda(item.valorExecutorExecutado)}</p>
+                         <p className="text-xs text-azul-600">
+                            Custo orçamentário de mão de obra executada: {item.temBaseMaoObra ? formatarMoeda(item.valorContabilizado) : "Indisponível"}
                         </p>
                       </div>
                     ) : (
@@ -550,7 +727,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                     )}
                   </Celula>
                   <Celula className="text-right font-medium text-superficie-900 whitespace-nowrap">
-                    {item.quantidadeTotal}
+                    {formatarQuantidade(item.quantidadeTotal)}
                   </Celula>
                    <Celula className="text-right font-medium whitespace-nowrap">
                      <span
@@ -560,11 +737,11 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                           : "text-superficie-500"
                       }
                     >
-                      {item.quantidadeExecutada}
+                      {formatarQuantidade(item.quantidadeExecutada)}
                      </span>
                    </Celula>
                    <Celula className="text-right font-medium text-superficie-900 whitespace-nowrap">
-                     {formatarMoeda(item.valorTotal)}
+                      {formatarMoeda(item.valorConstrutoraTotal)}
                    </Celula>
                   <Celula className="text-right font-medium whitespace-nowrap">
                     <span
@@ -574,9 +751,14 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                           : "text-superficie-500"
                       }
                      >
-                       {formatarMoeda(item.valorExecutado)}
-                     </span>
-                   </Celula>
+                         {formatarMoeda(item.valorConstrutoraExecutado)}
+                      </span>
+                    </Celula>
+                    <Celula className="text-right font-medium whitespace-nowrap">
+                      <span className={item.valorExecutorExecutado > 0 ? "font-semibold text-azul-600" : "text-superficie-500"}>
+                        {formatarMoeda(item.valorExecutorExecutado)}
+                      </span>
+                    </Celula>
                    <Celula className="text-right font-medium whitespace-nowrap">
                      <span
                        className={
@@ -596,25 +778,37 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                           : "text-superficie-400"
                       }
                     >
-                      {formatarMoeda(item.valorPendente)}
+                          {formatarMoeda(item.valorConstrutoraPendente)}
                     </span>
                   </Celula>
-                  <Celula className="text-right whitespace-nowrap">
-                    <Botao
-                      type="button"
-                      variante="contorno"
-                      tamanho="sm"
-                      onClick={() => salvarPreco(item)}
-                      disabled={pendente}
-                    >
-                      <Save className="h-3.5 w-3.5" />
-                      Salvar
-                    </Botao>
-                  </Celula>
+                   <Celula className="text-right whitespace-nowrap">
+                     <div className="flex justify-end gap-1">
+                       <Botao
+                         type="button"
+                         variante="contorno"
+                         tamanho="sm"
+                         onClick={() => salvarPreco(item)}
+                         disabled={pendente}
+                       >
+                         <Save className="h-3.5 w-3.5" />
+                         Salvar
+                       </Botao>
+                       <Botao
+                         type="button"
+                         variante="fantasma"
+                         tamanho="sm"
+                         onClick={() => excluirItem(item)}
+                         disabled={pendente}
+                         aria-label={`Excluir item ${item.nome}`}
+                       >
+                         <Trash2 className="h-3.5 w-3.5 text-perigo" />
+                       </Botao>
+                     </div>
+                   </Celula>
                 </Linha>
                 {expandido && (
                   <Linha className="bg-superficie-50/60 hover:bg-superficie-50/60">
-                     <Celula colSpan={12} className="p-0">
+                      <Celula colSpan={13} className="p-0">
                       <div className="px-6 py-4">
                         {item.tarefas.length === 0 ? (
                           <p className="text-sm text-superficie-500">
@@ -634,7 +828,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                                       <p className="truncate text-sm font-medium text-superficie-900">
                                         {tarefa.titulo}
                                       </p>
-                                      {tarefa.status === "concluido" ? (
+                                       {tarefa.status === "concluido" && tarefa.aprovacao === "aprovado" ? (
                                         <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
                                           Executado
                                         </span>
@@ -651,9 +845,12 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                                         {STATUS_TAREFA[tarefa.status]?.rotulo}
                                       </Etiqueta>
                                       <span>{tarefa.planta?.nome ?? "Sem planta"}</span>
-                                      <span>
-                                        {tarefa.responsavel?.nome ?? "Sem responsável"}
-                                      </span>
+                                       <span>
+                                         {tarefa.responsavel?.nome ?? "Sem responsável"}
+                                       </span>
+                                       <span title="Identificação operacional; não define o beneficiário financeiro do contrato executor">
+                                         Colaborador identificado: {tarefa.executor?.nome ?? "Não definido"}
+                                       </span>
                                       <span>
                                         {tarefa.prazo
                                           ? `Prazo: ${formatarData(tarefa.prazo)}`
@@ -662,11 +859,11 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                                        {tarefa.quantidade != null && tarefa.quantidade > 0 && (
                                          <>
                                            <span className="font-medium text-superficie-700">
-                                             Subtotal: {formatarMoeda(tarefa.quantidade * item.valorUnitario)}
+                                              Contrato executor: {formatarMoeda(tarefa.quantidade * item.valorUnitario)}
                                            </span>
-                                           {tarefa.status === "concluido" && (
-                                             <span className="font-medium text-azul-600">
-                                                Custo de mão de obra: {formatarMoeda(tarefa.quantidade * item.valorUnitarioMaoObra)}
+                                            {tarefa.status === "concluido" && tarefa.aprovacao === "aprovado" && (
+                                              <span className="font-medium text-azul-600">
+                                                  Custo orçamentário de mão de obra: {formatarMoeda(tarefa.quantidade * item.valorUnitarioMaoObra)}
                                              </span>
                                            )}
                                          </>
@@ -727,7 +924,8 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
             );
           })}
         </Corpo>
-      </Tabela>
+       </Tabela>
+       </>
       )}
 
       {itens.length > 0 && (
@@ -745,7 +943,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
         titulo="Novo item do catálogo"
       >
         <div className="space-y-4">
-          <Campo
+             <Campo
             rotulo="Nome do item"
             value={novoItemForm.nome}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -763,7 +961,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 setNovoItemForm((a) => ({ ...a, valorUnitario: e.target.value }))
               }
-              placeholder="0,00"
+               placeholder="Preço acordado com o executor"
             />
             <Campo
               rotulo="Unidade"
@@ -776,6 +974,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
           </div>
           <SeletorItemOrcamento
             obraId={obraId}
+            medicaoId={medicaoId}
             selecionados={novoItemForm.orcamentoItens}
             aoAdicionar={(item) =>
               setNovoItemForm((a) => ({

@@ -1767,6 +1767,32 @@ export type Database = {
         Args: { p_composicao_id?: string; p_obra_id: string }
         Returns: { composicao_id: string; categoria: string; total: number }[]
       }
+      atualizar_catalogo_com_vinculos: {
+        Args: {
+          p_catalogo_id: string
+          p_medicao_id: string
+          p_nome: string
+          p_valor_unitario: number
+          p_unidade: string
+          p_orcamento_item_ids: string[]
+        }
+        Returns: undefined
+      }
+      criar_catalogo_com_vinculos: {
+        Args: {
+          p_medicao_id: string
+          p_nome: string
+          p_valor_unitario: number
+          p_unidade: string
+          p_criado_por?: string | null
+          p_orcamento_item_ids: string[]
+        }
+        Returns: string
+      }
+      preco_efetivo_catalogo: {
+        Args: { p_catalogo_id: string }
+        Returns: number
+      }
       custo_composicao_por_categoria: {
         Args: { p_obra_id: string; p_orcamento_item_id: string }
         Returns: { categoria: string; total: number }[]
@@ -1844,6 +1870,18 @@ export type Database = {
       valor_pendente_medicao: {
         Args: { p_medicao_id: string }
         Returns: number
+      }
+      resumo_financeiro_medicao: {
+        Args: { p_medicao_id: string }
+        Returns: {
+          quantidade_executada: number
+          quantidade_medida: number
+          quantidade_pendente: number
+          valor_executado: number
+          valor_medido_total: number
+          valor_pago: number
+          valor_pendente: number
+        }[]
       }
       vincular_composicao_item: {
         Args: { p_autor?: string; p_chave_estavel: string; p_composicao_id: string; p_orcamento_id: string }

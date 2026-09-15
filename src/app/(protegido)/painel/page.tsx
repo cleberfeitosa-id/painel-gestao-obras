@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { situacaoPrazo, hojeChave } from "@/lib/datas";
 import { formatarMoeda } from "@/lib/utils";
 import { STATUS_OBRA, PRIORIDADE_TAREFA } from "@/lib/domain/rotulos";
+import { buscarResumoDaMedicao } from "@/lib/medicoes/resumo-da-medicao";
 import {
   Cartao,
   CartaoCabecalho,
@@ -159,13 +160,10 @@ async function buscarDados() {
 
   const medicoesCalculadas: MedicaoResumo[] = await Promise.all(
     medicoesRaw.slice(0, 15).map(async (m) => {
-      const [{ data: vExec }, { data: vPago }] = await Promise.all([
-        supabase.rpc("valor_executado_medicao", { p_medicao_id: m.id }),
-        supabase.rpc("valor_pago_medicao", { p_medicao_id: m.id }),
-      ]);
+      const resumo = await buscarResumoDaMedicao(m.id, m.obra_id);
       const contrato = Number(m.valor_contrato) || 0;
-      const executado = Number(vExec) || 0;
-      const pago = Number(vPago) || 0;
+      const executado = resumo.executorExecutado;
+      const pago = resumo.pago;
 
       somaTotalContrato += contrato;
       somaTotalExecutado += executado;
@@ -434,7 +432,7 @@ export default async function PainelPage() {
               </div>
               <div className="rounded-lg bg-emerald-50/60 p-3 border border-emerald-100">
                 <span className="text-xs text-emerald-700 font-medium block">
-                  Total Executado
+                   Total medido executor
                 </span>
                 <p className="text-lg font-bold text-emerald-900 mt-1">
                   {formatarMoeda(dados.resumoFinanceiroGlobal.totalExecutado)}
@@ -462,7 +460,7 @@ export default async function PainelPage() {
               <div className="flex items-center justify-between text-xs text-superficie-600 mb-1.5">
                 <span>Progresso Financeiro Consolidado</span>
                 <span className="font-semibold text-superficie-900">
-                  {dados.resumoFinanceiroGlobal.percentualExecutado}% Medido · {dados.resumoFinanceiroGlobal.percentualPago}% Quitado
+                  {dados.resumoFinanceiroGlobal.percentualExecutado}% Medido executor · {dados.resumoFinanceiroGlobal.percentualPago}% Quitado
                 </span>
               </div>
               <div className="h-2.5 w-full overflow-hidden rounded-full bg-superficie-100 flex">
