@@ -32,6 +32,9 @@ interface ListaTarefasPlantaProps {
   executores: ExecutorFiltro[];
   filtroSituacao: "todas" | SituacaoTarefa;
   aoMudarSituacao: (valor: "todas" | SituacaoTarefa) => void;
+  nomesTarefasDisponiveis: string[];
+  nomesTarefasSelecionados: string[];
+  aoMudarNomesTarefas: (valores: string[]) => void;
   filtroPrioridade: "todas" | PrioridadeTarefa;
   aoMudarPrioridade: (valor: "todas" | PrioridadeTarefa) => void;
   filtroExecutor: "todos" | "sem" | string;
@@ -54,6 +57,9 @@ export function ListaTarefasPlanta({
   executores,
   filtroSituacao,
   aoMudarSituacao,
+  nomesTarefasDisponiveis,
+  nomesTarefasSelecionados,
+  aoMudarNomesTarefas,
   filtroPrioridade,
   aoMudarPrioridade,
   filtroExecutor,
@@ -70,6 +76,7 @@ export function ListaTarefasPlanta({
 }: ListaTarefasPlantaProps) {
   const temFiltros =
     filtroSituacao !== "todas" ||
+    nomesTarefasSelecionados.length > 0 ||
     filtroPrioridade !== "todas" ||
     filtroExecutor !== "todos" ||
     filtroTag !== "todas" ||
@@ -111,6 +118,55 @@ export function ListaTarefasPlanta({
             ))}
           </Selecao>
         </div>
+
+        {nomesTarefasDisponiveis.length > 0 && (
+          <fieldset className="space-y-2 rounded-lg border border-superficie-200 bg-superficie-50/60 p-3">
+            <legend className="px-1 text-xs font-semibold text-superficie-700">
+              Tipos de tarefa
+            </legend>
+            <div className="grid max-h-48 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
+              {nomesTarefasDisponiveis.map((nome) => {
+                const selecionado = nomesTarefasSelecionados.includes(nome);
+                return (
+                  <label
+                    key={nome}
+                    className="flex min-w-0 cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-xs text-superficie-800 transition-colors hover:bg-white"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selecionado}
+                      onChange={() =>
+                        aoMudarNomesTarefas(
+                          selecionado
+                            ? nomesTarefasSelecionados.filter((item) => item !== nome)
+                            : [...nomesTarefasSelecionados, nome],
+                        )
+                      }
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-superficie-300 accent-azul-600"
+                    />
+                    <span className="min-w-0 break-words">{nome}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-between gap-2 text-[11px] text-superficie-500">
+              <span>
+                {nomesTarefasSelecionados.length === 0
+                  ? "Nenhum filtro de tipo aplicado"
+                  : `${nomesTarefasSelecionados.length} tipo(s) selecionado(s)`}
+              </span>
+              {nomesTarefasSelecionados.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => aoMudarNomesTarefas([])}
+                  className="font-medium text-azul-600 hover:text-azul-700"
+                >
+                  Limpar seleção
+                </button>
+              )}
+            </div>
+          </fieldset>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <Selecao

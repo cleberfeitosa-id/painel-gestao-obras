@@ -43,6 +43,7 @@ interface ModalExportarPlantaProps {
   itensLevantamento?: ItemLevantamento[];
   resumoLevantamento?: ResumoLevantamento;
   nomeLevantamento?: string;
+  tarefaIdsFiltro?: string[];
 }
 
 export function ModalExportarPlanta({
@@ -57,6 +58,7 @@ export function ModalExportarPlanta({
   itensLevantamento = [],
   resumoLevantamento,
   nomeLevantamento = "Levantamento",
+  tarefaIdsFiltro,
 }: ModalExportarPlantaProps) {
   const [opcoes, setOpcoes] = useState<OpcoesExportacaoPlanta>(OPCOES_EXPORTACAO_PADRAO);
   const [exportando, setExportando] = useState(false);
@@ -72,7 +74,7 @@ export function ModalExportarPlanta({
     try {
       if (modo === "levantamento" && resumoLevantamento) {
         setProgresso({ etapa: "Buscando tarefas do levantamento...", pct: 5 });
-        const { tarefas } = await obterDadosCompletosTarefasExportacao(plantaId, pagina);
+        const { tarefas } = await obterDadosCompletosTarefasExportacao(plantaId, pagina, tarefaIdsFiltro);
 
         const blob = await exportarLevantamentoIluminadoPdf(
           urlPdf,
@@ -85,6 +87,7 @@ export function ModalExportarPlanta({
           tarefas,
           {
             ...opcoes,
+            tarefaIdsFiltro,
             aoProgresso: (etapa, pct) => setProgresso({ etapa, pct }),
           },
         );
@@ -96,6 +99,7 @@ export function ModalExportarPlanta({
         const { tarefas, erro: erroTarefas } = await obterDadosCompletosTarefasExportacao(
           plantaId,
           pagina,
+          tarefaIdsFiltro,
         );
 
         if (erroTarefas) {
@@ -110,6 +114,7 @@ export function ModalExportarPlanta({
           tarefas,
           {
             ...opcoes,
+            tarefaIdsFiltro,
             aoProgresso: (etapa, pct) => setProgresso({ etapa, pct }),
           },
         );

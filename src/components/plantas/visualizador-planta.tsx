@@ -461,6 +461,7 @@ export function VisualizadorPlanta({
   } | null>(null);
 
   const [filtroSituacao, setFiltroSituacao] = useState<"todas" | SituacaoTarefa>("todas");
+  const [nomesTarefasSelecionados, setNomesTarefasSelecionados] = useState<string[]>([]);
   const [filtroPrioridade, setFiltroPrioridade] = useState<"todas" | PrioridadeTarefa>("todas");
   const [filtroExecutor, setFiltroExecutor] = useState<"todos" | "sem" | string>("todos");
   const [filtroTag, setFiltroTag] = useState<"todas" | "sem" | string>("todas");
@@ -535,12 +536,25 @@ export function VisualizadorPlanta({
     );
   }, [tarefasPagina]);
 
+  const nomesTarefasDisponiveis = useMemo(() => {
+    const nomes = new Set<string>();
+    for (const tarefa of tarefasPagina) {
+      const nome = tarefa.titulo.trim();
+      if (nome) nomes.add(nome);
+    }
+    return Array.from(nomes).sort((a, b) => a.localeCompare(b));
+  }, [tarefasPagina]);
+
   const tarefasFiltradas = useMemo(() => {
     return tarefasPagina.filter((t) => {
       if (filtroSituacao !== "todas") {
         const sit = situacaoDaTarefa({ status: t.status, aprovacao: t.aprovacao });
         if (sit !== filtroSituacao) return false;
       }
+      if (
+        nomesTarefasSelecionados.length > 0 &&
+        !nomesTarefasSelecionados.includes(t.titulo.trim())
+      ) return false;
       if (filtroPrioridade !== "todas" && t.prioridade !== filtroPrioridade) return false;
       if (filtroExecutor === "sem" && t.executor != null) return false;
       if (filtroExecutor !== "todos" && filtroExecutor !== "sem" && t.executor?.id !== filtroExecutor) return false;
@@ -564,6 +578,7 @@ export function VisualizadorPlanta({
   }, [
     tarefasPagina,
     filtroSituacao,
+    nomesTarefasSelecionados,
     filtroPrioridade,
     filtroExecutor,
     filtroTag,
@@ -589,6 +604,7 @@ export function VisualizadorPlanta({
 
   function trocarPagina(novaPagina: number) {
     setPaginaAtual(novaPagina);
+    setNomesTarefasSelecionados([]);
     setPontosMedicao([]);
     setPontosCalibracao([]);
     setRegiaoAtual(null);
@@ -2337,8 +2353,11 @@ export function VisualizadorPlanta({
           todasTarefasPagina={tarefasPagina}
           paginaAtual={paginaAtual}
           executores={executores}
-          filtroSituacao={filtroSituacao}
-          aoMudarSituacao={setFiltroSituacao}
+           filtroSituacao={filtroSituacao}
+           aoMudarSituacao={setFiltroSituacao}
+           nomesTarefasDisponiveis={nomesTarefasDisponiveis}
+           nomesTarefasSelecionados={nomesTarefasSelecionados}
+           aoMudarNomesTarefas={setNomesTarefasSelecionados}
           filtroPrioridade={filtroPrioridade}
           aoMudarPrioridade={setFiltroPrioridade}
           filtroExecutor={filtroExecutor}
@@ -2383,9 +2402,10 @@ export function VisualizadorPlanta({
           pagina={paginaAtual}
           plantaId={planta.id}
           obraNome={obraNome}
-          plantaNome={planta.nome}
-          modo="planta"
-        />
+           plantaNome={planta.nome}
+           modo="planta"
+           tarefaIdsFiltro={tarefasFiltradas.map((tarefa) => tarefa.id)}
+         />
       )}
     </div>
   );
