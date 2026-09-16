@@ -10,10 +10,14 @@ import {
   popGraphicsState,
   concatTransformationMatrix,
   degrees,
+  rgb,
+  LineCapStyle,
 } from "pdf-lib";
 import {
   corredorDaPolilinha,
   deslocarPolilinha,
+  faixasDeSegmentos,
+  polilinhaComFaixas,
   limitesDaRegiao,
   pdfParaPercentual,
 } from "@/lib/pdf/coordenadas";
@@ -27,6 +31,7 @@ import { CONFIGURACAO_APLICACAO } from "@/lib/configuracao-aplicacao";
 import {
   formatarMetros,
   formatarMetrosQuadrados,
+  obterCondutoresVisuais,
   obterNomeCorCabo,
   rotuloCondutor,
 } from "@/lib/levantamento/calculos";
@@ -35,6 +40,7 @@ import type { TarefaExportacaoCompleta } from "@/app/(protegido)/obras/[id]/plan
 import type {
   ItemLevantamento,
   ResumoLevantamento,
+  ConfigLegenda,
 } from "@/lib/levantamento/tipos";
 import type {
   FiguraPlanta,
@@ -55,6 +61,7 @@ export interface OpcoesExportacaoPlanta {
   transparenciaBordas: number;
   tarefaIdsFiltro?: string[];
   aoProgresso?: (etapa: string, percentual: number) => void;
+  configLegenda?: ConfigLegenda;
 }
 
 export const OPCOES_EXPORTACAO_PADRAO: OpcoesExportacaoPlanta = {
@@ -133,6 +140,75 @@ function desenharPaginaVetorial(
   page.pushOperators(popGraphicsState());
 }
 
+function caminhoSvgPdf(
+  pontos: PontoPdf[],
+  dimensoes: DimensoesPaginaPdf,
+  largura: number,
+  altura: number,
+  fechado = false,
+) {
+  const caminho = pontos.map((ponto, indice) => {
+    const percentual = pdfParaPercentual(ponto, dimensoes.largura, dimensoes.altura);
+    const x = (percentual.esquerda / 100) * largura;
+    const y = (percentual.topo / 100) * altura;
+    return `${indice === 0 ? "M" : "L"} ${x} ${y}`;
+  }).join(" ");
+  return fechado ? `${caminho} Z` : caminho;
+}
+
+function desenharTracadosVetoriais(
+  page: PDFPage,
+  itens: ItemLevantamento[],
+  dimensoes: DimensoesPaginaPdf,
+  largura: number,
+  altura: number,
+) {
+  const lineares = itens.filter((item) => (item.tipo === "distancia" || item.tipo === "tubulacao_cabo") && item.pontos.length >= 2);
+  const faixas = faixasDeSegmentos(lineares, 18);
+  for (const item of lineares) {
+    const pontosBase = polilinhaComFaixas(item.pontos, faixas, item.id);
+    const meta = item.metadadosCabo;
+    if (!meta) {
+      page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura), {
+        y: altura,
+        borderColor: hexParaRgb(item.cor),
+        borderWidth: 2.5,
+        borderLineCap: LineCapStyle.Round,
+      });
+      continue;
+    }
+    page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura), {
+      y: altura,
+      borderColor: hexParaRgb(meta.cor || item.cor),
+      borderWidth: 18,
+      borderOpacity: 0.3,
+      borderLineCap: LineCapStyle.Round,
+    });
+    const condutores = obterCondutoresVisuais(meta);
+    const gap = Math.max(3, 5 * (condutores.length > 3 ? 0.8 : 1));
+    condutores.forEach((condutor, indice) => {
+      const deslocamento = (indice - (condutores.length - 1) / 2) * gap;
+      const pontos = deslocarPolilinha(pontosBase, deslocamento);
+      const cor = condutor.corCabo || item.cor;
+      page.drawSvgPath(caminhoSvgPdf(pontos, dimensoes, largura, altura), {
+        y: altura,
+        borderColor: hexParaRgb(cor),
+        borderWidth: 2.5,
+        borderDashArray: condutor.funcao === "neutro" ? [7, 4] : condutor.funcao === "terra" ? [3, 3] : condutor.funcao === "retorno" ? [5, 3] : undefined,
+        borderLineCap: LineCapStyle.Round,
+      });
+    });
+  }
+  for (const item of itens.filter((valor) => valor.tipo === "area" && valor.pontos.length >= 3)) {
+    page.drawSvgPath(caminhoSvgPdf(item.pontos, dimensoes, largura, altura, true), {
+      color: hexParaRgb(item.cor),
+      opacity: 0.22,
+      borderColor: hexParaRgb(item.cor),
+      borderWidth: 2,
+    });
+  }
+}
+
 const CORES_STATUS_HEX: Record<string, string> = {
   pendente: "#94a3b8",
   em_execucao: "#f59e0b",
@@ -151,6 +227,15 @@ function hexParaRgba(hex: string, alfa = 1): string {
   const g = (num >> 8) & 255;
   const b = num & 255;
   return `rgba(${r}, ${g}, ${b}, ${alfa})`;
+}
+
+function hexParaRgb(hex: string) {
+  const normalizado = hex.replace("#", "");
+  const valor = normalizado.length === 3
+    ? normalizado.split("").map((caractere) => caractere + caractere).join("")
+    : normalizado;
+  const numero = Number.parseInt(valor, 16);
+  return rgb(((numero >> 16) & 255) / 255, ((numero >> 8) & 255) / 255, (numero & 255) / 255);
 }
 
 const CORES_TIPO_TAREFA = [
@@ -1575,43 +1660,35 @@ export async function exportarLevantamentoIluminadoPdf(
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(String(it.numero), px, py);
-    } else if (it.tipo === "distancia" || it.tipo === "tubulacao_cabo") {
-      if (it.pontos.length >= 2) {
-        ctx.beginPath();
-        it.pontos.forEach((p, idx) => {
-          const pct = pdfParaPercentual(p, dimensoesPdf.largura, dimensoesPdf.altura);
-          const px = (pct.esquerda / 100) * compositeCanvas.width;
-          const py = (pct.topo / 100) * compositeCanvas.height;
-          if (idx === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        });
-
-        ctx.strokeStyle = cor;
-        ctx.lineWidth = 6;
-        ctx.lineCap = "round";
-        ctx.stroke();
-      }
-    } else if (it.tipo === "area" && it.pontos.length >= 3) {
+    } else if (it.tipo === "descida_subida" && it.pontos.length > 0) {
+      const p = it.pontos[0];
+      const pct = pdfParaPercentual(p, dimensoesPdf.largura, dimensoesPdf.altura);
+      const px = (pct.esquerda / 100) * compositeCanvas.width;
+      const py = (pct.topo / 100) * compositeCanvas.height;
       ctx.beginPath();
-      it.pontos.forEach((p, idx) => {
-        const pct = pdfParaPercentual(p, dimensoesPdf.largura, dimensoesPdf.altura);
-        const px = (pct.esquerda / 100) * compositeCanvas.width;
-        const py = (pct.topo / 100) * compositeCanvas.height;
-        if (idx === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      });
-      ctx.closePath();
-
-      ctx.fillStyle = hexParaRgba(cor, 0.3);
+      ctx.arc(px, py, 30, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
       ctx.fill();
-
-      ctx.strokeStyle = cor;
-      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(px, py, 22, 0, Math.PI * 2);
+      ctx.fillStyle = cor;
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 3;
       ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 15px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("↕", px, py);
     }
   });
 
-  const painelX = 40;
+  const configLegenda = opcoes.configLegenda;
+  const legendaVisivel = configLegenda?.visivel !== false;
+  const painelX = configLegenda?.posicao.endsWith("e")
+    ? compositeCanvas.width - 640
+    : 40;
   const painelLargura = 600;
   const paddingPainel = 20;
   const raioPainel = 12;
@@ -1621,26 +1698,34 @@ export async function exportarLevantamentoIluminadoPdf(
   const totalSecaoAltura = 30;
   const swatchRaio = 9;
   const swatchGap = 14;
+  const fatorFonte = (configLegenda?.tamanhoFonte ?? 13) / 13;
 
   let alturaNecessaria = cabecalhoAltura + paddingPainel * 2;
   const secoesComItens: string[] = [];
 
   if (resumo.elementos.length > 0) {
     secoesComItens.push("elementos");
-    alturaNecessaria += tituloSecaoAltura + resumo.elementos.length * linhaAltura + totalSecaoAltura;
+    alturaNecessaria += (tituloSecaoAltura + resumo.elementos.length * linhaAltura + totalSecaoAltura) * fatorFonte;
   }
-  if (resumo.distancias.length > 0 || resumo.descidasSubidas.length > 0) {
+  if (resumo.distancias.length > 0) {
     secoesComItens.push("distancias");
-    const qtdItensDist = resumo.distancias.length + resumo.descidasSubidas.length;
-    alturaNecessaria += tituloSecaoAltura + qtdItensDist * linhaAltura + totalSecaoAltura;
+    alturaNecessaria += (tituloSecaoAltura + resumo.distancias.length * linhaAltura + totalSecaoAltura) * fatorFonte;
+  }
+  if (resumo.descidasSubidas.length > 0) {
+    secoesComItens.push("descidas");
+    alturaNecessaria += (tituloSecaoAltura + resumo.descidasSubidas.length * linhaAltura + totalSecaoAltura) * fatorFonte;
   }
   if (resumo.cabos.length > 0) {
     secoesComItens.push("cabos");
-    alturaNecessaria += tituloSecaoAltura + resumo.cabos.length * linhaAltura + totalSecaoAltura;
+    alturaNecessaria += (tituloSecaoAltura + resumo.cabos.length * linhaAltura * 1.3 + totalSecaoAltura) * fatorFonte;
+  }
+  if (resumo.cabosPorTipo.length > 0) {
+    secoesComItens.push("cabosPorTipo");
+    alturaNecessaria += (tituloSecaoAltura + resumo.cabosPorTipo.length * linhaAltura + totalSecaoAltura) * fatorFonte;
   }
   if (resumo.areas.length > 0) {
     secoesComItens.push("areas");
-    alturaNecessaria += tituloSecaoAltura + resumo.areas.length * linhaAltura + totalSecaoAltura;
+    alturaNecessaria += (tituloSecaoAltura + resumo.areas.length * linhaAltura + totalSecaoAltura) * fatorFonte;
   }
 
   if (secoesComItens.length === 0) {
@@ -1654,10 +1739,18 @@ export async function exportarLevantamentoIluminadoPdf(
     alturaNecessaria = maxAlturaPainel;
   }
 
-  const painelY = compositeCanvas.height - alturaNecessaria - 40;
+  const painelY = configLegenda?.posicao.startsWith("n")
+    ? 40
+    : compositeCanvas.height - alturaNecessaria - 40;
   const painelAltura = alturaNecessaria;
 
-  ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
+  if (!legendaVisivel) {
+    ctx.globalAlpha = 0;
+  }
+
+  ctx.fillStyle = configLegenda
+    ? hexParaRgba(configLegenda.corFundo, configLegenda.opacidade / 255)
+    : "rgba(15, 23, 42, 0.94)";
   desenharRetanguloArredondado(ctx, painelX, painelY, painelLargura, painelAltura, raioPainel);
   ctx.fill();
 
@@ -1667,10 +1760,10 @@ export async function exportarLevantamentoIluminadoPdf(
 
   let yAtual = painelY + paddingPainel;
 
-  const fonteCabecalho = Math.round(18 * escalaFonte);
-  const fonteTitulo = Math.round(20 * escalaFonte);
-  const fonteCorpo = Math.round(14 * escalaFonte);
-  const fontePequena = Math.round(12 * escalaFonte);
+  const fonteCabecalho = Math.round(18 * escalaFonte * fatorFonte);
+  const fonteTitulo = Math.round(20 * escalaFonte * fatorFonte);
+  const fonteCorpo = Math.round(14 * escalaFonte * fatorFonte);
+  const fontePequena = Math.round(12 * escalaFonte * fatorFonte);
   const linhaAlturaEsc = Math.round(linhaAltura * escalaFonte);
   const tituloSecaoAlturaEsc = Math.round(tituloSecaoAltura * escalaFonte);
   const totalSecaoAlturaEsc = Math.round(totalSecaoAltura * escalaFonte);
@@ -1678,14 +1771,15 @@ export async function exportarLevantamentoIluminadoPdf(
   const swatchGapEsc = Math.round(swatchGap * escalaFonte);
   const paddingPainelEsc = Math.round(paddingPainel * escalaFonte);
 
-  ctx.fillStyle = CONFIGURACAO_APLICACAO.corDestaque;
+  const corTextoLegenda = configLegenda?.corTexto ?? "#ffffff";
+  ctx.fillStyle = corTextoLegenda;
   ctx.font = `bold ${fonteCabecalho}px sans-serif`;
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   ctx.fillText(CONFIGURACAO_APLICACAO.nomeEmpresa.toUpperCase(), painelX + paddingPainelEsc, yAtual);
   yAtual += Math.round(28 * escalaFonte);
 
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = corTextoLegenda;
   ctx.font = `bold ${fonteTitulo}px sans-serif`;
   ctx.fillText(`LEVANTAMENTO: ${nomeLevantamento.toUpperCase()}`, painelX + paddingPainelEsc, yAtual);
   yAtual += Math.round(30 * escalaFonte);
@@ -1746,8 +1840,8 @@ export async function exportarLevantamentoIluminadoPdf(
     yAtual += totalSecaoAlturaEsc;
   }
 
-  const temDistancias = resumo.distancias.length > 0 || resumo.descidasSubidas.length > 0;
-  if (temDistancias && verificarEspaco(tituloSecaoAlturaEsc + (resumo.distancias.length + resumo.descidasSubidas.length) * linhaAlturaEsc + totalSecaoAlturaEsc)) {
+  const temDistancias = resumo.distancias.length > 0;
+  if (temDistancias && verificarEspaco(tituloSecaoAlturaEsc + resumo.distancias.length * linhaAlturaEsc + totalSecaoAlturaEsc)) {
     ctx.fillStyle = "#ffffff";
     ctx.font = `bold ${fonteCorpo}px sans-serif`;
     ctx.textAlign = "left";
@@ -1771,6 +1865,24 @@ export async function exportarLevantamentoIluminadoPdf(
       yAtual += linhaAlturaEsc;
     }
 
+    ctx.fillStyle = "#22d3ee";
+    ctx.font = `bold ${fontePequena}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("Total:", xTexto, yAtual + Math.round(16 * escalaFonte));
+    ctx.textAlign = "right";
+    ctx.fillText(formatarMetros(resumo.totalGeralDistancias), xDireita, yAtual + Math.round(16 * escalaFonte));
+    yAtual += totalSecaoAlturaEsc;
+  }
+
+  if (resumo.descidasSubidas.length > 0 && verificarEspaco(tituloSecaoAlturaEsc + resumo.descidasSubidas.length * linhaAlturaEsc + totalSecaoAlturaEsc)) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${fonteCorpo}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("DESCIDAS / SUBIDAS VERTICAIS", xTexto, yAtual);
+    ctx.textAlign = "right";
+    ctx.fillText(formatarMetros(resumo.totalGeralDescidasSubidas), xDireita, yAtual);
+    yAtual += tituloSecaoAlturaEsc;
+    ctx.font = `${fontePequena}px sans-serif`;
     for (const desc of resumo.descidasSubidas) {
       if (!verificarEspaco(linhaAlturaEsc)) break;
       desenharSwatch(xSwatch, yAtual + linhaAlturaEsc / 2, desc.cor);
@@ -1782,13 +1894,12 @@ export async function exportarLevantamentoIluminadoPdf(
       ctx.fillText(formatarMetros(desc.alturaTotal), xDireita, yAtual + Math.round(16 * escalaFonte));
       yAtual += linhaAlturaEsc;
     }
-
-    ctx.fillStyle = "#22d3ee";
+    ctx.fillStyle = "#c084fc";
     ctx.font = `bold ${fontePequena}px sans-serif`;
     ctx.textAlign = "left";
     ctx.fillText("Total:", xTexto, yAtual + Math.round(16 * escalaFonte));
     ctx.textAlign = "right";
-    ctx.fillText(formatarMetros(resumo.totalGeralDistancias), xDireita, yAtual + Math.round(16 * escalaFonte));
+    ctx.fillText(formatarMetros(resumo.totalGeralDescidasSubidas), xDireita, yAtual + Math.round(16 * escalaFonte));
     yAtual += totalSecaoAlturaEsc;
   }
 
@@ -1835,6 +1946,33 @@ export async function exportarLevantamentoIluminadoPdf(
     yAtual += totalSecaoAlturaEsc;
   }
 
+  if (resumo.cabosPorTipo.length > 0 && verificarEspaco(tituloSecaoAlturaEsc + resumo.cabosPorTipo.length * linhaAlturaEsc + totalSecaoAlturaEsc)) {
+    ctx.fillStyle = corTextoLegenda;
+    ctx.font = `bold ${fonteCorpo}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("TOTAIS DE CABOS POR COR E BITOLA", xTexto, yAtual);
+    yAtual += tituloSecaoAlturaEsc;
+    ctx.font = `${fontePequena}px sans-serif`;
+    for (const c of resumo.cabosPorTipo) {
+      if (!verificarEspaco(linhaAlturaEsc)) break;
+      if (c.corCabo) desenharSwatch(xSwatch, yAtual + linhaAlturaEsc / 2, c.corCabo);
+      ctx.fillStyle = corTextoLegenda;
+      ctx.textAlign = "left";
+      const bitola = c.secaoMm2 ? ` · ${c.secaoMm2} mm²` : " · bitola não informada";
+      ctx.fillText(`${c.tipoCabo}${bitola} · ${rotuloCondutor(c.funcao)} · ${obterNomeCorCabo(c.corCabo)}`, xTexto, yAtual + Math.round(16 * escalaFonte));
+      ctx.textAlign = "right";
+      ctx.fillText(formatarMetros(c.comprimentoTotal), xDireita, yAtual + Math.round(16 * escalaFonte));
+      yAtual += linhaAlturaEsc;
+    }
+    ctx.fillStyle = corTextoLegenda;
+    ctx.font = `bold ${fontePequena}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("Total de cabos:", xTexto, yAtual + Math.round(16 * escalaFonte));
+    ctx.textAlign = "right";
+    ctx.fillText(formatarMetros(resumo.totalGeralCabos), xDireita, yAtual + Math.round(16 * escalaFonte));
+    yAtual += totalSecaoAlturaEsc;
+  }
+
   if (resumo.areas.length > 0 && verificarEspaco(tituloSecaoAlturaEsc + resumo.areas.length * linhaAlturaEsc + totalSecaoAlturaEsc)) {
     ctx.fillStyle = "#ffffff";
     ctx.font = `bold ${fonteCorpo}px sans-serif`;
@@ -1875,6 +2013,8 @@ export async function exportarLevantamentoIluminadoPdf(
     ctx.fillText("Nenhuma marcação no levantamento.", painelX + painelLargura / 2, yAtual + linhaAlturaEsc / 2);
   }
 
+  ctx.globalAlpha = 1;
+
   notificar("Inicializando documento PDF...", 40);
   const pdfDoc = await PDFDocument.create();
   const sourcePdfBytes = await fetch(urlPdf).then((response) => response.arrayBuffer());
@@ -1890,6 +2030,7 @@ export async function exportarLevantamentoIluminadoPdf(
   const embeddedSourcePage = await pdfDoc.embedPage(sourcePage);
 
   desenharPaginaVetorial(a0Page, embeddedSourcePage, dimensoesFonte, a0Width, a0Height);
+  desenharTracadosVetoriais(a0Page, itens, dimensoesFonte, a0Width, a0Height);
 
   const compositeDataUrl = compositeCanvas.toDataURL("image/png");
   const compositeBytes = await fetch(compositeDataUrl).then((r) => r.arrayBuffer());
