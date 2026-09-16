@@ -37,6 +37,7 @@ type MedicaoExportacao = Pick<TarefaMedicaoRow, "id" | "tarefa_id" | "quantidade
 
 async function verificarGestor(): Promise<{ erro: string } | null> {
   const supabase = await createClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -329,7 +330,11 @@ export async function obterDadosCompletosTarefasExportacao(
 }> {
   const supabase = await createClient();
 
-  let consulta = supabase
+  if (tarefaIdsFiltro && tarefaIdsFiltro.length === 0) {
+    return { tarefas: [] };
+  }
+
+  const consulta = supabase
     .from("tarefas")
     .select(
       "id, titulo, descricao, status, prioridade, aprovacao, prazo, criado_em, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, localizacao_detalhe, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome), supervisor:perfis!tarefas_supervisor_id_fkey(nome), tags_tarefa(id, nome)",
@@ -338,10 +343,6 @@ export async function obterDadosCompletosTarefasExportacao(
     .eq("pagina", pagina)
     .order("criado_em", { ascending: true });
 
-  if (tarefaIdsFiltro && tarefaIdsFiltro.length > 0) {
-    consulta = consulta.in("id", tarefaIdsFiltro);
-  }
-
   const { data: tarefasDb, error } = await consulta;
 
   if (error || !tarefasDb) {
@@ -349,11 +350,16 @@ export async function obterDadosCompletosTarefasExportacao(
     return { tarefas: [], erro: "Não foi possível carregar as tarefas." };
   }
 
-  if (tarefasDb.length === 0) {
+  const idsSelecionados = tarefaIdsFiltro ? new Set(tarefaIdsFiltro) : null;
+  const tarefasSelecionadas = idsSelecionados
+    ? tarefasDb.filter((tarefa) => idsSelecionados.has(tarefa.id))
+    : tarefasDb;
+
+  if (tarefasSelecionadas.length === 0) {
     return { tarefas: [] };
   }
 
-  const tarefaIds = tarefasDb.map((t) => t.id);
+  const tarefaIds = tarefasSelecionadas.map((t) => t.id);
 
   const TAMANHO_BLOCO = 50;
   
@@ -420,19 +426,22 @@ export async function obterDadosCompletosTarefasExportacao(
 
   const totaisMedicao = new Map<string, number>();
   if (medicaoIdsUnicos.length > 0) {
-    const { data: todasMedicoesDaObra } = await supabase
-      .from("tarefa_medicoes")
-      .select("quantidade, catalogo_precos!inner(valor_unitario, medicao_id)")
-      .in("catalogo_precos.medicao_id", medicaoIdsUnicos);
+    for (let i = 0; i < medicaoIdsUnicos.length; i += TAMANHO_BLOCO) {
+      const bloco = medicaoIdsUnicos.slice(i, i + TAMANHO_BLOCO);
+      const { data: todasMedicoesDaObra } = await supabase
+        .from("tarefa_medicoes")
+        .select("quantidade, catalogo_precos!inner(valor_unitario, medicao_id)")
+        .in("catalogo_precos.medicao_id", bloco);
 
-    for (const item of todasMedicoesDaObra ?? []) {
-      const cp = item.catalogo_precos as unknown as {
-        valor_unitario: number;
-        medicao_id: string;
-      };
-      if (cp) {
-        const atual = totaisMedicao.get(cp.medicao_id) ?? 0;
-        totaisMedicao.set(cp.medicao_id, atual + Number(item.quantidade) * Number(cp.valor_unitario));
+      for (const item of todasMedicoesDaObra ?? []) {
+        const cp = item.catalogo_precos as unknown as {
+          valor_unitario: number;
+          medicao_id: string;
+        };
+        if (cp) {
+          const atual = totaisMedicao.get(cp.medicao_id) ?? 0;
+          totaisMedicao.set(cp.medicao_id, atual + Number(item.quantidade) * Number(cp.valor_unitario));
+        }
       }
     }
   }
@@ -496,7 +505,7 @@ export async function obterDadosCompletosTarefasExportacao(
     mapaMedicoes.set(m.tarefa_id, lista);
   }
 
-  const tarefasFormatadas: TarefaExportacaoCompleta[] = tarefasDb.map(
+  const tarefasFormatadas: TarefaExportacaoCompleta[] = tarefasSelecionadas.map(
     (t, index) => {
       const resp = t.responsavel as unknown as { nome: string } | null;
       const exec = t.executor as unknown as { nome: string } | null;
