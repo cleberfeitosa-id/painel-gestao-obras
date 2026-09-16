@@ -53,12 +53,14 @@ function extrairListaCondutores(meta: MetadadosCabo): {
   fase?: string;
   corCabo?: string;
   quantidade: number;
+  secaoMm2?: string;
 }[] {
   const listaCondutores: {
     funcao: FuncaoCondutor;
     fase?: string;
     corCabo?: string;
     quantidade: number;
+    secaoMm2?: string;
   }[] = [];
 
   if (meta.fases && meta.fases.length > 0) {
@@ -69,6 +71,7 @@ function extrairListaCondutores(meta: MetadadosCabo): {
           fase: f.nome,
           corCabo: f.cor || CORES_PADRAO_CONDUTOR.faseR,
           quantidade: f.quantidade,
+          secaoMm2: f.secaoMm2,
         });
       }
     }
@@ -84,6 +87,7 @@ function extrairListaCondutores(meta: MetadadosCabo): {
           funcao: cond.tipo,
           corCabo: cond.cor || corPadrao,
           quantidade: cond.quantidade,
+          secaoMm2: cond.secaoMm2,
         });
       }
     }
@@ -97,6 +101,7 @@ function extrairListaCondutores(meta: MetadadosCabo): {
               fase: cond.fase,
               corCabo: cond.cor || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
               quantidade: cond.quantidade,
+              secaoMm2: cond.secaoMm2,
             });
           } else if (cond.quantidade === 1) {
             listaCondutores.push({
@@ -104,6 +109,7 @@ function extrairListaCondutores(meta: MetadadosCabo): {
               fase: "R",
               corCabo: meta.corFaseR || meta.corFase || cond.cor || CORES_PADRAO_CONDUTOR.faseR,
               quantidade: 1,
+              secaoMm2: cond.secaoMm2,
             });
           } else if (cond.quantidade === 2) {
             listaCondutores.push({
@@ -111,12 +117,14 @@ function extrairListaCondutores(meta: MetadadosCabo): {
               fase: "R",
               corCabo: meta.corFaseR || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
               quantidade: 1,
+              secaoMm2: cond.secaoMm2,
             });
             listaCondutores.push({
               funcao: "fase",
               fase: "S",
               corCabo: meta.corFaseS || CORES_PADRAO_CONDUTOR.faseS,
               quantidade: 1,
+              secaoMm2: cond.secaoMm2,
             });
           } else if (cond.quantidade === 3) {
             listaCondutores.push({
@@ -124,24 +132,28 @@ function extrairListaCondutores(meta: MetadadosCabo): {
               fase: "R",
               corCabo: meta.corFaseR || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
               quantidade: 1,
+              secaoMm2: cond.secaoMm2,
             });
             listaCondutores.push({
               funcao: "fase",
               fase: "S",
               corCabo: meta.corFaseS || CORES_PADRAO_CONDUTOR.faseS,
               quantidade: 1,
+              secaoMm2: cond.secaoMm2,
             });
             listaCondutores.push({
               funcao: "fase",
               fase: "T",
               corCabo: meta.corFaseT || CORES_PADRAO_CONDUTOR.faseT,
               quantidade: 1,
+              secaoMm2: cond.secaoMm2,
             });
           } else {
             listaCondutores.push({
               funcao: "fase",
               corCabo: cond.cor || meta.corFase || CORES_PADRAO_CONDUTOR.faseR,
               quantidade: cond.quantidade,
+              secaoMm2: cond.secaoMm2,
             });
           }
         } else {
@@ -155,12 +167,25 @@ function extrairListaCondutores(meta: MetadadosCabo): {
             funcao: cond.tipo,
             corCabo: cond.cor || corPadrao,
             quantidade: cond.quantidade,
+            secaoMm2: cond.secaoMm2,
           });
         }
       }
     }
   }
   return listaCondutores;
+}
+
+export interface CondutorVisual {
+  funcao: FuncaoCondutor;
+  fase?: string;
+  corCabo?: string;
+  quantidade: number;
+  secaoMm2?: string;
+}
+
+export function obterCondutoresVisuais(meta: MetadadosCabo): CondutorVisual[] {
+  return extrairListaCondutores(meta);
 }
 
 function acumularCabos(
@@ -175,8 +200,9 @@ function acumularCabos(
   for (const itemCabo of listaCondutores) {
     const compCondutor = compLinear * itemCabo.quantidade;
     totalCabosItem += compCondutor;
+    const secaoMm2 = itemCabo.secaoMm2 || extrairSecaoMm2(meta.tipoCabo) || "Não informada";
 
-    const chaveCaboCircuito = `${meta.circuito}_${meta.tipoCabo}_${itemCabo.funcao}_${itemCabo.fase ?? ""}_${itemCabo.corCabo ?? ""}`;
+    const chaveCaboCircuito = `${meta.circuito}_${meta.tipoCabo}_${meta.tipoCondutor}_${itemCabo.funcao}_${itemCabo.fase ?? ""}_${itemCabo.corCabo ?? ""}_${secaoMm2}`;
     const existenteCabo = mapaCabosCircuito.get(chaveCaboCircuito);
     if (existenteCabo) {
       existenteCabo.quantidadeCondutores += itemCabo.quantidade;
@@ -190,26 +216,40 @@ function acumularCabos(
         funcao: itemCabo.funcao,
         fase: itemCabo.fase,
         corCabo: itemCabo.corCabo,
+        secaoMm2,
         quantidadeCondutores: itemCabo.quantidade,
         comprimentoTotal: compCondutor,
       });
     }
 
-    const chaveCaboTipo = `${meta.tipoCabo}_${itemCabo.funcao}_${itemCabo.corCabo ?? ""}`;
+    const chaveCaboTipo = `${meta.tipoCabo}_${meta.tipoCondutor}_${itemCabo.funcao}_${itemCabo.corCabo ?? ""}_${secaoMm2}`;
     const existenteTipo = mapaCabosTipo.get(chaveCaboTipo);
     if (existenteTipo) {
       existenteTipo.comprimentoTotal += compCondutor;
+      existenteTipo.quantidadeCondutores += itemCabo.quantidade;
+      if (!existenteTipo.circuitos?.includes(meta.circuito)) {
+        existenteTipo.circuitos = [...(existenteTipo.circuitos ?? []), meta.circuito];
+      }
     } else {
       mapaCabosTipo.set(chaveCaboTipo, {
         tipoCabo: meta.tipoCabo,
+        tipoCondutor: meta.tipoCondutor,
+        circuitos: [meta.circuito],
         funcao: itemCabo.funcao,
         corCabo: itemCabo.corCabo,
+        secaoMm2,
+        quantidadeCondutores: itemCabo.quantidade,
         comprimentoTotal: compCondutor,
       });
     }
   }
 
   return totalCabosItem;
+}
+
+function extrairSecaoMm2(tipoCabo: string): string | undefined {
+  const correspondencia = tipoCabo.match(/(\d+(?:[.,]\d+)?)\s*mm(?:²|2)/i);
+  return correspondencia?.[1]?.replace(",", ".");
 }
 
 export function calcularResumoLevantamento(
@@ -235,6 +275,7 @@ export function calcularResumoLevantamento(
 
   let totalGeralElementos = 0;
   let totalGeralDistancias = 0;
+  let totalGeralDescidasSubidas = 0;
   let totalGeralCabos = 0;
   let totalGeralAreas = 0;
 
@@ -259,22 +300,24 @@ export function calcularResumoLevantamento(
     } else if (item.tipo === "distancia" || item.tipo === "tubulacao_cabo") {
       const compLinear =
         item.comprimentoReal ?? calcularDistanciaPontos(item.pontos, calibracao);
-      totalGeralDistancias += compLinear;
+      if (item.tipo === "distancia") {
+        totalGeralDistancias += compLinear;
 
-      const chaveDist = item.subtipo;
-      const existenteDist = mapaDistancias.get(chaveDist);
-      if (existenteDist) {
-        existenteDist.totalMetros += compLinear;
-        existenteDist.quantidadeTrechos += 1;
-      } else {
-        mapaDistancias.set(chaveDist, {
-          subtipo: item.subtipo,
-          nome: item.nome,
-          categoria: item.categoria,
-          cor: item.cor,
-          totalMetros: compLinear,
-          quantidadeTrechos: 1,
-        });
+        const chaveDist = item.subtipo;
+        const existenteDist = mapaDistancias.get(chaveDist);
+        if (existenteDist) {
+          existenteDist.totalMetros += compLinear;
+          existenteDist.quantidadeTrechos += 1;
+        } else {
+          mapaDistancias.set(chaveDist, {
+            subtipo: item.subtipo,
+            nome: item.nome,
+            categoria: item.categoria,
+            cor: item.cor,
+            totalMetros: compLinear,
+            quantidadeTrechos: 1,
+          });
+        }
       }
 
       if (
@@ -294,26 +337,26 @@ export function calcularResumoLevantamento(
       const altDestino = item.alturaDestino ?? 0.3;
       const alturaDelta =
         item.comprimentoReal ?? Math.abs(altOrigem - altDestino);
-      totalGeralDistancias += alturaDelta;
+       const metaDescida =
+         item.metadadosCabo ||
+         (item.circuito ? mapaMetadadosPorCircuito.get(item.circuito) : undefined);
+       totalGeralDescidasSubidas += alturaDelta;
 
-      const chaveDesc = item.subtipo;
-      const existenteDesc = mapaDescidas.get(chaveDesc);
-      if (existenteDesc) {
-        existenteDesc.alturaTotal += alturaDelta;
-        existenteDesc.quantidade += 1;
-      } else {
-        mapaDescidas.set(chaveDesc, {
-          nome: item.nome,
-          subtipo: item.subtipo,
-          cor: item.cor,
-          alturaTotal: alturaDelta,
-          quantidade: 1,
-        });
-      }
-
-      const metaDescida =
-        item.metadadosCabo ||
-        (item.circuito ? mapaMetadadosPorCircuito.get(item.circuito) : undefined);
+       const chaveDesc = item.nome.trim() || item.subtipo;
+        const existenteDesc = mapaDescidas.get(chaveDesc);
+        if (existenteDesc) {
+          existenteDesc.alturaTotal += alturaDelta;
+          existenteDesc.quantidade += 1;
+        } else {
+          mapaDescidas.set(chaveDesc, {
+            chave: chaveDesc,
+            nome: item.nome.trim() || item.subtipo,
+            subtipo: item.subtipo,
+            cor: item.cor,
+            alturaTotal: alturaDelta,
+            quantidade: 1,
+          });
+        }
 
       if (
         metaDescida &&
@@ -380,6 +423,7 @@ export function calcularResumoLevantamento(
     ),
     totalGeralElementos,
     totalGeralDistancias,
+    totalGeralDescidasSubidas,
     totalGeralCabos,
     totalGeralAreas,
   };
