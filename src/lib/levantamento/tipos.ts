@@ -39,6 +39,7 @@ export interface FaseCabo {
   nome: string;
   cor: string;
   quantidade: number;
+  secaoMm2?: string;
 }
 
 export interface CondutorCabo {
@@ -134,14 +135,19 @@ export interface ResumoItemCabo {
   funcao: FuncaoCondutor;
   fase?: string;
   corCabo?: string;
+  secaoMm2?: string;
   quantidadeCondutores: number;
   comprimentoTotal: number;
 }
 
 export interface ResumoItemCaboPorTipo {
   tipoCabo: string;
+  tipoCondutor?: string;
+  circuitos?: string[];
   funcao: FuncaoCondutor;
   corCabo?: string;
+  secaoMm2?: string;
+  quantidadeCondutores: number;
   comprimentoTotal: number;
 }
 
@@ -156,6 +162,7 @@ export interface ResumoItemArea {
 }
 
 export interface ResumoItemDescidaSubida {
+  chave: string;
   nome: string;
   subtipo: string;
   cor: string;
@@ -172,6 +179,7 @@ export interface ResumoLevantamento {
   descidasSubidas: ResumoItemDescidaSubida[];
   totalGeralElementos: number;
   totalGeralDistancias: number;
+  totalGeralDescidasSubidas: number;
   totalGeralCabos: number;
   totalGeralAreas: number;
 }
