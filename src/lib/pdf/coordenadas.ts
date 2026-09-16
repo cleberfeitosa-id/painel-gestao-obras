@@ -291,6 +291,100 @@ export function deslocarPolilinha(
   return resultado;
 }
 
+export function faixasDePolilinhas(
+  itens: { id: string; pontos: PontoPdf[] }[],
+  espacamento: number,
+): Map<string, number> {
+  const grupos = new Map<string, { id: string; pontos: PontoPdf[] }[]>();
+  for (const item of itens) {
+    if (item.pontos.length < 2) continue;
+    const chave = item.pontos.map((p) => `${Math.round(p.x / 4)}:${Math.round(p.y / 4)}`).join("|");
+    const reversa = [...item.pontos].reverse().map((p) => `${Math.round(p.x / 4)}:${Math.round(p.y / 4)}`).join("|");
+    const grupo = grupos.get(chave) ?? grupos.get(reversa) ?? [];
+    grupo.push(item);
+    grupos.set(chave, grupo);
+  }
+  const resultado = new Map<string, number>();
+  for (const grupo of grupos.values()) {
+    grupo.sort((a, b) => a.id.localeCompare(b.id));
+    grupo.forEach((item, index) => resultado.set(item.id, (index - (grupo.length - 1) / 2) * espacamento));
+  }
+  return resultado;
+}
+
+function chaveSegmento(a: PontoPdf, b: PontoPdf): { chave: string; orientacao: number } {
+  const qa = `${Math.round(a.x / 4)}:${Math.round(a.y / 4)}`;
+  const qb = `${Math.round(b.x / 4)}:${Math.round(b.y / 4)}`;
+  return qa <= qb
+    ? { chave: `${qa}|${qb}`, orientacao: 1 }
+    : { chave: `${qb}|${qa}`, orientacao: -1 };
+}
+
+export function faixasDeSegmentos(
+  itens: { id: string; pontos: PontoPdf[] }[],
+  espacamento: number,
+): Map<string, number> {
+  const grupos = new Map<string, { id: string; indice: number; orientacao: number }[]>();
+  for (const item of itens) {
+    for (let indice = 0; indice < item.pontos.length - 1; indice += 1) {
+      const segmento = chaveSegmento(item.pontos[indice], item.pontos[indice + 1]);
+      const grupo = grupos.get(segmento.chave) ?? [];
+      grupo.push({ id: item.id, indice, orientacao: segmento.orientacao });
+      grupos.set(segmento.chave, grupo);
+    }
+  }
+
+  const resultado = new Map<string, number>();
+  for (const grupo of grupos.values()) {
+    grupo.sort((a, b) => a.id.localeCompare(b.id) || a.indice - b.indice);
+    grupo.forEach((segmento, indice) => {
+      resultado.set(`${segmento.id}:${segmento.indice}`, (indice - (grupo.length - 1) / 2) * espacamento * segmento.orientacao);
+    });
+  }
+  return resultado;
+}
+
+export function polilinhaComFaixas(
+  pontos: PontoPdf[],
+  faixas: Map<string, number>,
+  id: string,
+): PontoPdf[] {
+  if (pontos.length < 2) return pontos;
+  const deslocados = pontos.map((ponto) => ({ x: ponto.x, y: ponto.y }));
+  const extremidades = pontos.slice(0, -1).map((inicio, indice) => {
+    const fim = pontos[indice + 1];
+    const dx = fim.x - inicio.x;
+    const dy = fim.y - inicio.y;
+    const comprimento = Math.hypot(dx, dy) || 1;
+    const offset = faixas.get(`${id}:${indice}`) ?? 0;
+    const normal = { x: -dy / comprimento, y: dx / comprimento };
+    return {
+      inicio: { x: inicio.x + normal.x * offset, y: inicio.y + normal.y * offset },
+      fim: { x: fim.x + normal.x * offset, y: fim.y + normal.y * offset },
+    };
+  });
+
+  deslocados[0] = extremidades[0].inicio;
+  deslocados[deslocados.length - 1] = extremidades[extremidades.length - 1].fim;
+  for (let indice = 1; indice < deslocados.length - 1; indice += 1) {
+    const entrada = extremidades[indice - 1].fim;
+    const saida = extremidades[indice].inicio;
+    const media = { x: (entrada.x + saida.x) / 2, y: (entrada.y + saida.y) / 2 };
+    const distancia = Math.hypot(media.x - pontos[indice].x, media.y - pontos[indice].y);
+    const limite = Math.max(1, Math.max(Math.abs(faixas.get(`${id}:${indice - 1}`) ?? 0), Math.abs(faixas.get(`${id}:${indice}`) ?? 0)) * 2.5);
+    if (distancia > limite) {
+      const fator = limite / distancia;
+      deslocados[indice] = {
+        x: pontos[indice].x + (media.x - pontos[indice].x) * fator,
+        y: pontos[indice].y + (media.y - pontos[indice].y) * fator,
+      };
+    } else {
+      deslocados[indice] = media;
+    }
+  }
+  return deslocados;
+}
+
 export function distanciaPontoPolilinha(
   p: PontoPdf,
   pontos: PontoPdf[],
