@@ -83,7 +83,7 @@ export function Visualizador3D({
 
     itens.forEach((it) => {
       const circ = it.metadadosCabo?.circuito || it.circuito;
-      if (circ) {
+      if (circ && it.tipo === "tubulacao_cabo") {
         const cor = it.metadadosCabo?.cor || it.cor || "#eab308";
         const comp = it.comprimentoReal ?? 0;
         const exist = mapa.get(circ);
@@ -129,54 +129,112 @@ export function Visualizador3D({
 
   const resumoExibicao = useMemo(() => {
     if (circuitoFiltro === "todos") return resumo;
+    const agruparDescidas = (itensDescida: ItemLevantamento[]) => {
+      const grupos = new Map<string, ResumoLevantamento["descidasSubidas"][number]>();
+      for (const item of itensDescida) {
+        const chave = item.nome.trim() || item.subtipo;
+        const altura = item.comprimentoReal ?? Math.abs((item.alturaOrigem ?? 2.8) - (item.alturaDestino ?? 0.3));
+        const existente = grupos.get(chave);
+        if (existente) {
+          existente.alturaTotal += altura;
+          existente.quantidade += 1;
+        } else {
+          grupos.set(chave, {
+            chave,
+            nome: chave,
+            subtipo: item.subtipo,
+            cor: item.cor,
+            alturaTotal: altura,
+            quantidade: 1,
+          });
+        }
+      }
+      return Array.from(grupos.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    };
     if (circuitoFiltro === "sem_circuito") {
+      const descidasSemCircuito = agruparDescidas(
+        itens.filter(
+          (item) =>
+            item.tipo === "descida_subida" &&
+            !item.circuito &&
+            !item.metadadosCabo?.circuito,
+        ),
+      );
       return {
         ...resumo,
         cabos: [],
         cabosPorTipo: [],
         totalGeralCabos: 0,
-        descidasSubidas: resumo.descidasSubidas.filter((d) =>
-          itens.some(
-            (it) =>
-              it.subtipo === d.subtipo &&
-              it.tipo === "descida_subida" &&
-              !it.circuito &&
-              !it.metadadosCabo?.circuito,
-          ),
+        totalGeralDescidasSubidas: descidasSemCircuito.reduce(
+          (total, descida) => total + descida.alturaTotal,
+          0,
         ),
+        totalGeralDistancias: 0,
+        distancias: [],
+        descidasSubidas: descidasSemCircuito,
       };
     }
 
     const cabosFiltrados = resumo.cabos.filter(
       (c) => c.circuito === circuitoFiltro,
     );
+    const cabosPorTipoFiltrados = resumo.cabosPorTipo.filter((c) =>
+      cabosFiltrados.some(
+        (circuito) =>
+          circuito.tipoCabo === c.tipoCabo &&
+          circuito.tipoCondutor === c.tipoCondutor &&
+          circuito.funcao === c.funcao &&
+          circuito.corCabo === c.corCabo &&
+          circuito.secaoMm2 === c.secaoMm2 &&
+          c.circuitos?.includes(circuito.circuito),
+      ),
+    );
     const totalCabosFiltrados = cabosFiltrados.reduce(
       (acc, c) => acc + c.comprimentoTotal,
+      0,
+    );
+    const descidasFiltradas = agruparDescidas(
+      itens.filter(
+        (item) =>
+          item.tipo === "descida_subida" &&
+          (item.circuito === circuitoFiltro ||
+            item.metadadosCabo?.circuito === circuitoFiltro),
+      ),
+    );
+    const totalDescidasFiltradas = itens
+      .filter(
+        (it) =>
+          it.tipo === "descida_subida" &&
+          (it.circuito === circuitoFiltro ||
+            it.metadadosCabo?.circuito === circuitoFiltro),
+      )
+      .reduce(
+        (total, it) => total + (it.comprimentoReal ?? Math.abs((it.alturaOrigem ?? 2.8) - (it.alturaDestino ?? 0.3))),
+        0,
+      );
+    const distanciasFiltradas = resumo.distancias.filter((d) =>
+      itens.some(
+        (it) =>
+          it.subtipo === d.subtipo &&
+          it.tipo === "distancia" &&
+          (it.circuito === circuitoFiltro ||
+            it.metadadosCabo?.circuito === circuitoFiltro),
+      ),
+    );
+    const totalDistanciasFiltradas = distanciasFiltradas.reduce(
+      (total, distancia) => total + distancia.totalMetros,
       0,
     );
 
     return {
       ...resumo,
       cabos: cabosFiltrados,
+      cabosPorTipo: cabosPorTipoFiltrados,
       totalGeralCabos: totalCabosFiltrados,
-      descidasSubidas: resumo.descidasSubidas.filter((d) =>
-        itens.some(
-          (it) =>
-            it.subtipo === d.subtipo &&
-            it.tipo === "descida_subida" &&
-            (it.circuito === circuitoFiltro ||
-              it.metadadosCabo?.circuito === circuitoFiltro),
-        ),
-      ),
-      distancias: resumo.distancias.filter((d) =>
-        itens.some(
-          (it) =>
-            it.subtipo === d.subtipo &&
-            (it.tipo === "distancia" || it.tipo === "tubulacao_cabo") &&
-            (it.circuito === circuitoFiltro ||
-              it.metadadosCabo?.circuito === circuitoFiltro),
-        ),
-      ),
+      descidasSubidas: descidasFiltradas,
+      totalGeralDescidasSubidas: totalDescidasFiltradas,
+      totalGeralDistancias: totalDistanciasFiltradas,
+      distancias: distanciasFiltradas,
     };
   }, [resumo, circuitoFiltro, itens]);
 
@@ -772,20 +830,58 @@ export function Visualizador3D({
     atualizarPosicaoCamera();
   }
 
-  function exportarImagemPng() {
-    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
-    rendererRef.current.render(sceneRef.current, cameraRef.current);
-    const dataUrl = rendererRef.current.domElement.toDataURL("image/png");
+  async function obterImagemExportacao(): Promise<string | null> {
+    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return null;
+    const largura = 2400;
+    const altura = 1600;
+    const canvas = document.createElement("canvas");
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      preserveDrawingBuffer: true,
+      alpha: true,
+    });
+    const camera = cameraRef.current;
+    const estadoCamera = {
+      left: camera.left,
+      right: camera.right,
+      top: camera.top,
+      bottom: camera.bottom,
+      zoom: camera.zoom,
+    };
+    try {
+      const aspecto = largura / altura;
+      const tamanhoFrustum = camera.top - camera.bottom;
+      camera.left = (-tamanhoFrustum * aspecto) / 2;
+      camera.right = (tamanhoFrustum * aspecto) / 2;
+      renderer.setPixelRatio(1);
+      renderer.setSize(largura, altura, false);
+      camera.updateProjectionMatrix();
+      renderer.render(sceneRef.current, camera);
+      return canvas.toDataURL("image/png");
+    } finally {
+      camera.left = estadoCamera.left;
+      camera.right = estadoCamera.right;
+      camera.top = estadoCamera.top;
+      camera.bottom = estadoCamera.bottom;
+      camera.zoom = estadoCamera.zoom;
+      camera.updateProjectionMatrix();
+      renderer.dispose();
+    }
+  }
+
+  async function exportarImagemPng() {
+    const dataUrl = await obterImagemExportacao();
+    if (!dataUrl) return;
     baixarDataUrl(
       dataUrl,
       `levantamento-3d-${obraNome.toLowerCase().replace(/\s+/g, "_")}-pag${pagina}.png`,
     );
   }
 
-  function exportarPdf3D() {
-    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
-    rendererRef.current.render(sceneRef.current, cameraRef.current);
-    const dataUrl3D = rendererRef.current.domElement.toDataURL("image/png");
+  async function exportarPdf3D() {
+    const dataUrl3D = await obterImagemExportacao();
+    if (!dataUrl3D) return;
 
     const sufixoFiltro =
       circuitoFiltro !== "todos"
@@ -793,6 +889,15 @@ export function Visualizador3D({
           ? " (Sem Circuito)"
           : ` (Circuito ${circuitoFiltro})`
         : "";
+    const posicaoLegenda = {
+      nw: "top:16px;left:16px;",
+      ne: "top:16px;right:16px;",
+      sw: "bottom:16px;left:16px;",
+      se: "bottom:16px;right:16px;",
+    }[configLegenda.posicao];
+     const legendaExportacao = configLegenda.visivel
+       ? `<div class="legenda-exportada" style="${posicaoLegenda};background:${escaparHtml(configLegenda.corFundo)};color:${escaparHtml(configLegenda.corTexto)};opacity:${configLegenda.opacidade / 255};font-size:${configLegenda.tamanhoFonte}px"><strong>Resumo do Levantamento</strong>${resumoExibicao.distancias.map((d) => `<div>${escaparHtml(d.nome)}: ${formatarMetros(d.totalMetros)}</div>`).join("")}${resumoExibicao.descidasSubidas.map((d) => `<div>${escaparHtml(d.nome)}: ${formatarMetros(d.alturaTotal)} vertical</div>`).join("")}${resumoExibicao.cabosPorTipo.map((c) => `<div>${escaparHtml(c.tipoCabo)}${c.secaoMm2 ? ` · ${escaparHtml(c.secaoMm2)} mm²` : ""} · ${escaparHtml(obterNomeCorCabo(c.corCabo))}: ${formatarMetros(c.comprimentoTotal)}</div>`).join("")}</div>`
+      : "";
 
     const html = `
       <div class="header">
@@ -882,13 +987,34 @@ export function Visualizador3D({
                 )
                 .join("")}
               <tr style="font-weight:bold; border-top: 2px solid #334155;">
-                <td>Total de Tubulações</td>
+                <td>Total de Tubulações / Distâncias</td>
                 <td class="text-right">${formatarMetros(resumoExibicao.totalGeralDistancias)}</td>
+              </tr>
+              <tr style="font-weight:bold; border-top: 1px solid #334155;">
+                <td>Total de Descidas / Subidas</td>
+                <td class="text-right">${formatarMetros(resumoExibicao.totalGeralDescidasSubidas)}</td>
               </tr>
               <tr style="font-weight:bold; border-top: 1px solid #334155;">
                 <td>Total de Cabos</td>
                 <td class="text-right">${formatarMetros(resumoExibicao.totalGeralCabos)}</td>
               </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="secao">
+          <h3>Totais de Cabos por Cor e Bitola</h3>
+          <table>
+            <thead><tr><th>Tipo / Bitola</th><th>Função</th><th>Cor</th><th class="text-right">Total</th></tr></thead>
+            <tbody>
+              ${resumoExibicao.cabosPorTipo.map((c) => `
+                <tr>
+                  <td>${escaparHtml(c.tipoCabo)}${c.secaoMm2 ? ` · ${escaparHtml(c.secaoMm2)} mm²` : ""}</td>
+                  <td>${escaparHtml(rotuloCondutor(c.funcao))}</td>
+                  <td>${escaparHtml(obterNomeCorCabo(c.corCabo))}</td>
+                  <td class="text-right">${formatarMetros(c.comprimentoTotal)}</td>
+                </tr>
+              `).join("")}
             </tbody>
           </table>
         </div>
@@ -927,6 +1053,7 @@ export function Visualizador3D({
       <div class="imagem-container">
         <h3 style="margin-bottom: 8px; color: #334155;">Visualização Isométrica 3D com Marcações e Níveis</h3>
         <img src="${dataUrl3D}" alt="Visualização 3D do Levantamento" />
+        ${legendaExportacao}
       </div>
     `;
 
