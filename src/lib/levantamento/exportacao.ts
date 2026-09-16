@@ -111,11 +111,22 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
       ].join(";"),
     );
   }
+  linhas.push("");
+  linhas.push([escaparCsv("3. DESCIDAS / SUBIDAS VERTICAIS")].join(";"));
+  linhas.push(
+    [
+      escaparCsv("Tipo"),
+      escaparCsv("Identificação"),
+      escaparCsv("Quantidade"),
+      escaparCsv("Altura Total"),
+      escaparCsv("Unidade"),
+    ].join(";"),
+  );
   for (const desc of dados.resumo.descidasSubidas) {
     linhas.push(
       [
-        escaparCsv("Tubulações e Cabos"),
-        escaparCsv(`Descidas/Subidas Verticais (${desc.nome})`),
+        escaparCsv("Descida/Subida Vertical"),
+        escaparCsv(desc.nome),
         escaparCsv(desc.quantidade),
         escaparCsv(desc.alturaTotal.toFixed(2).replace(".", ",")),
         escaparCsv("m"),
@@ -124,7 +135,16 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
   }
   linhas.push(
     [
-      escaparCsv("TOTAL DE DISTÂNCIAS / TUBULAÇÕES"),
+      escaparCsv("TOTAL DE DESCIDAS / SUBIDAS"),
+      escaparCsv(""),
+      escaparCsv(""),
+      escaparCsv(dados.resumo.totalGeralDescidasSubidas.toFixed(2).replace(".", ",")),
+      escaparCsv("m"),
+    ].join(";"),
+  );
+  linhas.push(
+    [
+       escaparCsv("TOTAL DE DISTÂNCIAS / TUBULAÇÕES"),
       escaparCsv(""),
       escaparCsv(""),
       escaparCsv(dados.resumo.totalGeralDistancias.toFixed(2).replace(".", ",")),
@@ -134,7 +154,7 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
   linhas.push("");
 
   linhas.push(
-    [escaparCsv("3. RESUMO DE CABOS E CONDUTORES (DETALHADO POR CIRCUITO)")].join(
+    [escaparCsv("4. RESUMO DE CABOS E CONDUTORES (DETALHADO POR CIRCUITO)")].join(
       ";",
     ),
   );
@@ -166,6 +186,15 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
       ].join(";"),
     );
   }
+  linhas.push(escaparCsv("Resumo por cor e bitola"));
+  linhas.push(
+    [escaparCsv("Tipo de Cabo"), escaparCsv("Bitola"), escaparCsv("Tipo Condutor"), escaparCsv("Função"), escaparCsv("Cor"), escaparCsv("Qtd Condutores"), escaparCsv("Comprimento Total"), escaparCsv("Unidade")].join(";"),
+  );
+  for (const c of dados.resumo.cabosPorTipo) {
+    linhas.push(
+      [escaparCsv(c.tipoCabo), escaparCsv(c.secaoMm2 ? `${c.secaoMm2} mm²` : "Não informada"), escaparCsv(c.tipoCondutor), escaparCsv(rotuloCondutor(c.funcao)), escaparCsv(obterNomeCorCabo(c.corCabo)), escaparCsv(c.quantidadeCondutores), escaparCsv(c.comprimentoTotal.toFixed(2).replace(".", ",")), escaparCsv("m")].join(";"),
+    );
+  }
   linhas.push(
     [
       escaparCsv("TOTAL DE CONDUTORES / CABOS"),
@@ -181,7 +210,7 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
   );
   linhas.push("");
 
-  linhas.push([escaparCsv("4. RESUMO DE ÁREAS E PERÍMETROS")].join(";"));
+  linhas.push([escaparCsv("5. RESUMO DE ÁREAS E PERÍMETROS")].join(";"));
   linhas.push(
     [
       escaparCsv("Categoria"),
@@ -213,7 +242,7 @@ export function gerarCsvLevantamento(dados: DadosExportacao): string {
   );
   linhas.push("");
 
-  linhas.push([escaparCsv("5. LISTAGEM ITEM A ITEM")].join(";"));
+  linhas.push([escaparCsv("6. LISTAGEM ITEM A ITEM")].join(";"));
   linhas.push(
     [
       escaparCsv("Item #"),
@@ -399,13 +428,27 @@ export function exportarParaPdfViaImpressao(
           margin-top: 10px;
           text-align: center;
           page-break-before: always;
+          position: relative;
         }
         .imagem-container img {
-          max-width: 100%;
-          max-height: 180mm;
-          border: 1px solid #cbd5e1;
-          border-radius: 6px;
-        }
+           max-width: 100%;
+           max-height: 160mm;
+           border: 1px solid #cbd5e1;
+           border-radius: 6px;
+           image-rendering: auto;
+           object-fit: contain;
+         }
+         .legenda-exportada {
+           position: absolute;
+           z-index: 2;
+           max-width: 42%;
+           padding: 8px 10px;
+           border: 1px solid rgba(255,255,255,.25);
+           border-radius: 8px;
+           line-height: 1.45;
+           text-align: left;
+           box-shadow: 0 4px 14px rgba(0,0,0,.25);
+         }
         @media print {
           body {
             print-color-adjust: exact;
@@ -418,9 +461,10 @@ export function exportarParaPdfViaImpressao(
       ${htmlConteudo}
       <script>
         window.addEventListener('load', () => {
-          setTimeout(() => {
-            window.print();
-          }, 300);
+          const imagens = Array.from(document.images);
+          Promise.all(imagens.map((imagem) => imagem.decode().catch(() => undefined)))
+            .then(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))))
+            .then(() => window.print());
         });
       </script>
     </body>
