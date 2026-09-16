@@ -1,6 +1,16 @@
 "use client";
 
-import { PDFDocument, PDFName, PDFArray } from "pdf-lib";
+import {
+  PDFDocument,
+  PDFEmbeddedPage,
+  PDFName,
+  PDFArray,
+  PDFPage,
+  pushGraphicsState,
+  popGraphicsState,
+  concatTransformationMatrix,
+  degrees,
+} from "pdf-lib";
 import {
   corredorDaPolilinha,
   deslocarPolilinha,
@@ -68,6 +78,61 @@ const DIMENSOES_FOLHA_PT: Record<TamanhoFolhaPdf, { largura: number; altura: num
 
 const DIMENSOES_A4_PT = { largura: 595.28, altura: 841.89 };
 
+interface DimensoesPaginaPdf {
+  largura: number;
+  altura: number;
+  larguraOriginal: number;
+  alturaOriginal: number;
+  rotacao: number;
+}
+
+function obterDimensoesPaginaPdf(page: PDFPage): DimensoesPaginaPdf {
+  const rotacao = ((page.getRotation().angle % 360) + 360) % 360;
+  const larguraOriginal = page.getWidth();
+  const alturaOriginal = page.getHeight();
+  const girada = rotacao === 90 || rotacao === 270;
+
+  return {
+    largura: girada ? alturaOriginal : larguraOriginal,
+    altura: girada ? larguraOriginal : alturaOriginal,
+    larguraOriginal,
+    alturaOriginal,
+    rotacao,
+  };
+}
+
+function desenharPaginaVetorial(
+  page: PDFPage,
+  embeddedPage: PDFEmbeddedPage,
+  dimensoes: DimensoesPaginaPdf,
+  larguraDestino: number,
+  alturaDestino: number,
+) {
+  const escalaX = larguraDestino / dimensoes.largura;
+  const escalaY = alturaDestino / dimensoes.altura;
+
+  page.pushOperators(
+    pushGraphicsState(),
+    concatTransformationMatrix(escalaX, 0, 0, escalaY, 0, 0),
+  );
+
+  let x = 0;
+  let y = 0;
+  if (dimensoes.rotacao === 90) y = dimensoes.altura;
+  if (dimensoes.rotacao === 180) {
+    x = dimensoes.largura;
+    y = dimensoes.altura;
+  }
+  if (dimensoes.rotacao === 270) x = dimensoes.largura;
+
+  page.drawPage(embeddedPage, {
+    x,
+    y,
+    rotate: degrees(-dimensoes.rotacao),
+  });
+  page.pushOperators(popGraphicsState());
+}
+
 const CORES_STATUS_HEX: Record<string, string> = {
   pendente: "#94a3b8",
   em_execucao: "#f59e0b",
@@ -89,8 +154,8 @@ function hexParaRgba(hex: string, alfa = 1): string {
 }
 
 const CORES_TIPO_TAREFA = [
-  "#2563eb", "#7c3aed", "#db2777", "#0891b2", "#ea580c",
-  "#16a34a", "#ca8a04", "#4f46e5", "#be123c", "#0f766e",
+  "#7c3aed", "#c026d3", "#0891b2", "#4f46e5", "#9333ea",
+  "#0e7490", "#a21caf", "#6d28d9", "#155e75", "#86198f",
 ];
 
 function corDoTipoTarefa(nome: string): string {
@@ -120,48 +185,6 @@ function truncarTextoCanvas(
     resultado = resultado.slice(0, -1);
   }
   return `${resultado}…`;
-}
-
-function detalhesDeMediacaoLegenda(
-  tarefa: TarefaExportacaoCompleta,
-  incluirItensMedicao: boolean,
-): string[] {
-  const detalhes: string[] = [];
-  const medicoes = new Map<string, { nome: string; unidade: string; quantidade: number }>();
-
-  if (incluirItensMedicao) {
-    for (const medicao of tarefa.medicoes) {
-      const chave = `${medicao.nome}\u0000${medicao.unidade}`;
-      const atual = medicoes.get(chave) ?? {
-        nome: medicao.nome,
-        unidade: medicao.unidade,
-        quantidade: 0,
-      };
-      atual.quantidade += medicao.quantidade;
-      medicoes.set(chave, atual);
-    }
-  }
-
-  for (const medicao of medicoes.values()) {
-    detalhes.push(
-      `${medicao.nome}: ${formatarQuantidadeLegenda(medicao.quantidade)} ${medicao.unidade}`,
-    );
-  }
-
-  if (tarefa.localizacao_tipo === "distancia") {
-    const detalhe = tarefa.localizacao_detalhe;
-    const comprimentoDireto = detalhe?.comprimento;
-    const comprimentoSegmentos = detalhe?.segmentos?.reduce(
-      (total, segmento) => total + (segmento.comprimento ?? 0), 0) ?? 0;
-    const comprimento = typeof comprimentoDireto === "number" && Number.isFinite(comprimentoDireto) && comprimentoDireto > 0
-      ? comprimentoDireto
-      : comprimentoSegmentos;
-    if (typeof comprimento === "number" && comprimento > 0) {
-      detalhes.push(`Distância: ${formatarMetros(comprimento)}`);
-    }
-  }
-
-  return detalhes;
 }
 
 function tarefaTemGeometriaExportavel(t: TarefaExportacaoCompleta): boolean {
@@ -455,6 +478,10 @@ interface ItemPreparadoTarefa {
   alturaCalculada: number;
 }
 
+function medicoesAprovadasDaTarefa(tarefa: TarefaExportacaoCompleta) {
+  return tarefa.aprovacao === "aprovado" ? tarefa.medicoes : [];
+}
+
 function calcularAlturaCartao(
   t: TarefaExportacaoCompleta,
   temCrop: boolean,
@@ -462,6 +489,7 @@ function calcularAlturaCartao(
   opcoes: OpcoesExportacaoPlanta,
 ): number {
   let alt = 130;
+  const medicoesAprovadas = medicoesAprovadasDaTarefa(t);
 
   const totalImagens = (temCrop ? 1 : 0) + qtdFotos;
   if (totalImagens > 0) {
@@ -472,8 +500,8 @@ function calcularAlturaCartao(
     }
   }
 
-  if (opcoes.incluirItensMedicao && t.medicoes.length > 0) {
-    alt += 45 + Math.min(3, t.medicoes.length) * 32;
+  if (opcoes.incluirItensMedicao && medicoesAprovadas.length > 0) {
+    alt += 45 + Math.min(3, medicoesAprovadas.length) * 32;
     if (opcoes.incluirValoresFinanceiros) alt += 36;
   } else if (t.descricao) {
     alt += 90;
@@ -493,6 +521,7 @@ function renderizarCartaoTarefaGrade(
   opcoes: OpcoesExportacaoPlanta,
 ) {
   const { tarefa, obraNome, plantaNome, cropCanvas, fotosCanvases } = item;
+  const medicoesAprovadas = medicoesAprovadasDaTarefa(tarefa);
 
   ctx.fillStyle = "#ffffff";
   ctx.strokeStyle = "#cbd5e1";
@@ -619,7 +648,7 @@ function renderizarCartaoTarefaGrade(
     }
   }
 
-  if (opcoes.incluirItensMedicao && tarefa.medicoes.length > 0) {
+  if (opcoes.incluirItensMedicao && medicoesAprovadas.length > 0) {
     ctx.fillStyle = "#1e293b";
     ctx.fillRect(x + 18, yAtual, largura - 36, 32);
     ctx.fillStyle = "#ffffff";
@@ -632,7 +661,7 @@ function renderizarCartaoTarefaGrade(
     }
     yAtual += 32;
 
-    tarefa.medicoes.slice(0, 3).forEach((m, mIdx) => {
+    medicoesAprovadas.slice(0, 3).forEach((m, mIdx) => {
       ctx.fillStyle = mIdx % 2 === 0 ? "#f8fafc" : "#ffffff";
       ctx.fillRect(x + 18, yAtual, largura - 36, 28);
 
@@ -648,7 +677,7 @@ function renderizarCartaoTarefaGrade(
     });
 
     if (opcoes.incluirValoresFinanceiros) {
-      const somaTarefa = tarefa.medicoes.reduce((acc, med) => acc + med.valor_total_tarefa, 0);
+      const somaTarefa = medicoesAprovadas.reduce((acc, med) => acc + med.valor_total_tarefa, 0);
       ctx.fillStyle = "#e2e8f0";
       ctx.fillRect(x + 18, yAtual, largura - 36, 30);
       ctx.fillStyle = "#0f172a";
@@ -762,7 +791,9 @@ export async function exportarPlantaIluminadaPdf(
   const ctx = compositeCanvas.getContext("2d");
   if (!ctx) throw new Error("Não foi possível inicializar o canvas da planta.");
 
-  ctx.drawImage(baseCanvas, 0, 0);
+  // A prancha original será incorporada como página PDF vetorial mais adiante.
+  // Este canvas contém apenas as marcações que serão sobrepostas à página.
+  ctx.clearRect(0, 0, compositeCanvas.width, compositeCanvas.height);
 
   const tarefasParaExportar = (opcoes.tarefaIdsFiltro && opcoes.tarefaIdsFiltro.length > 0)
     ? tarefas.filter((t) => opcoes.tarefaIdsFiltro?.includes(t.id))
@@ -783,7 +814,7 @@ export async function exportarPlantaIluminadaPdf(
   tarefasParaExportar.forEach((t) => {
     const situacao = situacaoDaTarefa(t);
     const cor = CORES_STATUS_HEX[situacao] ?? "#2563eb";
-    const corTipo = corDoTipoTarefa(t.titulo);
+    const corTipo = corDoTipoTarefa(t.titulo.trim());
 
     if (t.localizacao_tipo === "ponto" && t.ponto_x != null && t.ponto_y != null) {
       const pct = pdfParaPercentual(
@@ -800,7 +831,7 @@ export async function exportarPlantaIluminadaPdf(
       ctx.fillStyle = hexParaRgba(cor, 0.6 * alfaInterior);
       ctx.fill();
       ctx.strokeStyle = hexParaRgba(corTipo, alfaBorda);
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
 
@@ -832,7 +863,7 @@ export async function exportarPlantaIluminadaPdf(
       ctx.fillStyle = hexParaRgba(cor, 0.4 * alfaInterior);
       ctx.fillRect(rx, ry, rw, rh);
       ctx.strokeStyle = hexParaRgba(corTipo, 0.8 * alfaBorda);
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 1.5;
       ctx.strokeRect(rx, ry, rw, rh);
 
       coordenadasClickA0.push({
@@ -862,7 +893,7 @@ export async function exportarPlantaIluminadaPdf(
          ctx.fillStyle = hexParaRgba(cor, 0.45 * alfaInterior);
          ctx.fill();
          ctx.strokeStyle = hexParaRgba(corTipo, alfaBorda);
-         ctx.lineWidth = 3;
+         ctx.lineWidth = 1.5;
          ctx.stroke();
       }
     } else if (t.localizacao_tipo === "circuito") {
@@ -992,7 +1023,7 @@ export async function exportarPlantaIluminadaPdf(
              ctx.fillStyle = hexParaRgba(cor, 0.55 * alfaInterior);
              ctx.fill();
              ctx.strokeStyle = hexParaRgba(corTipo, alfaBorda);
-             ctx.lineWidth = 3;
+             ctx.lineWidth = 1.5;
              ctx.stroke();
           }
 
@@ -1014,7 +1045,7 @@ export async function exportarPlantaIluminadaPdf(
               });
               if (linha.strokeContrast) {
                  ctx.strokeStyle = hexParaRgba("#0f172a", 0.7 * alfaBorda);
-                ctx.lineWidth = 3;
+                ctx.lineWidth = 1.5;
                 ctx.setLineDash([]);
                 ctx.stroke();
               }
@@ -1064,47 +1095,119 @@ export async function exportarPlantaIluminadaPdf(
         ctx.fillStyle = hexParaRgba(cor, 0.8 * alfaInterior);
         ctx.fill();
        ctx.strokeStyle = hexParaRgba(corTipo, alfaBorda);
-       ctx.lineWidth = 3;
+       ctx.lineWidth = 1.5;
        ctx.stroke();
     }
   });
 
-  const gruposLegenda = new Map<string, { cor: string; status: Map<string, number> }>();
+  type ItemLegenda = {
+    nome: string;
+    unidade: string;
+    quantidade: number;
+    quantidadeValida: number;
+    quantidadeIndisponivel: number;
+  };
+  type GrupoLegenda = {
+    nome: string;
+    cor: string;
+    status: Map<string, number>;
+    itensMedicao: Map<string, ItemLegenda>;
+    geometrias: Map<string, ItemLegenda>;
+  };
+
+  const gruposLegenda = new Map<string, GrupoLegenda>();
   for (const tarefa of tarefasParaExportar.filter(tarefaTemGeometriaExportavel)) {
-    const grupo = gruposLegenda.get(tarefa.titulo) ?? {
-      cor: corDoTipoTarefa(tarefa.titulo),
+    const nomeGrupo = tarefa.titulo.trim();
+    const grupo = gruposLegenda.get(nomeGrupo) ?? {
+      nome: nomeGrupo,
+      cor: corDoTipoTarefa(nomeGrupo),
       status: new Map<string, number>(),
+      itensMedicao: new Map<string, ItemLegenda>(),
+      geometrias: new Map<string, ItemLegenda>(),
     };
     const situacao = situacaoDaTarefa(tarefa);
     grupo.status.set(situacao, (grupo.status.get(situacao) ?? 0) + 1);
-    gruposLegenda.set(tarefa.titulo, grupo);
+    if (opcoes.incluirItensMedicao && tarefa.aprovacao === "aprovado") {
+      for (const medicao of tarefa.medicoes) {
+        const nome = medicao.nome.trim();
+        const unidade = medicao.unidade.trim();
+        const chave = `${nome}\u0000${unidade}`;
+        const item = grupo.itensMedicao.get(chave) ?? {
+          nome,
+          unidade,
+          quantidade: 0,
+          quantidadeValida: 0,
+          quantidadeIndisponivel: 0,
+        };
+        if (Number.isFinite(medicao.quantidade) && medicao.quantidade >= 0) {
+          item.quantidade += medicao.quantidade;
+          item.quantidadeValida += 1;
+        } else {
+          item.quantidadeIndisponivel += 1;
+        }
+        grupo.itensMedicao.set(chave, item);
+      }
+    }
+    if (tarefa.localizacao_tipo === "distancia") {
+      const detalhe = tarefa.localizacao_detalhe;
+      const comprimentoDireto = detalhe?.comprimento;
+      const comprimentoSegmentos = detalhe?.segmentos?.reduce(
+        (total, segmento) => total + (segmento.comprimento ?? 0),
+        0,
+      ) ?? 0;
+      const comprimento = typeof comprimentoDireto === "number" && Number.isFinite(comprimentoDireto) && comprimentoDireto > 0
+        ? comprimentoDireto
+        : comprimentoSegmentos;
+      if (comprimento > 0) {
+        const chave = "__distancia__";
+        const item = grupo.geometrias.get(chave) ?? {
+          nome: "Distância",
+          unidade: "m",
+          quantidade: 0,
+          quantidadeValida: 0,
+          quantidadeIndisponivel: 0,
+        };
+        item.quantidade += comprimento;
+        item.quantidadeValida += 1;
+        grupo.geometrias.set(chave, item);
+      }
+    }
+    gruposLegenda.set(nomeGrupo, grupo);
   }
 
-  const linhasLegenda = Array.from(gruposLegenda.entries()).flatMap(([nome, grupo]) =>
-    Array.from(grupo.status.entries()).map(([situacao, quantidade]) => ({
-      nome,
-      cor: CORES_STATUS_HEX[situacao] ?? "#cbd5e1",
-      corBorda: grupo.cor,
-      situacao,
-      quantidade,
-    })),
-  );
-  const detalhesLegenda = tarefasParaExportar
-    .filter(tarefaTemGeometriaExportavel)
-    .map((tarefa) => ({ tarefa, detalhes: detalhesDeMediacaoLegenda(tarefa, opcoes.incluirItensMedicao) }))
-    .filter((item) => item.detalhes.length > 0);
-  if (linhasLegenda.length > 0) {
+  const gruposVisiveis = Array.from(gruposLegenda.values());
+  if (gruposVisiveis.length > 0) {
     const margem = 40;
     const largura = Math.min(920, Math.max(560, compositeCanvas.width * 0.24));
     const alturaMaxima = Math.max(260, compositeCanvas.height - margem * 2);
-    const linhasStatusDisponiveis = Math.max(1, Math.floor((alturaMaxima - 130) / 34));
-    const linhasStatus = linhasLegenda.slice(0, linhasStatusDisponiveis);
-    const detalhesDisponiveis = Math.max(0, Math.floor((alturaMaxima - 100 - linhasStatus.length * 34) / 28));
-    const detalhesVisiveis = detalhesLegenda.slice(0, detalhesDisponiveis);
-    const totalOcultas = linhasLegenda.length - linhasStatus.length + detalhesLegenda.length - detalhesVisiveis.length;
+    const larguraTexto = largura - 76;
+    const linhasDeStatus = (grupo: GrupoLegenda): string[] => {
+      ctx.save();
+      ctx.font = "11px sans-serif";
+      const texto = Array.from(grupo.status.entries()).map(([situacao, quantidade]) =>
+        `${SITUACAO_TAREFA[situacao as keyof typeof SITUACAO_TAREFA]?.rotulo ?? situacao}: ${quantidade}`,
+      ).join(" · ");
+      const linhas = quebrarTexto(ctx, texto, larguraTexto);
+      ctx.restore();
+      return linhas;
+    };
+    const alturaGrupo = (grupo: GrupoLegenda) =>
+      31 + linhasDeStatus(grupo).length * 15 +
+      (grupo.itensMedicao.size > 0 ? 22 + grupo.itensMedicao.size * 22 : 0) +
+      (grupo.geometrias.size > 0 ? 22 + grupo.geometrias.size * 22 : 0) +
+      (grupo.itensMedicao.size === 0 && grupo.geometrias.size === 0 ? 22 : 0);
+    const gruposExibidos: GrupoLegenda[] = [];
+    let alturaConteudo = 100;
+    for (const grupo of gruposVisiveis) {
+      const alturaNecessaria = alturaGrupo(grupo);
+      if (alturaConteudo + alturaNecessaria > alturaMaxima - 24) break;
+      gruposExibidos.push(grupo);
+      alturaConteudo += alturaNecessaria;
+    }
+    const totalOcultas = gruposVisiveis.length - gruposExibidos.length;
     const altura = Math.min(
       alturaMaxima,
-      100 + linhasStatus.length * 34 + detalhesVisiveis.length * 28 + (totalOcultas > 0 ? 24 : 0),
+      alturaConteudo + (totalOcultas > 0 ? 24 : 0),
     );
     const x = compositeCanvas.width - largura - margem;
     const y = margem;
@@ -1122,50 +1225,88 @@ export async function exportarPlantaIluminadaPdf(
     ctx.fillStyle = "#94a3b8";
     ctx.font = "14px sans-serif";
     ctx.fillText("Borda = tipo · preenchimento = status", x + 24, y + 52);
-    linhasStatus.forEach((linha, index) => {
-      const linhaY = y + 82 + index * 34;
+    let linhaY = y + 82;
+    gruposExibidos.forEach((grupo) => {
       ctx.beginPath();
-      ctx.arc(x + 32, linhaY + 8, 8, 0, Math.PI * 2);
-      ctx.fillStyle = hexParaRgba(linha.cor, alfaInterior);
+      ctx.arc(x + 32, linhaY + 9, 7, 0, Math.PI * 2);
+      const primeiraSituacao = grupo.status.keys().next().value;
+      ctx.fillStyle = hexParaRgba(CORES_STATUS_HEX[primeiraSituacao ?? ""] ?? "#64748b", 0.9);
       ctx.fill();
-      ctx.strokeStyle = hexParaRgba(linha.corBorda, alfaBorda);
+      ctx.strokeStyle = grupo.cor;
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.fillStyle = "#ffffff";
-      ctx.font = "14px sans-serif";
       ctx.textAlign = "left";
-      ctx.fillText(truncarTextoCanvas(ctx, linha.nome, largura - 260), x + 52, linhaY);
-      ctx.fillStyle = CORES_STATUS_HEX[linha.situacao] ?? "#cbd5e1";
-      ctx.textAlign = "right";
       ctx.font = "bold 14px sans-serif";
-      ctx.fillText(`${SITUACAO_TAREFA[linha.situacao as keyof typeof SITUACAO_TAREFA]?.rotulo ?? linha.situacao}: ${linha.quantidade}`, x + largura - 24, linhaY);
+      ctx.fillText(truncarTextoCanvas(ctx, grupo.nome, largura - 76), x + 52, linhaY);
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "11px sans-serif";
+      const status = linhasDeStatus(grupo);
+      status.forEach((linha, statusIndex) => {
+        ctx.fillText(linha, x + 52, linhaY + 17 + statusIndex * 15);
+      });
+
+      const yItens = linhaY + 17 + status.length * 15;
+      const desenharSecao = (
+        titulo: string,
+        itens: ItemLegenda[],
+        cor: string,
+        yInicial: number,
+      ) => {
+        if (itens.length === 0) return yInicial;
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "bold 10px sans-serif";
+        ctx.fillText(titulo, x + 52, yInicial);
+        itens.forEach((item, itemIndex) => {
+          const quantidade = item.quantidadeValida > 0
+            ? `${formatarQuantidadeLegenda(item.quantidade)} ${item.unidade}`.trim()
+            : "quantidade indisponível";
+          const observacao = item.quantidadeIndisponivel > 0 && item.quantidadeValida > 0
+            ? " (parcial)"
+            : "";
+          ctx.fillStyle = cor;
+          ctx.font = "11px sans-serif";
+          ctx.fillText(
+            truncarTextoCanvas(ctx, `${quantidade}${observacao} ${item.nome}`.trim(), larguraTexto),
+            x + 52,
+            yInicial + 15 + itemIndex * 22,
+          );
+        });
+        return yInicial + 22 + itens.length * 22;
+      };
+
+      let yProximaSecao = yItens;
+      yProximaSecao = desenharSecao(
+        "ITENS DE MEDIÇÃO APROVADOS",
+        Array.from(grupo.itensMedicao.values()),
+        "#fbbf24",
+        yProximaSecao,
+      );
+      desenharSecao(
+        "QUANTITATIVOS GEOMÉTRICOS DA PLANTA",
+        Array.from(grupo.geometrias.values()),
+        "#67e8f9",
+        yProximaSecao,
+      );
+      if (grupo.itensMedicao.size === 0 && grupo.geometrias.size === 0) {
+        ctx.fillStyle = "#64748b";
+        ctx.font = "italic 10px sans-serif";
+        ctx.fillText("Sem medição aprovada ou geometria quantificável", x + 52, yItens);
+      }
+      linhaY += alturaGrupo(grupo);
     });
 
-    if (detalhesVisiveis.length > 0) {
-      const separadorY = y + 82 + linhasStatus.length * 34 - 8;
+    if (totalOcultas > 0) {
       ctx.strokeStyle = "rgba(255,255,255,0.18)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(x + 24, separadorY);
-      ctx.lineTo(x + largura - 24, separadorY);
+      ctx.moveTo(x + 24, y + altura - 34);
+      ctx.lineTo(x + largura - 24, y + altura - 34);
       ctx.stroke();
-
-      detalhesVisiveis.forEach(({ tarefa, detalhes }, index) => {
-        const linhaY = y + 82 + linhasStatus.length * 34 + index * 28;
-        ctx.fillStyle = "#cbd5e1";
-        ctx.font = "bold 12px sans-serif";
-        ctx.textAlign = "left";
-        ctx.fillText(truncarTextoCanvas(ctx, `#${tarefa.numero} ${tarefa.titulo}`, largura - 48), x + 24, linhaY);
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = "11px sans-serif";
-        ctx.fillText(truncarTextoCanvas(ctx, detalhes.join(" · "), largura - 48), x + 24, linhaY + 15);
-      });
-    }
-    if (totalOcultas > 0) {
       ctx.fillStyle = "#fbbf24";
       ctx.font = "bold 11px sans-serif";
       ctx.textAlign = "left";
-      ctx.fillText(`+ ${totalOcultas} item(ns) não exibido(s) por falta de espaço`, x + 24, y + altura - 18);
+      ctx.fillText(`+ ${totalOcultas} tipo(s) não exibido(s) por falta de espaço`, x + 24, y + altura - 18);
     }
   }
 
@@ -1174,15 +1315,23 @@ export async function exportarPlantaIluminadaPdf(
 
   const pdfDoc = await PDFDocument.create();
 
+  const sourcePdfBytes = await fetch(urlPdf).then((response) => response.arrayBuffer());
+  const sourcePdf = await PDFDocument.load(sourcePdfBytes);
+  const sourcePage = sourcePdf.getPage(paginaNumero - 1);
+  const dimensoesFonte = obterDimensoesPaginaPdf(sourcePage);
   const dims = DIMENSOES_FOLHA_PT[opcoes.tamanhoFolha];
-  const aspectCanvas = compositeCanvas.width / compositeCanvas.height;
-  const a0Width = aspectCanvas >= 1 ? dims.largura : dims.altura;
-  const a0Height = aspectCanvas >= 1 ? dims.altura : dims.largura;
+  const aspectFonte = dimensoesFonte.largura / dimensoesFonte.altura;
+  const a0Width = aspectFonte >= 1 ? dims.largura : dims.altura;
+  const a0Height = aspectFonte >= 1 ? dims.altura : dims.largura;
 
   const a0Page = pdfDoc.addPage([a0Width, a0Height]);
-  const compositeDataUrl = compositeCanvas.toDataURL("image/jpeg", 0.94);
+  const embeddedSourcePage = await pdfDoc.embedPage(sourcePage);
+
+  desenharPaginaVetorial(a0Page, embeddedSourcePage, dimensoesFonte, a0Width, a0Height);
+
+  const compositeDataUrl = compositeCanvas.toDataURL("image/png");
   const compositeBytes = await fetch(compositeDataUrl).then((r) => r.arrayBuffer());
-  const a0Image = await pdfDoc.embedJpg(compositeBytes);
+  const a0Image = await pdfDoc.embedPng(compositeBytes);
 
   a0Page.drawImage(a0Image, { x: 0, y: 0, width: a0Width, height: a0Height });
 
@@ -1395,7 +1544,9 @@ export async function exportarLevantamentoIluminadoPdf(
   const ctx = compositeCanvas.getContext("2d");
   if (!ctx) throw new Error("Não foi possível inicializar o canvas do levantamento.");
 
-  ctx.drawImage(baseCanvas, 0, 0);
+  // A prancha original será incorporada como página PDF vetorial mais adiante.
+  // Este canvas contém apenas as marcações que serão sobrepostas à página.
+  ctx.clearRect(0, 0, compositeCanvas.width, compositeCanvas.height);
 
   itens.forEach((it) => {
     const cor = it.cor || "#2563eb";
@@ -1726,15 +1877,23 @@ export async function exportarLevantamentoIluminadoPdf(
 
   notificar("Inicializando documento PDF...", 40);
   const pdfDoc = await PDFDocument.create();
+  const sourcePdfBytes = await fetch(urlPdf).then((response) => response.arrayBuffer());
+  const sourcePdf = await PDFDocument.load(sourcePdfBytes);
+  const sourcePage = sourcePdf.getPage(paginaNumero - 1);
+  const dimensoesFonte = obterDimensoesPaginaPdf(sourcePage);
   const dims = DIMENSOES_FOLHA_PT[opcoes.tamanhoFolha];
-  const aspectCanvas = compositeCanvas.width / compositeCanvas.height;
-  const a0Width = aspectCanvas >= 1 ? dims.largura : dims.altura;
-  const a0Height = aspectCanvas >= 1 ? dims.altura : dims.largura;
+  const aspectFonte = dimensoesFonte.largura / dimensoesFonte.altura;
+  const a0Width = aspectFonte >= 1 ? dims.largura : dims.altura;
+  const a0Height = aspectFonte >= 1 ? dims.altura : dims.largura;
 
   const a0Page = pdfDoc.addPage([a0Width, a0Height]);
-  const compositeDataUrl = compositeCanvas.toDataURL("image/jpeg", 0.94);
+  const embeddedSourcePage = await pdfDoc.embedPage(sourcePage);
+
+  desenharPaginaVetorial(a0Page, embeddedSourcePage, dimensoesFonte, a0Width, a0Height);
+
+  const compositeDataUrl = compositeCanvas.toDataURL("image/png");
   const compositeBytes = await fetch(compositeDataUrl).then((r) => r.arrayBuffer());
-  const a0Image = await pdfDoc.embedJpg(compositeBytes);
+  const a0Image = await pdfDoc.embedPng(compositeBytes);
 
   a0Page.drawImage(a0Image, { x: 0, y: 0, width: a0Width, height: a0Height });
 
