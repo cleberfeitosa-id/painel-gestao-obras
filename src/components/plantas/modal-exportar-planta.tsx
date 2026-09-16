@@ -28,6 +28,7 @@ import {
 import type {
   ItemLevantamento,
   ResumoLevantamento,
+  ConfigLegenda,
 } from "@/lib/levantamento/tipos";
 
 interface ModalExportarPlantaProps {
@@ -44,6 +45,7 @@ interface ModalExportarPlantaProps {
   resumoLevantamento?: ResumoLevantamento;
   nomeLevantamento?: string;
   tarefaIdsFiltro?: string[];
+  configLegenda?: ConfigLegenda;
 }
 
 export function ModalExportarPlanta({
@@ -59,6 +61,7 @@ export function ModalExportarPlanta({
   resumoLevantamento,
   nomeLevantamento = "Levantamento",
   tarefaIdsFiltro,
+  configLegenda,
 }: ModalExportarPlantaProps) {
   const [opcoes, setOpcoes] = useState<OpcoesExportacaoPlanta>(OPCOES_EXPORTACAO_PADRAO);
   const [exportando, setExportando] = useState(false);
@@ -88,6 +91,7 @@ export function ModalExportarPlanta({
           {
             ...opcoes,
             tarefaIdsFiltro,
+            configLegenda,
             aoProgresso: (etapa, pct) => setProgresso({ etapa, pct }),
           },
         );

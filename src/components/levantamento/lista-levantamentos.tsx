@@ -91,17 +91,18 @@ export function ListaLevantamentos({
         totalPontos += 1;
       } else if (it.tipo === "distancia" || it.tipo === "tubulacao_cabo") {
         const comp = it.comprimentoReal ?? 0;
-        totalDistancia += comp;
+        if (it.tipo === "distancia") {
+          totalDistancia += comp;
+        }
         if (it.metadadosCabo) {
           for (const c of it.metadadosCabo.condutores) {
             totalCabos += comp * (c.quantidade ?? 1);
           }
         }
-      } else if (it.tipo === "descida_subida") {
-        const comp = it.comprimentoReal ?? 0;
-        totalDistancia += comp;
       } else if (it.tipo === "area") {
         totalArea += it.areaReal ?? 0;
+      } else if (it.tipo === "descida_subida" && !it.circuito && !it.metadadosCabo?.circuito) {
+        totalDistancia += it.comprimentoReal ?? 0;
       }
     }
 

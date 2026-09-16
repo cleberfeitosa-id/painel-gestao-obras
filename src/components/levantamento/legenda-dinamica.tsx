@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   formatarMetros,
   formatarMetrosQuadrados,
+  obterNomeCorCabo,
   rotuloCondutor,
 } from "@/lib/levantamento/calculos";
 import type {
@@ -223,8 +224,7 @@ export function LegendaDinamica({
                 </div>
               )}
 
-              {(resumo.distancias.length > 0 ||
-                resumo.descidasSubidas.length > 0) && (
+              {resumo.distancias.length > 0 && (
                 <div className="space-y-1.5 pt-2">
                   <div className="flex items-center justify-between text-[11px] font-semibold text-white/70 uppercase tracking-wider">
                     <span>Tubulações / Distâncias</span>
@@ -248,9 +248,20 @@ export function LegendaDinamica({
                         </span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {resumo.descidasSubidas.length > 0 && (
+                <div className="space-y-1.5 pt-2">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-white/70 uppercase tracking-wider">
+                    <span>Descidas / Subidas Verticais</span>
+                    <span>{formatarMetros(resumo.totalGeralDescidasSubidas)}</span>
+                  </div>
+                  <div className="space-y-1">
                     {resumo.descidasSubidas.map((desc) => (
                       <div
-                        key={desc.subtipo}
+                        key={desc.chave}
                         className="flex items-center justify-between text-xs py-0.5"
                       >
                         <div className="flex items-center gap-1.5 min-w-0 pr-2">
@@ -306,6 +317,29 @@ export function LegendaDinamica({
                       </div>
                     ))}
                   </div>
+                  {resumo.cabosPorTipo.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-white/10 space-y-1">
+                      <div className="text-[10px] font-semibold text-white/60 uppercase tracking-wider">
+                        Total por cor e bitola
+                      </div>
+                      {resumo.cabosPorTipo.map((c, idx) => (
+                        <div
+                          key={`${c.tipoCabo}_${c.funcao}_${c.corCabo ?? ""}_${c.secaoMm2 ?? ""}_${idx}`}
+                          className="flex items-center justify-between text-xs py-0.5"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                            {c.corCabo && (
+                              <span className="w-2 h-2 rounded-full shrink-0 border border-white/40" style={{ backgroundColor: c.corCabo }} />
+                            )}
+                            <span className="truncate">
+                              {c.tipoCabo}{c.secaoMm2 ? ` · ${c.secaoMm2} mm²` : ""}{c.tipoCondutor ? ` · ${c.tipoCondutor}` : ""} · {rotuloCondutor(c.funcao)} · {c.corCabo ? obterNomeCorCabo(c.corCabo) : "Cor padrão"}
+                            </span>
+                          </div>
+                          <span className="font-bold text-emerald-200 shrink-0">{formatarMetros(c.comprimentoTotal)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
