@@ -68,6 +68,7 @@ import {
   type Nivel3D,
   type TipoElementoLevantamento,
 } from "@/lib/levantamento/tipos";
+import { faixasDeSegmentos, polilinhaComFaixas } from "@/lib/pdf/coordenadas";
 import {
   obterCalibracoesPlanta,
   salvarCalibracaoDireta,
@@ -87,6 +88,11 @@ import { GerenciadorNiveisModal } from "./gerenciador-niveis-modal";
 import { GerenciadorCategoriasModal } from "./gerenciador-categorias-modal";
 import { ModalUploadNovaPlanta } from "./modal-upload-nova-planta";
 import { Visualizador3D } from "./visualizador-3d";
+import { PreviaCircuitos2D } from "./previa-circuitos-2d";
+import {
+  ModalEditarDescidasLote,
+  type DadosEdicaoLoteDescida,
+} from "./modal-editar-descidas-lote";
 
 const ModalExportarPlanta = dynamic(
   () =>
@@ -126,7 +132,7 @@ function encontrarPontoSnap(
   ponto: PontoPdf,
   itensExistentes: ItemLevantamento[],
   pontosDesenhoAtuais: PontoPdf[],
-  raioSnapPdf = 16,
+  raioSnapPdf = 4,
 ): PontoPdf {
   let menorDist = raioSnapPdf;
   let pontoEncontrado: PontoPdf | null = null;
@@ -309,6 +315,12 @@ export function VisualizadorLevantamento({
   const [itens, setItens] = useState<ItemLevantamento[]>(
     (levantamentoInicial?.itens as unknown as ItemLevantamento[]) ?? [],
   );
+  const [distanciasSelecionadas, setDistanciasSelecionadas] = useState<string[]>(
+    () =>
+      ((levantamentoInicial?.itens as unknown as ItemLevantamento[]) ?? [])
+        .filter((item) => item.tipo === "distancia")
+        .map((item) => item.id),
+  );
 
   function getNextNumero(subtipo: string) {
     const itensDoSubtipo = itens.filter((i) => i.subtipo === subtipo);
@@ -345,6 +357,8 @@ export function VisualizadorLevantamento({
   const [modalCaboAberto, setModalCaboAberto] = useState(false);
   const [itemCaboEmEdicao, setItemCaboEmEdicao] = useState<ItemLevantamento | null>(null);
   const [modalEditarLoteCircuitosAberto, setModalEditarLoteCircuitosAberto] = useState(false);
+  const [modalEditarLoteDescidasAberto, setModalEditarLoteDescidasAberto] = useState(false);
+  const [itemDescidaEmEdicao, setItemDescidaEmEdicao] = useState<ItemLevantamento | null>(null);
   const [pontosAlvoDescidaLote, setPontosAlvoDescidaLote] = useState<ItemLevantamento[]>([]);
   const [metadadosCaboAtivo, setMetadadosCaboAtivo] = useState<MetadadosCabo>({
     circuito: "C1",
@@ -447,6 +461,8 @@ export function VisualizadorLevantamento({
     });
   const [filtroItensAberto, setFiltroItensAberto] = useState(false);
   const [gruposItensOcultos, setGruposItensOcultos] = useState<string[]>([]);
+  const [mostrarCondutores2D, setMostrarCondutores2D] = useState(false);
+  const [espessuraCircuito2D, setEspessuraCircuito2D] = useState(1.5);
 
   function alternarExibicaoMedidas(novoModo: ModoExibicaoMedidas) {
     setModoExibicaoMedidas(novoModo);
@@ -468,6 +484,7 @@ export function VisualizadorLevantamento({
     const novos = itens.filter((i) => i.id !== id);
     registrarEstado(novos);
     setItensLoteSelecionados((prev) => prev.filter((item) => item !== id));
+    setDistanciasSelecionadas((prev) => prev.filter((item) => item !== id));
     if (itemSelecionado?.id === id) {
       setItemSelecionado(null);
     }
@@ -955,10 +972,40 @@ export function VisualizadorLevantamento({
     [gruposItensOcultos, itens],
   );
 
+  const faixasTracados = useMemo(
+    () => faixasDeSegmentos(
+      itensVisiveis.filter((item) => item.tipo === "distancia" || item.tipo === "tubulacao_cabo"),
+      12,
+    ),
+    [itensVisiveis],
+  );
+
   const resumoVisivel = useMemo(
     () => calcularResumoLevantamento(itensVisiveis, calibracaoPagina, niveis),
     [itensVisiveis, calibracaoPagina, niveis],
   );
+
+  const itensLinearesSelecionaveis = useMemo(
+    () => itensVisiveis.filter((item) => item.tipo === "distancia"),
+    [itensVisiveis],
+  );
+
+  const totalDistanciasSelecionadas = useMemo(
+    () => itensLinearesSelecionaveis
+      .filter((item) => distanciasSelecionadas.includes(item.id))
+      .reduce((total, item) => total + (item.comprimentoReal ?? calcularDistanciaPontos(item.pontos, calibracaoPagina)), 0),
+    [calibracaoPagina, distanciasSelecionadas, itensLinearesSelecionaveis],
+  );
+
+  function alternarSelecaoDistancia(id: string) {
+    setDistanciasSelecionadas((prev) => prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]);
+  }
+
+  function alternarTodasDistancias() {
+    const ids = itensLinearesSelecionaveis.map((item) => item.id);
+    const todasSelecionadas = ids.length > 0 && ids.every((id) => distanciasSelecionadas.includes(id));
+    setDistanciasSelecionadas(todasSelecionadas ? [] : ids);
+  }
 
   function alternarGrupoVisibilidade(chave: string) {
     if (
@@ -1013,6 +1060,7 @@ export function VisualizadorLevantamento({
       setObraSelecionadaId(p.obra_id);
       setPagina(1);
       setItens([]);
+      setDistanciasSelecionadas([]);
       setGruposItensOcultos([]);
       setItemSelecionado(null);
       setHistoricoDesfazer([]);
@@ -1415,6 +1463,65 @@ export function VisualizadorLevantamento({
       setPontoDescidaPendente(null);
     }
     setModalDescidaAberto(false);
+  }
+
+  function salvarEdicaoDescida(dados: {
+    nome: string;
+    subtipo: string;
+    cor: string;
+    circuito?: string;
+    nivelOrigemId?: string;
+    alturaOrigem: number;
+    nivelDestinoId?: string;
+    alturaDestino: number;
+  }) {
+    if (!itemDescidaEmEdicao) return;
+    const atualizado: ItemLevantamento = {
+      ...itemDescidaEmEdicao,
+      nome: dados.nome,
+      subtipo: dados.subtipo,
+      cor: dados.cor,
+      circuito: dados.circuito,
+      nivelOrigemId: dados.nivelOrigemId,
+      alturaOrigem: dados.alturaOrigem,
+      nivelDestinoId: dados.nivelDestinoId,
+      alturaDestino: dados.alturaDestino,
+      comprimentoReal: Math.abs(dados.alturaOrigem - dados.alturaDestino),
+      metadadosCabo: itemDescidaEmEdicao.metadadosCabo && dados.circuito
+        ? { ...itemDescidaEmEdicao.metadadosCabo, circuito: dados.circuito, cor: dados.cor, altura: dados.alturaOrigem, nivelId: dados.nivelOrigemId }
+        : undefined,
+    };
+    registrarEstado(itens.map((item) => item.id === atualizado.id ? atualizado : item));
+    setItemSelecionado(atualizado);
+    setItemDescidaEmEdicao(null);
+    setModalDescidaAberto(false);
+  }
+
+  function salvarEdicaoLoteDescidas(dados: DadosEdicaoLoteDescida) {
+    const ids = new Set(itens.filter((item) => itensLoteSelecionados.includes(item.id) && item.tipo === "descida_subida").map((item) => item.id));
+    if (ids.size === 0) return;
+    const novosItens = itens.map((item) => {
+      if (!ids.has(item.id)) return item;
+      const origem = dados.alterarOrigem ? dados.alturaOrigem : (item.alturaOrigem ?? 2.8);
+      const destino = dados.alterarDestino ? dados.alturaDestino : (item.alturaDestino ?? 0.3);
+      return {
+        ...item,
+        nome: dados.alterarNome ? dados.nome : item.nome,
+        circuito: dados.alterarCircuito ? (dados.circuito || undefined) : item.circuito,
+        cor: dados.alterarCor ? dados.cor : item.cor,
+        nivelOrigemId: dados.alterarOrigem ? dados.nivelOrigemId : item.nivelOrigemId,
+        alturaOrigem: origem,
+        nivelDestinoId: dados.alterarDestino ? dados.nivelDestinoId : item.nivelDestinoId,
+        alturaDestino: destino,
+        comprimentoReal: Math.abs(origem - destino),
+        metadadosCabo: item.metadadosCabo && (dados.alterarCircuito ? Boolean(dados.circuito) : Boolean(item.metadadosCabo.circuito))
+          ? { ...item.metadadosCabo, circuito: dados.alterarCircuito ? dados.circuito : item.metadadosCabo.circuito, cor: dados.alterarCor ? dados.cor : item.metadadosCabo.cor, altura: origem }
+          : undefined,
+      };
+    });
+    registrarEstado(novosItens);
+    setModalEditarLoteDescidasAberto(false);
+    setMensagemLote({ tipo: "sucesso", texto: `${ids.size} descida(s) atualizada(s) com sucesso!` });
   }
 
   function salvarConfiguracaoCabo(dados: MetadadosCabo) {
@@ -1898,6 +2005,15 @@ export function VisualizadorLevantamento({
                     ))}
                   </div>
                 </div>
+                <div className="flex items-center gap-2 bg-superficie-100 px-2 py-1 rounded-lg text-xs">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={mostrarCondutores2D} onChange={(e) => setMostrarCondutores2D(e.target.checked)} className="h-3.5 w-3.5 accent-azul-600" />
+                    <span className="font-semibold text-superficie-700">Condutores 2D</span>
+                  </label>
+                  {mostrarCondutores2D && (
+                    <input type="range" min="0.75" max="4" step="0.25" value={espessuraCircuito2D} onChange={(e) => setEspessuraCircuito2D(Number(e.target.value))} className="w-20 accent-azul-600" title="Espessura dos condutores" />
+                  )}
+                </div>
 
                 <div className="space-y-1.5">
                   <span className="text-xs font-bold text-superficie-800 uppercase tracking-wider block">
@@ -2182,11 +2298,14 @@ export function VisualizadorLevantamento({
                       itensLoteSelecionados.includes(i.id) &&
                       i.tipo === "tubulacao_cabo",
                   );
-                  const outrosLote = itens.filter(
+                   const outrosLote = itens.filter(
                     (i) =>
                       itensLoteSelecionados.includes(i.id) &&
                       i.tipo !== "tubulacao_cabo",
-                  );
+                   );
+                   const descidasLote = itens.filter(
+                     (i) => itensLoteSelecionados.includes(i.id) && i.tipo === "descida_subida",
+                   );
                   const nomesCircuitosUnicos = new Set(
                     circuitosLote.map(
                       (c) =>
@@ -2233,7 +2352,7 @@ export function VisualizadorLevantamento({
 
                       {(circuitosLote.length > 0 || pontosLote.length > 0) && (
                         <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-azul-200/70">
-                          {circuitosLote.length > 0 && (
+                           {circuitosLote.length > 0 && (
                             <button
                               type="button"
                               onClick={() =>
@@ -2245,7 +2364,17 @@ export function VisualizadorLevantamento({
                               <Zap className="h-3.5 w-3.5 text-amber-700" />
                               <span>Editar {circuitosLote.length} Circuito(s)</span>
                             </button>
-                          )}
+                           )}
+                           {descidasLote.length > 0 && (
+                             <button
+                               type="button"
+                               onClick={() => setModalEditarLoteDescidasAberto(true)}
+                               className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 text-xs font-semibold border border-purple-300 transition-colors cursor-pointer"
+                             >
+                               <ArrowDownUp className="h-3.5 w-3.5 text-purple-700" />
+                               <span>Editar {descidasLote.length} Descida(s)</span>
+                             </button>
+                           )}
 
                           {pontosLote.length > 0 && (
                             <button
@@ -2340,7 +2469,7 @@ export function VisualizadorLevantamento({
                                   {grupo.nome}
                                 </div>
                                 <div className="text-[10px] text-superficie-500 font-mono">
-                                  Total:{" "}
+                                  {grupo.tipo === "tubulacao_cabo" ? "Extensão do circuito: " : "Total: "}
                                   <span className="font-bold text-superficie-700">
                                     {totalGrupo}
                                   </span>{" "}
@@ -2817,7 +2946,7 @@ export function VisualizadorLevantamento({
                         : "cursor-crosshair"
                     }`}
                   >
-                    <svg className="w-full h-full pointer-events-none absolute inset-0">
+                   <svg className="w-full h-full pointer-events-none absolute inset-0">
                       {pontoSnap && (() => {
                         const pct = pdfParaPercentual(
                           pontoSnap,
@@ -2871,7 +3000,8 @@ export function VisualizadorLevantamento({
                           item.tipo === "tubulacao_cabo"
                         ) {
                           if (item.pontos.length < 2) return null;
-                          const d = item.pontos
+                           const pontosTracado = polilinhaComFaixas(item.pontos, faixasTracados, item.id);
+                           const d = pontosTracado
                             .map((p, idx) => {
                               const pct = pdfParaPercentual(
                                 p,
@@ -2923,7 +3053,7 @@ export function VisualizadorLevantamento({
                                         ? configMarcador.espessura * 2.2
                                         : configMarcador.espessura * 1.5)
                                 }
-                                strokeOpacity={isCabo ? (ativo ? 0.95 : 0.65) : 0.85}
+                                 strokeOpacity={isCabo && mostrarCondutores2D ? 0 : (isCabo ? (ativo ? 0.95 : 0.65) : 0.85)}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 className="cursor-pointer pointer-events-auto hover:opacity-100 transition-all"
@@ -3137,7 +3267,17 @@ export function VisualizadorLevantamento({
                           strokeDasharray="4 4"
                         />
                       )}
-                    </svg>
+                   </svg>
+                    {mostrarCondutores2D && (
+                      <PreviaCircuitos2D
+                        itens={itensVisiveis}
+                        largura={dimensoes.largura}
+                        altura={dimensoes.altura}
+                        escala={escala}
+                        espessura={espessuraCircuito2D}
+                        mostrarCondutores={mostrarCondutores2D}
+                      />
+                    )}
 
                     {itensVisiveis.map((item) => {
                       if (item.tipo === "ponto") {
@@ -3342,20 +3482,25 @@ export function VisualizadorLevantamento({
                   <div className="h-4 w-px bg-superficie-700 hidden sm:block shrink-0" />
 
                   <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                    {itemSelecionado.tipo === "tubulacao_cabo" && (
-                      <button
+                     {(itemSelecionado.tipo === "tubulacao_cabo" || itemSelecionado.tipo === "descida_subida") && (
+                       <button
                         type="button"
-                        onClick={() => {
-                          setItemCaboEmEdicao(itemSelecionado);
-                          setModalCaboAberto(true);
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
-                        title="Editar especificações, condutores e cota deste circuito"
-                      >
-                        <Zap className="h-3.5 w-3.5" />
-                        <span>Editar Circuito</span>
-                      </button>
-                    )}
+                         onClick={() => {
+                           if (itemSelecionado.tipo === "tubulacao_cabo") {
+                             setItemCaboEmEdicao(itemSelecionado);
+                             setModalCaboAberto(true);
+                           } else {
+                             setItemDescidaEmEdicao(itemSelecionado);
+                             setModalDescidaAberto(true);
+                           }
+                         }}
+                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs font-semibold shadow-sm transition-all cursor-pointer ${itemSelecionado.tipo === "descida_subida" ? "bg-purple-600 hover:bg-purple-500" : "bg-amber-600 hover:bg-amber-500"}`}
+                         title="Editar item medido"
+                       >
+                         {itemSelecionado.tipo === "descida_subida" ? <ArrowDownUp className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
+                         <span>Editar {itemSelecionado.tipo === "descida_subida" ? "Descida" : "Circuito"}</span>
+                       </button>
+                     )}
 
                     {itemSelecionado.tipo === "ponto" && (
                       <button
@@ -3445,8 +3590,18 @@ export function VisualizadorLevantamento({
                 {formatarMetros(resumoVisivel.totalGeralDistancias)}
               </div>
               <p className="text-xs text-superficie-500 mt-0.5">
-                Linhas + descidas verticais
+                Trechos lineares medidos
               </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-superficie-200 shadow-sm">
+              <span className="text-xs text-superficie-500 font-semibold uppercase tracking-wider block">
+                Descidas / Subidas
+              </span>
+              <div className="text-2xl font-bold text-purple-700 mt-1">
+                {formatarMetros(resumoVisivel.totalGeralDescidasSubidas)}
+              </div>
+              <p className="text-xs text-superficie-500 mt-0.5">Trechos verticais</p>
             </div>
 
             <div className="p-4 rounded-2xl bg-white border border-superficie-200 shadow-sm">
@@ -3473,6 +3628,42 @@ export function VisualizadorLevantamento({
               </p>
             </div>
           </div>
+
+          <section className="rounded-2xl border border-cyan-200 bg-white overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-cyan-100 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-superficie-900">Distâncias selecionáveis</h2>
+                <p className="text-xs text-superficie-500 mt-1">Escolha os trechos que compõem o subtotal de tubulações.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-cyan-700">Selecionado: {formatarMetros(totalDistanciasSelecionadas)}</span>
+                <button type="button" onClick={alternarTodasDistancias} className="px-3 py-1.5 rounded-lg border border-cyan-200 text-xs font-semibold text-cyan-700 hover:bg-cyan-50">
+                  {itensLinearesSelecionaveis.length > 0 && itensLinearesSelecionaveis.every((item) => distanciasSelecionadas.includes(item.id)) ? "Desmarcar todas" : "Selecionar todas"}
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-cyan-50 text-superficie-600 font-semibold border-b border-cyan-100">
+                  <tr><th className="p-3 w-16">Incluir</th><th className="p-3">Trecho</th><th className="p-3">Tipo / Circuito</th><th className="p-3 text-right">Comprimento</th></tr>
+                </thead>
+                <tbody className="divide-y divide-superficie-100">
+                  {itensLinearesSelecionaveis.map((item) => {
+                    const comprimento = item.comprimentoReal ?? calcularDistanciaPontos(item.pontos, calibracaoPagina);
+                    return (
+                      <tr key={item.id} className="hover:bg-cyan-50/50">
+                        <td className="p-3"><input type="checkbox" checked={distanciasSelecionadas.includes(item.id)} onChange={() => alternarSelecaoDistancia(item.id)} aria-label={`Incluir ${item.nome} no subtotal`} className="h-4 w-4 accent-cyan-600" /></td>
+                        <td className="p-3 font-medium text-superficie-900">{item.nome}</td>
+                        <td className="p-3 text-superficie-600">{item.tipo === "tubulacao_cabo" ? `Circuito ${item.metadadosCabo?.circuito ?? item.circuito ?? "-"}` : "Distância"}</td>
+                        <td className="p-3 text-right font-bold text-cyan-700">{formatarMetros(comprimento)}</td>
+                      </tr>
+                    );
+                  })}
+                  {itensLinearesSelecionaveis.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-superficie-400 italic">Nenhuma distância medida nesta página.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
           <div className="rounded-2xl border border-superficie-200 bg-white overflow-hidden shadow-sm">
             <div className="p-4 border-b border-superficie-100 font-bold text-superficie-900">
@@ -3541,7 +3732,7 @@ export function VisualizadorLevantamento({
                 </thead>
                 <tbody className="divide-y divide-superficie-100">
                   {resumoVisivel.cabos.map((c, idx) => (
-                    <tr key={`${c.circuito}_${c.tipoCabo}_${c.funcao}_${c.fase ?? ""}_${c.corCabo ?? ""}_${idx}`}>
+                    <tr key={`${c.circuito}_${c.tipoCabo}_${c.funcao}_${c.fase ?? ""}_${c.corCabo ?? ""}_${c.secaoMm2 ?? ""}_${idx}`}>
                       <td className="p-3 font-bold text-azul-700">
                         <div className="flex items-center gap-2">
                           {c.corCircuito && (
@@ -3609,6 +3800,39 @@ export function VisualizadorLevantamento({
               </table>
             </div>
           </div>
+
+          <div className="rounded-2xl border border-emerald-200 bg-white overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-emerald-100 font-bold text-superficie-900">
+              Totais de cabos por cor e bitola
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-emerald-50 text-superficie-600 font-semibold border-b border-emerald-100">
+                  <tr>
+                    <th className="p-3">Tipo / Bitola</th>
+                    <th className="p-3">Função</th>
+                    <th className="p-3">Cor</th>
+                    <th className="p-3 text-right">Condutores</th>
+                    <th className="p-3 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-superficie-100">
+                  {resumoVisivel.cabosPorTipo.map((c, idx) => (
+                    <tr key={`${c.tipoCabo}_${c.funcao}_${c.corCabo ?? ""}_${c.secaoMm2 ?? ""}_${idx}`}>
+                      <td className="p-3 font-medium text-superficie-900">
+                        {c.tipoCabo}{c.secaoMm2 ? ` · ${c.secaoMm2} mm²` : ""}
+                      </td>
+                      <td className="p-3">{rotuloCondutor(c.funcao)}</td>
+                      <td className="p-3"><span className="inline-flex items-center gap-2">{c.corCabo && <span className="w-3 h-3 rounded-full border border-black/20" style={{ backgroundColor: c.corCabo }} />}{obterNomeCorCabo(c.corCabo)}</span></td>
+                      <td className="p-3 text-right">{c.quantidadeCondutores}x</td>
+                      <td className="p-3 text-right font-bold text-emerald-700">{formatarMetros(c.comprimentoTotal)}</td>
+                    </tr>
+                  ))}
+                  {resumoVisivel.cabosPorTipo.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-superficie-400 italic">Nenhum cabo configurado.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
@@ -3657,15 +3881,36 @@ export function VisualizadorLevantamento({
       />
 
       <ModalDescidaSubida
+        key={itemDescidaEmEdicao?.id ?? "nova-descida"}
         aberto={modalDescidaAberto}
         niveis={niveis}
         circuitosDisponiveis={circuitosDisponiveisComCor}
-        aoSalvar={salvarDescidaSubida}
+        dadosIniciais={itemDescidaEmEdicao ? {
+          nome: itemDescidaEmEdicao.nome,
+          subtipo: itemDescidaEmEdicao.subtipo,
+          cor: itemDescidaEmEdicao.cor,
+          circuito: itemDescidaEmEdicao.circuito,
+          nivelOrigemId: itemDescidaEmEdicao.nivelOrigemId,
+          alturaOrigem: itemDescidaEmEdicao.alturaOrigem,
+          nivelDestinoId: itemDescidaEmEdicao.nivelDestinoId,
+          alturaDestino: itemDescidaEmEdicao.alturaDestino,
+        } : undefined}
+        aoSalvar={itemDescidaEmEdicao ? salvarEdicaoDescida : salvarDescidaSubida}
         aoFechar={() => {
           setModalDescidaAberto(false);
           setPontoDescidaPendente(null);
           setPontosAlvoDescidaLote([]);
+          setItemDescidaEmEdicao(null);
         }}
+      />
+
+      <ModalEditarDescidasLote
+        key={itens.filter((item) => itensLoteSelecionados.includes(item.id) && item.tipo === "descida_subida").map((item) => item.id).join(",")}
+        aberto={modalEditarLoteDescidasAberto}
+        itensSelecionados={itens.filter((item) => itensLoteSelecionados.includes(item.id) && item.tipo === "descida_subida")}
+        niveis={niveis}
+        aoSalvar={salvarEdicaoLoteDescidas}
+        aoFechar={() => setModalEditarLoteDescidasAberto(false)}
       />
 
       <GerenciadorNiveisModal
@@ -3708,6 +3953,7 @@ export function VisualizadorLevantamento({
           itensLevantamento={itensVisiveis}
           resumoLevantamento={resumoVisivel}
           nomeLevantamento={nomeLevantamento}
+          configLegenda={configLegenda}
         />
       )}
     </div>
