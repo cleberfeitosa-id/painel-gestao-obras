@@ -310,7 +310,7 @@ export function ModalDescidaSubida({
             </span>
           </div>
           <div className="text-xs text-superficie-500">
-            Será somado automaticamente nas tubulações
+            Será somado aos trechos verticais; condutores associados também entram no cálculo de cabos.
           </div>
         </div>
 
@@ -320,7 +320,7 @@ export function ModalDescidaSubida({
           </Botao>
           <Botao variante="primario" onClick={salvar}>
             <ArrowDownUp className="h-4 w-4" />
-            Inserir Descida/Subida
+             {dadosIniciais ? "Salvar alterações" : "Inserir Descida/Subida"}
           </Botao>
         </div>
       </div>
