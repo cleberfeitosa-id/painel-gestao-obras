@@ -24,6 +24,7 @@ interface ModalExportarProps {
   obraNome: string;
   transparenciaTarefas?: number;
   transparenciaBordas?: number;
+  plantaDestaque: string | null;
 }
 
 export function ModalExportarCompatibilizacao({
@@ -36,6 +37,7 @@ export function ModalExportarCompatibilizacao({
   obraNome,
   transparenciaTarefas = 0,
   transparenciaBordas = 0,
+  plantaDestaque,
 }: ModalExportarProps) {
   const [exportando, setExportando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function ModalExportarCompatibilizacao({
         obraNome,
         transparenciaTarefas,
         transparenciaBordas,
+        plantaDestaque,
         (etapa, pct) => setProgresso({ etapa, pct })
       );
       
@@ -86,7 +89,7 @@ export function ModalExportarCompatibilizacao({
     >
       <div className="space-y-6">
         <p className="text-sm text-superficie-600">
-          O PDF gerado manterá 100% da resolução vetorial infinita original das plantas CAD. A geometria da folha será moldada perfeitamente de forma adaptativa. Serão incluídas apenas as marcações de tarefas e choques atualmente visíveis na tela.
+          O PDF manterá as plantas em formato vetorial, aplicará a transparência e o destaque de composição selecionado e incluirá as marcações conforme os filtros atuais. Os tons de cinza são um tratamento visual da tela e não são convertidos no PDF vetorial.
         </p>
 
         <div className="space-y-4">

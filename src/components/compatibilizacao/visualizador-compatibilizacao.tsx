@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
-import { Eye, EyeOff, ZoomIn, ZoomOut, AlertTriangle, Trash2, FileDown } from "lucide-react";
+import { Eye, EyeOff, ZoomIn, ZoomOut, AlertTriangle, Trash2, FileDown, Contrast } from "lucide-react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import dynamic from "next/dynamic";
@@ -126,6 +126,7 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
   const [novoChoquePonto, setNovoChoquePonto] = useState<{x: number, y: number} | null>(null);
   const [descChoque, setDescChoque] = useState("");
   const [modalExportar, setModalExportar] = useState(false);
+  const [plantaDestaque, setPlantaDestaque] = useState<string | null>(null);
 
   const gruposTarefas = Array.from(new Set(tarefas.map(t => t.titulo))).sort();
   const [gruposVisiveis, setGruposVisiveis] = useState<Set<string>>(new Set(gruposTarefas));
@@ -244,9 +245,24 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
     return true;
   });
 
+  const tarefasExportaveis = tarefasFiltradas.filter((t) => {
+    const temPonto = t.ponto_x !== null && t.ponto_y !== null;
+    const pontos = t.localizacao_tipo === "regiao" && t.regiao?.vertices
+      ? t.regiao.vertices
+      : t.localizacao_detalhe?.pontos;
+    return temPonto || (Array.isArray(pontos) && pontos.length > 1);
+  });
+
   const executores: string[] = Array.from(new Set(tarefas.map((t) => t.executores?.nome).filter(Boolean))) as string[];
 
   const safeRenderEscala = Math.min(renderEscala, 2.5);
+
+  const filtroDaPlanta = (plantaId: string, indice: number) => {
+    if (plantaDestaque === plantaId) return "grayscale(1) contrast(4)";
+
+    const brilho = 0.72 + ((indice % 4) * 0.09);
+    return `grayscale(1) contrast(1.15) brightness(${brilho.toFixed(2)})`;
+  };
 
   return (
     <div className="flex h-full w-full bg-slate-50">
@@ -263,10 +279,19 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
         
         <div className="flex-1 overflow-auto p-4 space-y-4">
           {plantasComp.map(p => (
-            <Cartao key={p.id} className={`p-3 text-sm ${p.e_base ? 'border-primary' : ''}`}>
+            <Cartao key={p.id} className={`p-3 text-sm ${p.e_base ? 'border-primary' : ''} ${plantaDestaque === p.id ? 'ring-2 ring-slate-900' : ''}`}>
               <div className="flex items-center justify-between font-medium">
                 <span className="truncate">{p.plantas.nome} {p.e_base && "(Base)"}</span>
                 <div className="flex gap-1">
+                  <Botao
+                    variante="fantasma"
+                    className={`h-6 w-6 p-0 ${plantaDestaque === p.id ? "text-slate-950" : "text-slate-500"}`}
+                    onClick={() => setPlantaDestaque(plantaDestaque === p.id ? null : p.id)}
+                    title={plantaDestaque === p.id ? "Remover destaque preto" : "Destacar planta em preto"}
+                    aria-label={plantaDestaque === p.id ? "Remover destaque preto" : "Destacar planta em preto"}
+                  >
+                    <Contrast className="h-4 w-4" />
+                  </Botao>
                   <Botao variante="fantasma" className="h-6 w-6 p-0" onClick={() => toggleVisivel(p)}>
                     {p.visivel ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                   </Botao>
@@ -444,22 +469,36 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
             </div>
           </div>
           <div className="border rounded max-h-48 overflow-y-auto p-1 space-y-1">
-            {gruposTarefas.map(nome => {
-              const qtd = tarefas.filter(t => t.titulo === nome).length;
-              return (
-                <label key={nome} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer text-xs">
-                  <input 
-                    type="checkbox" 
-                    checked={gruposVisiveis.has(nome)} 
-                    onChange={() => alternarGrupo(nome)}
-                    className="rounded border-slate-300"
-                  />
-                  <span className="truncate flex-1" title={nome}>{nome}</span>
-                  <span className="text-slate-400">({qtd})</span>
-                </label>
-              );
-            })}
+            {gruposTarefas.length === 0 ? (
+              <p className="p-3 text-center text-xs text-slate-500">
+                Nenhuma tarefa disponível nesta compatibilização.
+              </p>
+            ) : (
+              gruposTarefas.map(nome => {
+                const qtd = tarefas.filter(t => t.titulo === nome).length;
+                return (
+                  <label key={nome} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer text-xs">
+                    <input
+                      type="checkbox"
+                      checked={gruposVisiveis.has(nome)}
+                      onChange={() => alternarGrupo(nome)}
+                      className="rounded border-slate-300"
+                    />
+                    <span className="truncate flex-1" title={nome}>{nome}</span>
+                    <span className="text-slate-400">({qtd})</span>
+                  </label>
+                );
+              })
+            )}
           </div>
+          <p className="mt-2 text-[10px] text-slate-500">
+            {tarefas.length} {tarefas.length === 1 ? "tarefa" : "tarefas"} · {gruposTarefas.length} {gruposTarefas.length === 1 ? "grupo" : "grupos"} · {tarefasExportaveis.length} visíveis para exportação
+          </p>
+          {tarefas.length > 0 && tarefasFiltradas.length === 0 && (
+            <p className="mt-1 text-xs text-amber-700">
+              Nenhuma tarefa corresponde aos filtros atuais.
+            </p>
+          )}
 
           <hr className="my-4"/>
           <Botao 
@@ -537,7 +576,7 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
                   height: plantaBase.dimensoes ? plantaBase.dimensoes.altura * safeRenderEscala : 'auto'
                 }}
               >
-                {plantasComp.map((p) => {
+                {plantasComp.map((p, indice) => {
                   if (!p.visivel || !p.urlPdf) return null;
                   
                   let matrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
@@ -557,12 +596,12 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
                   return (
                     <div 
                       key={p.id}
-                      className="absolute top-0 left-0 origin-top-left"
-                      style={{
-                        opacity: p.opacidade,
-                        zIndex: marcandoRef?.plantaId === p.id ? 40 : (p.e_base ? 10 : 20),
-                        mixBlendMode: (marcandoRef?.plantaId === p.id) ? "normal" : "multiply",
-                        transform: (p.e_base || marcandoRef?.plantaId === p.id) ? 'none' : `matrix(${matrix.a}, ${matrix.b}, ${matrix.c}, ${matrix.d}, ${matrix.e * safeRenderEscala}, ${matrix.f * safeRenderEscala})`
+                       className="absolute top-0 left-0 origin-top-left"
+                       style={{
+                         opacity: plantaDestaque === p.id ? 1 : p.opacidade,
+                         zIndex: marcandoRef?.plantaId === p.id ? 40 : (p.e_base ? 10 : 20),
+                         mixBlendMode: (marcandoRef?.plantaId === p.id) ? "normal" : "multiply",
+                         transform: (p.e_base || marcandoRef?.plantaId === p.id) ? 'none' : `matrix(${matrix.a}, ${matrix.b}, ${matrix.c}, ${matrix.d}, ${matrix.e * safeRenderEscala}, ${matrix.f * safeRenderEscala})`
                       }}
                       onClick={(e) => {
                         if (marcandoRef?.plantaId === p.id) {
@@ -578,22 +617,24 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
                           salvarReferencia(p.id, marcandoRef.refIndex, pdfX, pdfY);
                         }
                       }}
-                    >
-                      <Document file={p.urlPdf}>
-                        <Page 
-                          pageNumber={p.pagina} 
-                          scale={safeRenderEscala}
-                          renderTextLayer={false}
-                          renderAnnotationLayer={false}
-                        onLoadSuccess={(page: { getViewport: (options: { scale: number }) => { width: number; height: number } }) => {
-                          const vp = page.getViewport({ scale: 1 });
-                          setPlantasComp(prev => prev.map(x => 
-                            x.id === p.id ? { ...x, dimensoes: { largura: vp.width, altura: vp.height } } : x
-                          ));
-                        }}
-                      />
-                    </Document>
-                    {p.dimensoes && p.ref1_x && p.ref1_y && (
+                     >
+                       <div style={{ filter: filtroDaPlanta(p.id, indice) }}>
+                         <Document file={p.urlPdf}>
+                           <Page
+                             pageNumber={p.pagina}
+                             scale={safeRenderEscala}
+                             renderTextLayer={false}
+                             renderAnnotationLayer={false}
+                           onLoadSuccess={(page: { getViewport: (options: { scale: number }) => { width: number; height: number } }) => {
+                             const vp = page.getViewport({ scale: 1 });
+                             setPlantasComp(prev => prev.map(x =>
+                               x.id === p.id ? { ...x, dimensoes: { largura: vp.width, altura: vp.height } } : x
+                             ));
+                           }}
+                         />
+                       </Document>
+                       </div>
+                     {p.dimensoes && p.ref1_x && p.ref1_y && (
                       <div 
                         className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center pointer-events-none z-50"
                         style={{ 
@@ -801,9 +842,10 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
           choques={choques}
           compatibilizacaoNome={compatibilizacao.nome}
             obraNome={obraNome}
-          transparenciaTarefas={transparenciaTarefas}
-          transparenciaBordas={transparenciaBordas}
-        />
+           transparenciaTarefas={transparenciaTarefas}
+           transparenciaBordas={transparenciaBordas}
+           plantaDestaque={plantaDestaque}
+         />
       )}
     </div>
   );
