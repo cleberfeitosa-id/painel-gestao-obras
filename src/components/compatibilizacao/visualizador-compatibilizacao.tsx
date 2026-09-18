@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Eye, EyeOff, ZoomIn, ZoomOut, AlertTriangle, Trash2, FileDown, Contrast } from "lucide-react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -107,9 +108,10 @@ interface Props {
 
 export default function VisualizadorCompatibilizacao({ obraNome, compatibilizacao, plantasPreCarregadas, plantasDisponiveis, tarefas, choques: choquesIniciais }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   
   const [plantasComp, setPlantasComp] = useState<PlantaItem[]>(
-    plantasPreCarregadas.sort((a, b) => (a.e_base === b.e_base ? 0 : a.e_base ? -1 : 1))
+    [...plantasPreCarregadas].sort((a, b) => (a.e_base === b.e_base ? 0 : a.e_base ? -1 : 1))
   );
   const [choques, setChoques] = useState<ChoqueItem[]>(choquesIniciais);
   const [marcandoRef, setMarcandoRef] = useState<{plantaId: string, refIndex: 1 | 2} | null>(null);
@@ -127,6 +129,7 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
   const [descChoque, setDescChoque] = useState("");
   const [modalExportar, setModalExportar] = useState(false);
   const [plantaDestaque, setPlantaDestaque] = useState<string | null>(null);
+  const [alterandoPlanta, setAlterandoPlanta] = useState(false);
 
   const gruposTarefas = Array.from(new Set(tarefas.map(t => t.titulo))).sort();
   const [gruposVisiveis, setGruposVisiveis] = useState<Set<string>>(new Set(gruposTarefas));
@@ -213,15 +216,38 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
   };
 
   const addPlanta = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    if (!e.target.value) return;
-    await adicionarPlantaCompatibilizacao(compatibilizacao.id, e.target.value);
-    window.location.reload();
+    const plantaId = e.target.value;
+    e.target.value = "";
+    if (!plantaId || alterandoPlanta) return;
+
+    setAlterandoPlanta(true);
+    try {
+      const resultado = await adicionarPlantaCompatibilizacao(compatibilizacao.id, plantaId);
+      if (resultado.error) {
+        console.error("Erro ao adicionar planta à compatibilização:", resultado.error);
+        window.alert("Não foi possível adicionar a planta à compatibilização.");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setAlterandoPlanta(false);
+    }
   };
 
   const removerPlanta = async (id: string) => {
     if (!confirm("Remover planta?")) return;
-    await removerPlantaCompatibilizacao(id);
-    window.location.reload();
+    setAlterandoPlanta(true);
+    try {
+      const resultado = await removerPlantaCompatibilizacao(id);
+      if (resultado.error) {
+        console.error("Erro ao remover planta da compatibilização:", resultado.error);
+        window.alert("Não foi possível remover a planta da compatibilização.");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setAlterandoPlanta(false);
+    }
   };
 
   const toggleVisivel = async (p: PlantaItem) => {
@@ -269,7 +295,7 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
       <div className="w-80 flex-shrink-0 border-r bg-white flex flex-col h-full overflow-hidden">
         <div className="p-4 border-b space-y-4">
           <h2 className="font-semibold text-lg">Plantas ({plantasComp.length})</h2>
-          <select className="w-full border rounded p-2 text-sm" onChange={addPlanta} value="">
+          <select className="w-full border rounded p-2 text-sm" onChange={addPlanta} value="" disabled={alterandoPlanta}>
             <option value="">+ Adicionar Planta</option>
             {plantasDisponiveis.filter((pd) => !plantasComp.find(pc => pc.planta_id === pd.id)).map((pd) => (
               <option key={pd.id} value={pd.id}>{pd.nome}</option>
@@ -296,7 +322,7 @@ export default function VisualizadorCompatibilizacao({ obraNome, compatibilizaca
                     {p.visivel ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                   </Botao>
                   {!p.e_base && (
-                    <Botao variante="fantasma" className="h-6 w-6 p-0 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => removerPlanta(p.id)}>
+                     <Botao variante="fantasma" className="h-6 w-6 p-0 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => removerPlanta(p.id)} disabled={alterandoPlanta}>
                       <Trash2 className="h-4 w-4" />
                     </Botao>
                   )}

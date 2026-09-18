@@ -88,6 +88,7 @@ export default async function CompatibilizacaoDetalhePage({ params }: Compatibil
       
       <div className="flex-1 overflow-hidden">
           <AreaCompatibilizacao
+            key={plantasComUrls.map((planta) => planta.id).sort().join(",")}
             obraId={id}
             obraNome={obra.nome}
           compatibilizacao={compatibilizacao}
