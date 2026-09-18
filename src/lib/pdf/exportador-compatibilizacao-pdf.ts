@@ -1,6 +1,6 @@
 "use client";
 
-import { PDFDocument, rgb, pushGraphicsState, popGraphicsState, concatTransformationMatrix, StandardFonts, BlendMode, degrees, PDFPage, PDFName, PDFDict, moveTo, lineTo, fillAndStroke, stroke, closePath, setFillingRgbColor, setStrokingRgbColor, setLineWidth, setGraphicsState } from "pdf-lib";
+import { PDFDocument, rgb, pushGraphicsState, popGraphicsState, concatTransformationMatrix, StandardFonts, BlendMode, degrees, PDFPage, PDFName, PDFStream, moveTo, lineTo, fillAndStroke, stroke, closePath, setFillingRgbColor, setStrokingRgbColor, setLineWidth, setGraphicsState } from "pdf-lib";
 import { calcularMatrizTransformacao } from "@/components/compatibilizacao/math";
 import type { ChoqueItem, PlantaItem, TarefaItem } from "@/components/compatibilizacao/visualizador-compatibilizacao";
 
@@ -20,6 +20,7 @@ export async function exportarCompatibilizacaoPdf(
   obraNome: string,
   transparenciaTarefas = 0,
   transparenciaBordas = 0,
+  plantaDestaque: string | null = null,
   aoProgresso?: (etapa: string, pct: number) => void
 ): Promise<{ blob: Blob; url: string }> {
   const notificar = (etapa: string, pct: number) => {
@@ -143,26 +144,17 @@ export async function exportarCompatibilizacaoPdf(
     concatTransformationMatrix(1, 0, 0, 1, -minX, -minY)
   );
 
-  notificar("Embutindo páginas...", 50);
+  notificar("Embutindo páginas vetoriais...", 50);
 
   for (const rp of renderedPlans) {
     const embeddedPage = await finalDoc.embedPage(rp.pdfPage);
-    
-    // As hachuras e fundos CAD resetam a opacidade nativamente (ca=1.0).
-    // O Transparency Group isola a planta e garante que o BlendMode afete a camada inteira,
-    // derretendo o fundo branco e respeitando o nível de opacidade fornecido.
-    // O flush() é vital pois processa e cria a referência do XObject internamente.
+
     try {
       await finalDoc.flush();
-      const xobj = finalDoc.context.lookupMaybe(embeddedPage.ref, PDFDict);
+      const xobj = finalDoc.context.lookupMaybe(embeddedPage.ref, PDFStream);
       if (xobj) {
-        const groupDict = finalDoc.context.obj({
-          Type: 'Group',
-          S: 'Transparency',
-          I: true,
-          K: false
-        });
-        xobj.set(PDFName.of('Group'), groupDict);
+        const groupDict = finalDoc.context.obj({ Type: "Group", S: "Transparency", I: true, K: false });
+        xobj.dict.set(PDFName.of("Group"), groupDict);
       }
     } catch (e) {
       console.warn("Aviso: Falha ao aplicar Transparency Group", e);
@@ -183,12 +175,13 @@ export async function exportarCompatibilizacaoPdf(
     if (angle === 180) { dx = rp.dim.largura; dy = rp.dim.altura; }
     if (angle === 270) dx = rp.dim.largura;
 
-    finalPage.drawPage(embeddedPage, { 
-      x: dx, 
-      y: dy, 
+    const destacada = plantaDestaque === rp.p.id;
+    finalPage.drawPage(embeddedPage, {
+      x: dx,
+      y: dy,
       rotate: degrees(-angle),
-      opacity: rp.isBase ? 1.0 : (rp.p.opacidade ?? 0.5),
-      blendMode: rp.isBase ? BlendMode.Normal : BlendMode.Multiply
+      opacity: destacada ? 1.0 : (rp.p.opacidade ?? 0.5),
+      blendMode: destacada ? BlendMode.Normal : BlendMode.Multiply,
     });
     
     finalPage.pushOperators(popGraphicsState());
