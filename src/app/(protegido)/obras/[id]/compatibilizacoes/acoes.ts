@@ -33,7 +33,7 @@ export async function criarCompatibilizacao(formData: FormData) {
       },
     ])
     .select()
-    .single();
+    .maybeSingle();
 
   if (error || !data) {
     console.error("Erro ao criar compatibilização", error);
@@ -81,7 +81,7 @@ export async function adicionarPlantaCompatibilizacao(compatId: string, plantaId
     .select("id")
     .eq("compatibilizacao_id", compatId)
     .eq("e_base", true)
-    .single();
+    .maybeSingle();
 
   const { error } = await supabase
     .from("compatibilizacao_plantas")
