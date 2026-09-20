@@ -24,6 +24,7 @@ import {
   obterDadosCompletosTarefasExportacao,
   type TarefaExportacaoCompleta,
 } from "@/app/(protegido)/obras/[id]/plantas/acoes";
+import { distanciaEmPontos } from "@/lib/pdf/coordenadas";
 
 type ResultadoSalvar = { id: string } | { erro: string };
 type ResultadoExcluir = { ok: true } | { erro: string };
@@ -227,6 +228,20 @@ export async function salvarCalibracaoDireta(
   }
 
   const supabase = await createClient();
+  const { data: planta } = await supabase
+    .from("plantas")
+    .select("total_paginas")
+    .eq("id", resultado.data.plantaId)
+    .single();
+  if (!planta || resultado.data.pagina > planta.total_paginas) {
+    return { erro: "Pagina de calibracao invalida." };
+  }
+  const distanciaEmPdf = distanciaEmPontos(resultado.data.refP1, resultado.data.refP2);
+  const fatorCalculado = resultado.data.distanciaReal / distanciaEmPdf;
+  if (!Number.isFinite(distanciaEmPdf) || distanciaEmPdf <= 0 || Math.abs(fatorCalculado - resultado.data.unidadesPorPonto) > Math.max(1e-9, Math.abs(fatorCalculado) * 1e-9)) {
+    return { erro: "Dados de calibracao inconsistentes." };
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

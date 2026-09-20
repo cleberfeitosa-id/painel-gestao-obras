@@ -38,6 +38,7 @@ import {
 import { Botao, Spinner } from "@/components/ui";
 import {
   calcularCalibracao,
+  calcularCalibracaoPorEscala,
   distanciaEmPontos,
   pdfParaPercentual,
   telaParaPdf,
@@ -1640,24 +1641,40 @@ export function VisualizadorLevantamento({
   }
 
   async function salvarCalibracaoModal(
-    distanciaReal: number,
-    unidade: "m" | "cm",
+    dados:
+      | { metodo: "referencia"; distanciaReal: number; unidade: "m" | "cm" }
+      | { metodo: "escala"; denominador: number; unidade: "m" | "cm" },
   ) {
-    if (pontosCalibracao.length !== 2)
+    if (dados.metodo === "referencia" && pontosCalibracao.length !== 2)
       return { erro: "Selecione 2 pontos na planta." };
-    const p1 = pontosCalibracao[0];
-    const p2 = pontosCalibracao[1];
-    const unidadesPorPonto = calcularCalibracao(p1, p2, distanciaReal);
+    const [p1, p2] = dados.metodo === "referencia"
+      ? pontosCalibracao
+      : [{ x: 0, y: 0 }, { x: 72, y: 0 }];
+    let distanciaReal: number;
+    let unidadesPorPonto: number;
+    try {
+      distanciaReal = dados.metodo === "referencia"
+        ? dados.distanciaReal
+        : calcularCalibracaoPorEscala(dados.denominador, dados.unidade) * 72;
+      unidadesPorPonto = calcularCalibracao(p1, p2, distanciaReal);
+    } catch (erro) {
+      return { erro: erro instanceof Error ? erro.message : "Pontos de calibragem invalidos." };
+    }
 
-    const res = await salvarCalibracaoDireta({
-      plantaId: plantaSelecionadaId,
-      pagina,
-      unidadesPorPonto,
-      unidade,
-      refP1: p1,
-      refP2: p2,
-      distanciaReal,
-    });
+    let res: Awaited<ReturnType<typeof salvarCalibracaoDireta>>;
+    try {
+      res = await salvarCalibracaoDireta({
+        plantaId: plantaSelecionadaId,
+        pagina,
+        unidadesPorPonto,
+        unidade: dados.unidade,
+        refP1: p1,
+        refP2: p2,
+        distanciaReal,
+      });
+    } catch {
+      return { erro: "Nao foi possivel salvar a calibracao. Tente novamente." };
+    }
 
     if ("erro" in res) {
       return { erro: res.erro };
@@ -1672,7 +1689,7 @@ export function VisualizadorLevantamento({
         planta_id: plantaSelecionadaId,
         pagina,
         unidades_por_ponto: unidadesPorPonto,
-        unidade,
+        unidade: dados.unidade,
         ref_p1: p1,
         ref_p2: p2,
         distancia_real: distanciaReal,
@@ -1683,6 +1700,7 @@ export function VisualizadorLevantamento({
     ]);
 
     setPontosCalibracao([]);
+    setCalibrando(false);
     return {};
   }
 
