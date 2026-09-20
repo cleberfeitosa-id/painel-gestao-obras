@@ -53,6 +53,22 @@ export function calcularCalibracao(
   return distanciaReal / pontos;
 }
 
+/**
+ * Converte uma escala metrica (1:N) em unidades reais por ponto PDF.
+ * Um ponto PDF equivale a 1/72 de polegada; a escala arquitetonica usa mm.
+ */
+export function calcularCalibracaoPorEscala(
+  denominador: number,
+  unidade: "m" | "cm",
+): number {
+  if (!Number.isFinite(denominador) || denominador <= 0) {
+    throw new Error("O denominador da escala precisa ser maior que zero.");
+  }
+
+  const milimetrosPorPonto = (25.4 / 72) * denominador;
+  return unidade === "m" ? milimetrosPorPonto / 1000 : milimetrosPorPonto / 10;
+}
+
 export function medirDistancia(
   p1: PontoPdf,
   p2: PontoPdf,
