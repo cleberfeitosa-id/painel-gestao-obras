@@ -30,6 +30,7 @@ import {
   CANTOS,
   cantoParaPonto,
   calcularCalibracao,
+  calcularCalibracaoPorEscala,
   centroDaRegiao,
   corredorDaPolilinha,
   deslocarPolilinha,
@@ -1107,15 +1108,22 @@ export function VisualizadorPlanta({
   }
 
   async function salvarCalibracao(
-    distanciaReal: number,
-    unidade: "m" | "cm",
+    dados:
+      | { metodo: "referencia"; distanciaReal: number; unidade: "m" | "cm" }
+      | { metodo: "escala"; denominador: number; unidade: "m" | "cm" },
   ): Promise<{ erro?: string }> {
-    if (pontosCalibracao.length !== 2) {
+    if (dados.metodo === "referencia" && pontosCalibracao.length !== 2) {
       return { erro: "Selecione dois pontos na planta." };
     }
-    const [p1, p2] = pontosCalibracao;
+    const [p1, p2] = dados.metodo === "referencia"
+      ? pontosCalibracao
+      : [{ x: 0, y: 0 }, { x: 72, y: 0 }];
     let unidadesPorPonto: number;
+    let distanciaReal: number;
     try {
+      distanciaReal = dados.metodo === "referencia"
+        ? dados.distanciaReal
+        : calcularCalibracaoPorEscala(dados.denominador, dados.unidade) * 72;
       unidadesPorPonto = calcularCalibracao(p1, p2, distanciaReal);
     } catch (erro) {
       return { erro: erro instanceof Error ? erro.message : "Pontos de calibragem invalidos." };
@@ -1125,7 +1133,7 @@ export function VisualizadorPlanta({
       plantaId: planta.id,
       pagina: paginaAtual,
       unidadesPorPonto,
-      unidade,
+      unidade: dados.unidade,
       refP1: p1,
       refP2: p2,
       distanciaReal,
@@ -1139,7 +1147,7 @@ export function VisualizadorPlanta({
         planta_id: planta.id,
         pagina: paginaAtual,
         unidades_por_ponto: unidadesPorPonto,
-        unidade,
+        unidade: dados.unidade,
         ref_p1: p1,
         ref_p2: p2,
         distancia_real: distanciaReal,
