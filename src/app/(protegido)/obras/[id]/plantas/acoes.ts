@@ -22,6 +22,7 @@ import type {
   TarefaComentarioRow,
   TarefaMedicaoRow,
 } from "@/lib/supabase/database.types";
+import { distanciaEmPontos } from "@/lib/pdf/coordenadas";
 import type { DetalheLocalizacaoLevantamento } from "@/components/plantas/tipos";
 
 const LIMITE_BYTES = 100 * 1024 * 1024;
@@ -195,6 +196,20 @@ export async function salvarCalibracao(
   }
 
   const supabase = await createClient();
+  const { data: planta } = await supabase
+    .from("plantas")
+    .select("total_paginas")
+    .eq("id", resultado.data.plantaId)
+    .single();
+  if (!planta || resultado.data.pagina > planta.total_paginas) {
+    return { erro: "Pagina de calibracao invalida." };
+  }
+  const distanciaEmPdf = distanciaEmPontos(resultado.data.refP1, resultado.data.refP2);
+  const fatorCalculado = resultado.data.distanciaReal / distanciaEmPdf;
+  if (!Number.isFinite(distanciaEmPdf) || distanciaEmPdf <= 0 || Math.abs(fatorCalculado - resultado.data.unidadesPorPonto) > Math.max(1e-9, Math.abs(fatorCalculado) * 1e-9)) {
+    return { erro: "Dados de calibracao inconsistentes." };
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
