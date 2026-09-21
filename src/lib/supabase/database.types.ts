@@ -1276,30 +1276,33 @@ export type Database = {
           },
         ]
       }
-      tarefa_medicoes: {
-        Row: {
-          catalogo_id: string
-          criado_em: string
-          criado_por: string | null
-          id: string
-          quantidade: number
-          tarefa_id: string
+        tarefa_medicoes: {
+          Row: {
+            catalogo_id: string
+            criado_em: string
+            criado_por: string | null
+            id: string
+            quantidade: number
+          segmentos_circuito: Json
+            tarefa_id: string
         }
         Insert: {
           catalogo_id: string
           criado_em?: string
           criado_por?: string | null
-          id?: string
-          quantidade: number
-          tarefa_id: string
+            id?: string
+            quantidade: number
+          segmentos_circuito?: Json
+            tarefa_id: string
         }
         Update: {
           catalogo_id?: string
           criado_em?: string
           criado_por?: string | null
-          id?: string
-          quantidade?: number
-          tarefa_id?: string
+            id?: string
+            quantidade?: number
+          segmentos_circuito?: Json
+            tarefa_id?: string
         }
         Relationships: [
           {

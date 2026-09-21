@@ -26,6 +26,45 @@ const esquemaMedicao = z.object({
   usar_distancia: z.boolean().default(false),
 });
 
+const esquemaSegmentoCircuito = z.object({
+  segmentoId: z.string().trim().min(1).max(200).optional(),
+  pontos: z.array(z.object({ x: z.number().finite(), y: z.number().finite() })).optional(),
+  comprimento: z.number().finite().nonnegative().optional(),
+  distanciaCabo: z.number().finite().nonnegative().optional(),
+});
+
+function idDeterministicoDoSegmento(pontos: Array<{ x: number; y: number }> | undefined, indice: number) {
+  const texto = JSON.stringify(pontos ?? []);
+  let hash = 2166136261;
+  for (let i = 0; i < texto.length; i++) {
+    hash ^= texto.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `segmento-${(hash >>> 0).toString(16)}-${indice}`;
+}
+
+function segmentosParaMedicao(detalhe: unknown): Array<{
+  segmentoId: string;
+  comprimento: number | null;
+  distanciaCabo: number | null;
+}> {
+  if (!detalhe || typeof detalhe !== "object" || Array.isArray(detalhe)) return [];
+  const valor = detalhe as { segmentos?: unknown; circuito?: unknown; pontos?: unknown; comprimento?: unknown; distanciaCabo?: unknown };
+  if (typeof valor.circuito !== "string") return [];
+  const segmentosBrutos = Array.isArray(valor.segmentos)
+    ? valor.segmentos
+    : [{ pontos: valor.pontos, comprimento: valor.comprimento, distanciaCabo: valor.distanciaCabo }];
+  const resultado = z.array(esquemaSegmentoCircuito).safeParse(segmentosBrutos);
+  if (!resultado.success || resultado.data.length === 0) return [];
+  const segmentosValidos = resultado.data.filter((segmento) => (segmento.pontos?.length ?? 0) >= 2 || segmento.comprimento != null || segmento.distanciaCabo != null);
+  if (segmentosValidos.length === 0) return [];
+  return segmentosValidos.map((segmento, indice) => ({
+    segmentoId: segmento.segmentoId ?? idDeterministicoDoSegmento(segmento.pontos, indice),
+    comprimento: segmento.comprimento ?? null,
+    distanciaCabo: segmento.distanciaCabo ?? null,
+  }));
+}
+
 const esquemaLocalizacao = z
   .object({
     localizacao_tipo: z.enum(["nenhuma", "ponto", "regiao", "distancia", "circuito", "area", "descida"]),
@@ -389,6 +428,7 @@ export async function criarTarefa(
       tarefa_id: data.id,
       catalogo_id: m.catalogo_id,
       quantidade: m.quantidade,
+      segmentos_circuito: segmentosParaMedicao(resultado.data.localizacao_detalhe),
       criado_por: user.id,
     }));
 
@@ -906,7 +946,7 @@ export async function atualizarTarefasEmLote(
   const supabaseAdmin = await createAdminClient();
   const { data: tarefasExistentes, error: erroTarefasExistentes } = await supabaseAdmin
     .from("tarefas")
-    .select("id, obra_id")
+    .select("id, obra_id, localizacao_detalhe")
     .in("id", idsPermitidos);
 
   if (erroTarefasExistentes || !tarefasExistentes || tarefasExistentes.length !== idsPermitidos.length) {
@@ -914,6 +954,9 @@ export async function atualizarTarefasEmLote(
   }
 
   const obrasDasTarefas = new Set(tarefasExistentes.map((tarefa) => tarefa.obra_id));
+  const localizacoesPorTarefa = new Map(
+    tarefasExistentes.map((tarefa) => [tarefa.id, tarefa]),
+  );
   const tarefasDistancia = new Map<string, number>();
   if (medicoes.some((medicao) => medicao.usar_distancia)) {
     const { data: tarefasComLocalizacao, error: erroTarefas } = await supabaseAdmin
@@ -985,14 +1028,16 @@ export async function atualizarTarefasEmLote(
     }
 
     if (medicoes.length > 0) {
-      const medicoesInsert = idsPermitidos.flatMap((tarefaId) =>
-        medicoes.map((m) => ({
+      const medicoesInsert = idsPermitidos.flatMap((tarefaId) => {
+        const localizacao = localizacoesPorTarefa.get(tarefaId);
+        return medicoes.map((m) => ({
           tarefa_id: tarefaId,
           catalogo_id: m.catalogo_id,
           quantidade: m.usar_distancia ? tarefasDistancia.get(tarefaId)! : m.quantidade,
+          segmentos_circuito: segmentosParaMedicao(localizacao?.localizacao_detalhe),
           criado_por: user.id,
-        }))
-      );
+        }));
+      });
 
       const { error: erroMedicoes } = await supabaseAdmin
         .from("tarefa_medicoes")
@@ -1108,6 +1153,7 @@ export async function atualizarTarefa(
       tarefa_id: id,
       catalogo_id: m.catalogo_id,
       quantidade: m.quantidade,
+      segmentos_circuito: segmentosParaMedicao(resultado.data.localizacao_detalhe),
       criado_por: user.id,
     }));
 
