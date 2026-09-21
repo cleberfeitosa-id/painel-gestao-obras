@@ -351,9 +351,13 @@ export async function criarTarefasEmLoteLevantamento(
             : 0),
         0,
       );
-      const segmentos = itensCirc.map((i) => ({
+      const segmentos = itensCirc.map((i, indice) => ({
+        segmentoId: typeof i.detalhe?.segmentoId === "string"
+          ? i.detalhe.segmentoId
+          : `${nomeCirc}-${indice + 1}`,
         pontos: i.detalhe?.pontos || [],
         comprimento: i.detalhe?.comprimento,
+        distanciaCabo: i.detalhe?.distanciaCabo,
       }));
       const detalheFundido = {
         ...primeiro.detalhe,

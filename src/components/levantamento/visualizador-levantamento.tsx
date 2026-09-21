@@ -730,9 +730,15 @@ export function VisualizadorLevantamento({
         (acc, i) => acc + (i.comprimentoReal ?? 0),
         0,
       );
+      const quantidadeCondutores = (primeiro.metadadosCabo?.condutores ?? []).reduce(
+        (total, condutor) => total + Math.max(0, condutor.quantidade),
+        0,
+      );
       const segmentos = itensCirc.map((i) => ({
+        segmentoId: i.id,
         pontos: i.pontos,
         comprimento: i.comprimentoReal,
+        distanciaCabo: (i.comprimentoReal ?? 0) * quantidadeCondutores,
       }));
 
       const nivelNome = primeiro.nivelId
