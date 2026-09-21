@@ -538,6 +538,7 @@ export async function excluirPagamento(dados: {
 
 export type ItemOrcamentoParaCatalogo = {
   id: string;
+  item: string | null;
   codigo: string | null;
   descricao: string | null;
   unidade: string | null;
@@ -590,12 +591,12 @@ export async function buscarItensOrcamento(dados: {
   const { data, error } = await supabase
     .from("orcamento_itens")
     .select(
-      "id, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id, ativo, tipo, orcamentos!inner(obra_id)",
+      "id, item, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id, ativo, tipo, orcamentos!inner(obra_id)",
     )
     .eq("orcamentos.obra_id", resultado.data.obraId)
     .eq("ativo", true)
     .eq("tipo", "item")
-    .or(`codigo.ilike.%${termo}%,descricao.ilike.%${termo}%`)
+    .or(`item.ilike.%${termo}%,codigo.ilike.%${termo}%,descricao.ilike.%${termo}%`)
     .limit(100);
 
   if (error) {
@@ -613,8 +614,9 @@ export async function buscarItensOrcamento(dados: {
     const codigo = item.codigo?.trim();
     return !codigo || !codigosPais.has(codigo);
   }).map((item) => ({
-    id: item.id,
-    codigo: item.codigo,
+     id: item.id,
+     item: item.item,
+     codigo: item.codigo,
     descricao: item.descricao,
     unidade: item.unidade,
     quantidade: item.quantidade,

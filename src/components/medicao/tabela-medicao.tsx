@@ -161,7 +161,7 @@ function baixarCsv(itens: ItemMedicao[], medicaoId: string) {
       numeroCsv(item.composicaoCustos.mao_de_obra ?? 0),
       numeroCsv(item.composicaoCustos.material ?? 0),
       numeroCsv(item.composicaoCustos.equipamento ?? 0),
-      item.orcamentoItens.map((orcamento) => `${orcamento.codigo ?? ""} - ${orcamento.descricao ?? ""}`).join(" | "),
+       item.orcamentoItens.map((orcamento) => `${orcamento.item ?? ""} - ${orcamento.codigo ?? ""} - ${orcamento.descricao ?? ""}`).join(" | "),
     ]),
     ["", ""],
     ["BLOCO", "TAREFAS"],
@@ -260,7 +260,7 @@ function SeletorItemOrcamento({
               className="inline-flex items-center gap-1 rounded-full border border-azul-200 bg-azul-50/50 px-2.5 py-1 text-xs"
             >
               <span className="max-w-[200px] truncate font-medium text-superficie-900">
-                {item.codigo ?? "—"} · {item.descricao ?? "Sem descrição"}
+                {item.item ?? "Item sem identificador"} · {item.codigo ?? "Sem código"} · {item.descricao ?? "Sem descrição"}
               </span>
               <span className="text-[10px] text-superficie-500">
                 {formatarMoeda(valorUnitarioComposicao(item))}/un · qtd. {formatarQuantidade(Number(item.quantidade))} · total {formatarMoeda(valorPrevistoDoItem(item))}
@@ -289,7 +289,7 @@ function SeletorItemOrcamento({
               buscar();
             }
           }}
-          placeholder="Buscar por código ou descrição"
+          placeholder="Buscar por item, código ou descrição"
           className="min-w-0 flex-1 rounded-lg border border-borda px-2.5 py-1.5 text-xs text-superficie-900 placeholder:text-superficie-400 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
         />
         <Botao
@@ -325,7 +325,7 @@ function SeletorItemOrcamento({
                       className="w-full px-2.5 py-2 text-left hover:bg-superficie-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <p className="text-xs font-medium text-superficie-900">
-                        {item.codigo ?? "—"} · {item.descricao ?? "Sem descrição"} ·{" "}
+                        {item.item ?? "Item sem identificador"} · {item.codigo ?? "Sem código"} · {item.descricao ?? "Sem descrição"} ·{" "}
                         {item.unidade ?? "—"}
                       </p>
                       <p className="text-[11px] text-superficie-500">
@@ -560,8 +560,9 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
           <Cabecalho>
           <LinhaCabecalho>
             <CelulaCabecalho className="w-10" />
-            <CelulaCabecalho>Item</CelulaCabecalho>
-            <CelulaCabecalho>Unidade</CelulaCabecalho>
+             <CelulaCabecalho>Item</CelulaCabecalho>
+             <CelulaCabecalho>Item do orçamento</CelulaCabecalho>
+             <CelulaCabecalho>Unidade</CelulaCabecalho>
             <CelulaCabecalho title="Preço unitário cobrado pelo executor neste item de medição">
               Preço cobrado executor
             </CelulaCabecalho>
@@ -594,7 +595,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
             return (
               <Fragment key={item.catalogoId}>
                 <Linha>
-                  <Celula>
+                   <Celula>
                     <button
                       type="button"
                       onClick={() => alternar(item.catalogoId)}
@@ -635,8 +636,8 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                             key={orcamento.id}
                             className="text-xs text-azul-950"
                           >
-                            <span className="font-bold">{orcamento.codigo ?? "Sem código"}</span>
-                            <span className="ml-1">· {orcamento.descricao ?? "Descrição não informada"}</span>
+                             <span className="font-bold">{orcamento.item ?? "Item sem identificador"}</span>
+                             <span className="ml-1">· {[orcamento.codigo, orcamento.descricao].filter(Boolean).join(" · ") || "Descrição não informada"}</span>
                           </div>
                         ))}
                         </div>
@@ -707,9 +708,27 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                       }
                       placeholder="m"
                       className="w-20 rounded-lg border border-borda px-3 py-1.5 text-sm text-superficie-900 focus:border-azul-500 focus:outline-none focus:ring-2 focus:ring-azul-500"
-                    />
-                  </Celula>
-                  <Celula>
+                     />
+                   </Celula>
+                   <Celula className="min-w-[260px] align-top">
+                     {vinculo.length > 0 ? (
+                       <div className="space-y-1">
+                         {vinculo.map((orcamento) => (
+                           <div key={orcamento.id} className="text-xs text-superficie-700">
+                             <p className="font-semibold text-superficie-900">
+                               {orcamento.codigo ?? "Sem código"}
+                             </p>
+                             <p className="leading-snug">
+                               {orcamento.descricao ?? "Descrição não informada"}
+                             </p>
+                           </div>
+                         ))}
+                       </div>
+                     ) : (
+                       <span className="text-xs text-superficie-400">Não vinculado</span>
+                     )}
+                   </Celula>
+                   <Celula>
                     <input
                       value={preco.valorUnitario}
                       onChange={(e) =>
@@ -868,7 +887,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                 </Linha>
                 {expandido && (
                   <Linha className="bg-superficie-50/60 hover:bg-superficie-50/60">
-                      <Celula colSpan={13} className="p-0">
+                       <Celula colSpan={14} className="p-0">
                       <div className="px-6 py-4">
                         {item.tarefas.length === 0 ? (
                           <p className="text-sm text-superficie-500">
