@@ -41,6 +41,12 @@ function temKeyword(texto: string, keywords: string[]): boolean {
   return false;
 }
 
+function ehAuxiliarProfissional(texto: string): boolean {
+  return /\bAUXILIAR\s+DE\s+(ELETRICISTA|ENCANADOR|PEDREIRO|SERVICOS?|OBRA|MANUTENCAO)\b/i.test(
+    normalizar(texto),
+  );
+}
+
 function ehExplicitamenteEquipamento(classificacao: string): boolean {
   const c = normalizar(classificacao);
   return c === "equipamento" || c.includes("equipamento");
@@ -55,25 +61,30 @@ export function classificarCategoria(
   const c = texto(classificacao);
   const n = texto(nome);
 
+  const categoriaNormalizada = normalizar(c).replace(/[\s-]+/g, "_");
+  if (categoriaNormalizada === "mao_de_obra" || categoriaNormalizada === "mobra" || categoriaNormalizada === "mao_de_obra_com_encargos") {
+    return "mao_de_obra";
+  }
+  if (categoriaNormalizada === "equipamento") return "equipamento";
+  if (categoriaNormalizada === "material" || categoriaNormalizada === "insumo") return "material";
+
   if (t === "composicao") return "outro";
+
+  // A categoria da planilha SINAPI pode vir como "Outros" mesmo quando
+  // a descricao identifica claramente um profissional. A descricao tem
+  // precedencia para nao perder o custo de mao de obra.
+  if (temKeyword(n, KEYWORDS_MAO_DE_OBRA) || ehAuxiliarProfissional(n)) return "mao_de_obra";
+  if (ehExplicitamenteEquipamento(c) || temKeyword(n, KEYWORDS_EQUIPAMENTO)) return "equipamento";
 
   const ehInsumo = t === "insumo";
   const ehCompAuxiliar = t === "composicao auxiliar" || t === "composição auxiliar";
 
   if (ehInsumo) {
-    if (ehExplicitamenteEquipamento(c)) return "equipamento";
-    if (temKeyword(n, KEYWORDS_EQUIPAMENTO)) return "equipamento";
     return "material";
   }
 
   if (ehCompAuxiliar) {
-    if (ehExplicitamenteEquipamento(c) || temKeyword(n, KEYWORDS_EQUIPAMENTO)) {
-      return "equipamento";
-    }
     return "mao_de_obra";
   }
-
-  if (temKeyword(n, KEYWORDS_MAO_DE_OBRA)) return "mao_de_obra";
-  if (ehExplicitamenteEquipamento(c) || temKeyword(n, KEYWORDS_EQUIPAMENTO)) return "equipamento";
   return "material";
 }

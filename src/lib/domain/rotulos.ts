@@ -222,6 +222,7 @@ export const STATUS_VINCULO: Record<StatusVinculo, Opcao<StatusVinculo>> = {
 };
 
 export type FuncaoColunaOrcamento =
+  | "item"
   | "codigo"
   | "descricao"
   | "unidade"
@@ -238,6 +239,7 @@ export type FuncaoColunaOrcamento =
   | "quantidade_executada";
 
 export const FUNCAO_COLUNA_ORCAMENTO: Record<FuncaoColunaOrcamento, { rotulo: string }> = {
+  item: { rotulo: "Item" },
   codigo: { rotulo: "Código" },
   descricao: { rotulo: "Descrição" },
   unidade: { rotulo: "Unidade" },

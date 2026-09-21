@@ -23,7 +23,7 @@ export function normalizarCabecalho(valor: unknown): string {
 }
 
 const FUNCOES: Array<[FuncaoColunaOrcamento, RegExp[]]> = [
-  ["codigo", [/^codigo$|^cod$|item|sinapi|composicao/]], ["descricao", [/descricao|servico|insumo|nome/]],
+  ["item", [/^item$|^numero_item$|^num_item$/]], ["codigo", [/^codigo$|^cod$|sinapi|composicao/]], ["descricao", [/descricao|servico|insumo|nome/]],
   ["unidade", [/^unidade$|^un$/]], ["quantidade", [/quantidade|qtd|^quant/]], ["valor_unitario", [/valor_unitario|preco_unitario|preco|unitario/]],
   ["valor_total", [/valor_total|total|previsto|orcado/]], ["valor_bdi", [/valor_bdi|com_bdi/]], ["custo_real", [/custo_real|realizado|executado|real/]],
   ["grupo", [/grupo|capitulo|etapa/]], ["fonte", [/fonte|origem/]], ["categoria", [/categoria|tipo/]], ["bdi", [/^bdi$|percentual_bdi/]],

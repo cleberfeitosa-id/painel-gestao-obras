@@ -8,7 +8,7 @@ export type ColunaOrcamento = {
 };
 
 export type FuncaoColunaOrcamento =
-  | "codigo" | "descricao" | "unidade" | "quantidade" | "valor_unitario"
+  | "item" | "codigo" | "descricao" | "unidade" | "quantidade" | "valor_unitario"
   | "valor_total" | "valor_bdi" | "custo_real" | "grupo" | "fonte"
   | "categoria" | "composicao" | "bdi" | "quantidade_executada";
 
