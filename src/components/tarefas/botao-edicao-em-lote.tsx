@@ -22,7 +22,11 @@ interface BotaoEdicaoEmLoteProps {
   aoConcluir: () => void;
 }
 
-type MedicaoItem = { catalogo_id: string; quantidade: number };
+type MedicaoItem = {
+  catalogo_id: string;
+  quantidade: number;
+  usar_distancia: boolean;
+};
 
 export function BotaoEdicaoEmLote({
   tarefasSelecionadas,
@@ -52,17 +56,25 @@ export function BotaoEdicaoEmLote({
   }, {});
 
   function adicionarMedicao() {
-    setMedicoesLista((atual) => [...atual, { catalogo_id: "", quantidade: 0 }]);
+    setMedicoesLista((atual) => [...atual, { catalogo_id: "", quantidade: 0, usar_distancia: false }]);
   }
 
   function removerMedicao(indice: number) {
     setMedicoesLista((atual) => atual.filter((_, i) => i !== indice));
   }
 
-  function atualizarMedicao(indice: number, campo: keyof MedicaoItem, valor: string | number) {
+  function atualizarMedicao(indice: number, campo: keyof MedicaoItem, valor: string | number | boolean) {
     setMedicoesLista((atual) =>
       atual.map((item, i) =>
         i === indice ? { ...item, [campo]: valor } : item,
+      ),
+    );
+  }
+
+  function alternarUsoDaDistancia(indice: number, usarDistancia: boolean) {
+    setMedicoesLista((atual) =>
+      atual.map((item, i) =>
+        i === indice ? { ...item, usar_distancia: usarDistancia } : item,
       ),
     );
   }
@@ -225,10 +237,20 @@ export function BotaoEdicaoEmLote({
                       type="number"
                       min={0}
                       step="any"
+                      disabled={medicao.usar_distancia}
                       value={medicao.quantidade || ""}
                       onChange={(e) => atualizarMedicao(indice, "quantidade", e.target.value === "" ? 0 : Number(e.target.value))}
                       className="w-28 bg-white"
                     />
+                    <label className="flex max-w-40 items-center gap-2 pb-1 text-xs text-superficie-600">
+                      <input
+                        type="checkbox"
+                        checked={medicao.usar_distancia}
+                        onChange={(e) => alternarUsoDaDistancia(indice, e.target.checked)}
+                        className="h-4 w-4 rounded border-borda"
+                      />
+                      Usar distância linear da tarefa
+                    </label>
                     <Botao
                       type="button"
                       variante="fantasma"

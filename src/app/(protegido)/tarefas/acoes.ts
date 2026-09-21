@@ -23,6 +23,7 @@ type Resultado = { erro?: string };
 const esquemaMedicao = z.object({
   catalogo_id: z.string().uuid("Selecione um item do catalogo valido."),
   quantidade: z.coerce.number().min(0, "A quantidade nao pode ser negativa."),
+  usar_distancia: z.boolean().default(false),
 });
 
 const esquemaLocalizacao = z
@@ -320,12 +321,15 @@ export async function criarTarefa(
   }
 
   const medicoesRaw = formData.get("medicoes");
-  let medicoes: { catalogo_id: string; quantidade: number }[] = [];
+  let medicoes: { catalogo_id: string; quantidade: number; usar_distancia: boolean }[] = [];
   if (medicoesRaw) {
     try {
-      medicoes = JSON.parse(String(medicoesRaw));
+      const parsed = JSON.parse(String(medicoesRaw));
+      const resultado = z.array(esquemaMedicao).safeParse(parsed);
+      if (!resultado.success) return { erro: "As medições informadas são inválidas." };
+      medicoes = resultado.data;
     } catch {
-      medicoes = [];
+      return { erro: "As medições informadas são inválidas." };
     }
   }
 
@@ -531,12 +535,15 @@ export async function criarTarefasEmLote(
   }
 
   const medicoesRaw = formData.get("medicoes");
-  let medicoes: { catalogo_id: string; quantidade: number }[] = [];
+  let medicoes: { catalogo_id: string; quantidade: number; usar_distancia: boolean }[] = [];
   if (medicoesRaw) {
     try {
-      medicoes = JSON.parse(String(medicoesRaw));
+      const parsed = JSON.parse(String(medicoesRaw));
+      const resultado = z.array(esquemaMedicao).safeParse(parsed);
+      if (!resultado.success) return { erro: "As medições informadas são inválidas." };
+      medicoes = resultado.data;
     } catch {
-      medicoes = [];
+      return { erro: "As medições informadas são inválidas." };
     }
   }
 
@@ -794,19 +801,23 @@ export async function atualizarTarefasEmLote(
   const user = await usuarioAtual();
   if (!user) return { erro: "Sessao expirada. Entre novamente." };
 
-  if (ids.length === 0) return { erro: "Nenhuma tarefa selecionada." };
+  const idsValidados = z.array(z.string().uuid()).safeParse([...new Set(ids)]);
+  if (!idsValidados.success || idsValidados.data.length === 0) {
+    return { erro: "Nenhuma tarefa selecionada." };
+  }
+  const idsUnicos = idsValidados.data;
 
   const papel = await papelDoUsuario(user.id);
   const gestor = eGestor(papel);
 
-  let idsPermitidos = ids;
+  let idsPermitidos = idsUnicos;
   if (!gestor) {
     // Colaborador so pode editar suas proprias tarefas
     const supabase = await createClient();
     const { data } = await supabase
       .from("tarefas")
       .select("id")
-      .in("id", ids)
+      .in("id", idsUnicos)
       .eq("responsavel_id", user.id);
     idsPermitidos = (data ?? []).map((t) => t.id);
     
@@ -876,12 +887,15 @@ export async function atualizarTarefasEmLote(
   }
 
   const medicoesRaw = formData.get("medicoes");
-  let medicoes: { catalogo_id: string; quantidade: number }[] = [];
+  let medicoes: { catalogo_id: string; quantidade: number; usar_distancia: boolean }[] = [];
   if (medicoesRaw) {
     try {
-      medicoes = JSON.parse(String(medicoesRaw));
+      const parsed = JSON.parse(String(medicoesRaw));
+      const resultado = z.array(esquemaMedicao).safeParse(parsed);
+      if (!resultado.success) return { erro: "As medições informadas são inválidas." };
+      medicoes = resultado.data;
     } catch {
-      medicoes = [];
+      return { erro: "As medições informadas são inválidas." };
     }
   }
 
@@ -890,6 +904,64 @@ export async function atualizarTarefasEmLote(
   }
 
   const supabaseAdmin = await createAdminClient();
+  const { data: tarefasExistentes, error: erroTarefasExistentes } = await supabaseAdmin
+    .from("tarefas")
+    .select("id, obra_id")
+    .in("id", idsPermitidos);
+
+  if (erroTarefasExistentes || !tarefasExistentes || tarefasExistentes.length !== idsPermitidos.length) {
+    return { erro: "Uma ou mais tarefas selecionadas nao existem." };
+  }
+
+  const obrasDasTarefas = new Set(tarefasExistentes.map((tarefa) => tarefa.obra_id));
+  const tarefasDistancia = new Map<string, number>();
+  if (medicoes.some((medicao) => medicao.usar_distancia)) {
+    const { data: tarefasComLocalizacao, error: erroTarefas } = await supabaseAdmin
+      .from("tarefas")
+      .select("id, localizacao_tipo, localizacao_detalhe")
+      .in("id", idsPermitidos);
+
+    if (erroTarefas) {
+      console.error("[tarefas] falha ao buscar distancias das tarefas:", erroTarefas);
+      return { erro: "Falha ao obter as distâncias das tarefas." };
+    }
+
+    for (const tarefa of tarefasComLocalizacao ?? []) {
+      if (tarefa.localizacao_tipo !== "distancia") {
+        return { erro: "A opção de distância só pode ser usada em tarefas de distância linear." };
+      }
+
+      const detalhe = tarefa.localizacao_detalhe;
+      const comprimento =
+        detalhe && typeof detalhe === "object" && !Array.isArray(detalhe) &&
+        typeof detalhe.comprimento === "number"
+          ? detalhe.comprimento
+          : null;
+      if (comprimento === null || !Number.isFinite(comprimento) || comprimento <= 0) {
+        return { erro: "Uma das tarefas selecionadas não possui uma distância linear válida." };
+      }
+      tarefasDistancia.set(tarefa.id, comprimento);
+    }
+  }
+
+  if (medicoes.length > 0) {
+    const { data: catalogos, error: erroCatalogos } = await supabaseAdmin
+      .from("catalogo_precos")
+      .select("id, medicoes!inner(obra_id)")
+      .in("id", medicoes.map((medicao) => medicao.catalogo_id));
+
+    if (erroCatalogos || !catalogos || catalogos.length !== new Set(medicoes.map((medicao) => medicao.catalogo_id)).size) {
+      return { erro: "Um ou mais itens de medição não foram encontrados." };
+    }
+
+    const catalogoDeOutraObra = catalogos.some((catalogo) => {
+      const medicao = Array.isArray(catalogo.medicoes) ? catalogo.medicoes[0] : catalogo.medicoes;
+      return !medicao || !obrasDasTarefas.has(medicao.obra_id);
+    });
+    if (catalogoDeOutraObra || obrasDasTarefas.size !== 1) {
+      return { erro: "Os itens de medição precisam pertencer à mesma obra das tarefas selecionadas." };
+    }
+  }
   if (Object.keys(updates).length > 0) {
     const { error } = await supabaseAdmin
       .from("tarefas")
@@ -917,7 +989,7 @@ export async function atualizarTarefasEmLote(
         medicoes.map((m) => ({
           tarefa_id: tarefaId,
           catalogo_id: m.catalogo_id,
-          quantidade: m.quantidade,
+          quantidade: m.usar_distancia ? tarefasDistancia.get(tarefaId)! : m.quantidade,
           criado_por: user.id,
         }))
       );
