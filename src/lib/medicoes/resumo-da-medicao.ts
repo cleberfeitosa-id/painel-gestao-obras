@@ -49,7 +49,11 @@ export async function buscarResumoDaMedicao(
     }
   }
 
-  const orcamentoIds = [...new Set(links.map((link) => link.orcamento_item_id))];
+  const linksUnicos = [...new Map(
+    links.map((link) => [`${link.catalogo_id}:${link.orcamento_item_id}`, link]),
+  ).values()];
+
+  const orcamentoIds = [...new Set(linksUnicos.map((link) => link.orcamento_item_id))];
   const { data: itensOrcamento } = orcamentoIds.length > 0
     ? await supabase
         .from("orcamento_itens")
@@ -63,7 +67,7 @@ export async function buscarResumoDaMedicao(
     (catalogo ?? []).map((item) => [item.id, Number(item.valor_unitario ?? 0)]),
   );
   for (const catalogoId of catalogoIds) {
-    const valores = links
+    const valores = linksUnicos
       .filter((link) => link.catalogo_id === catalogoId)
       .map((link) => itensOrcamento?.find((item) => item.id === link.orcamento_item_id))
       .filter((item) => item?.ativo && item.tipo === "item")

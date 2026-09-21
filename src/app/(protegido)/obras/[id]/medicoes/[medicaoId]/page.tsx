@@ -22,6 +22,7 @@ import type {
 } from "@/lib/supabase/database.types";
 import type { ItemOrcamentoParaCatalogo } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
 import { buscarResumoDaMedicao } from "@/lib/medicoes/resumo-da-medicao";
+import { classificarCategoria } from "@/lib/orcamento/classificar-categoria";
 
 export interface TarefaMedicao {
   id: string;
@@ -101,7 +102,8 @@ function agregarComposicaoCustos(
   mapCustosPorItem: Map<string, Record<string, number>>,
 ): Record<string, number> {
   const total: Record<string, number> = {};
-  for (const item of itensOrc) {
+  const itensUnicos = [...new Map(itensOrc.map((item) => [item.id, item])).values()];
+  for (const item of itensUnicos) {
     const custos = item.id ? mapCustosPorItem.get(item.id) : undefined;
     if (!custos) continue;
     for (const [cat, val] of Object.entries(custos)) {
@@ -116,7 +118,8 @@ function valorUnitarioMaoObraDoItem(
   itensOrc: ItemOrcamentoParaCatalogo[],
   mapCustosPorItem: Map<string, Record<string, number>>,
 ): number {
-  const itensComComposicao = itensOrc.filter((item) => {
+  const itensUnicos = [...new Map(itensOrc.map((item) => [item.id, item])).values()];
+  const itensComComposicao = itensUnicos.filter((item) => {
     const custos = item.id ? mapCustosPorItem.get(item.id) : undefined;
     return Boolean(item.composicao_id && custos && Object.keys(custos).length > 0);
   });
@@ -327,10 +330,10 @@ async function buscarDados(
       mapaItensPorCatalogo.set(v.catalogo_id, atual);
     }
 
-     const [{ data: custosPorCat }, { data: composicoes }] = await Promise.all([
-       supabase.rpc("custo_composicoes", { p_obra_id: obraId }),
-       supabase.from("composicoes").select("id, obra_id, codigo, nome, unidade, custo_unitario").eq("obra_id", obraId),
-     ]);
+      const { data: composicoes } = await supabase
+        .from("composicoes")
+        .select("id, obra_id, codigo, nome, unidade, custo_unitario")
+        .eq("obra_id", obraId);
      const composicoesPorCodigo = new Map<string, string[]>();
      for (const composicao of composicoes ?? []) {
        const codigo = composicao.codigo?.trim();
@@ -357,51 +360,82 @@ async function buscarDados(
        const idsComposicoesDaObra = (composicoes ?? [])
          .filter((composicao) => codigosDosItens.has(composicao.codigo?.trim() ?? ""))
          .map((composicao) => composicao.id);
-       const idsComposicoesParaComponentes = [...new Set([
-         ...composicaoIdsDosItens,
-         ...idsComposicoesDaObra,
-       ])];
-       let componentes: ComposicaoComponenteRow[] = [];
-       if (idsComposicoesParaComponentes.length > 0) {
-        const resultadoComponentes = await supabase
-          .from("composicao_componentes")
-          .select("id, composicao_id, nome, categoria, unidade, quantidade, custo_unitario, codigo, composicao_referencia_id, criado_em")
-           .in("composicao_id", idsComposicoesParaComponentes);
+        // Carregar todas as composicoes da obra preserva as referencias
+        // internas de segundo nivel. Buscar apenas as composicoes vinculadas
+        // diretamente faria a recursao descartar silenciosamente os filhos.
+        const idsComposicoesParaComponentes = [...new Set([
+          ...composicaoIdsDosItens,
+          ...idsComposicoesDaObra,
+          ...(composicoes ?? []).map((composicao) => composicao.id),
+        ])];
+        let componentes: ComposicaoComponenteRow[] = [];
+        if (idsComposicoesParaComponentes.length > 0) {
+         const tamanhoLote = 100;
+         const lotes = <T,>(ids: string[]): T[][] => {
+           const resultado: T[][] = [];
+           for (let indice = 0; indice < ids.length; indice += tamanhoLote) {
+             resultado.push(ids.slice(indice, indice + tamanhoLote) as T[]);
+           }
+           return resultado;
+         };
+         const componentesModernos: ComposicaoComponenteRow[] = [];
+         let erroComponentes: { code?: string; message?: string; details?: string; hint?: string } | null = null;
+         for (const lote of lotes<string>(idsComposicoesParaComponentes)) {
+           const resultadoComponentes = await supabase
+             .from("composicao_componentes")
+             .select("id, composicao_id, nome, categoria, unidade, quantidade, custo_unitario, codigo, composicao_referencia_id, criado_em")
+             .in("composicao_id", lote);
+           if (resultadoComponentes.error) {
+             erroComponentes = resultadoComponentes.error;
+             break;
+           }
+           componentesModernos.push(...(resultadoComponentes.data ?? []));
+         }
 
-        if (!resultadoComponentes.error) {
-          componentes = resultadoComponentes.data ?? [];
-        } else {
-          // Bases antigas podem ainda nao ter as colunas de referencias
-          // adicionadas na migracao 0020. Os componentes basicos continuam
-          // validos para a decomposicao da medicao.
-          const resultadoLegado = await supabase
-            .from("composicao_componentes")
-            .select("id, composicao_id, nome, categoria, unidade, quantidade, custo_unitario, criado_em")
-             .in("composicao_id", idsComposicoesParaComponentes);
-           if (resultadoLegado.error) {
-             console.error(
-               "Erro ao buscar componentes das composicoes:",
-               JSON.stringify({
-                 code: resultadoLegado.error.code,
-                 message: resultadoLegado.error.message,
-                 details: resultadoLegado.error.details,
-                 hint: resultadoLegado.error.hint,
-               }),
-             );
-          } else {
-            componentes = (resultadoLegado.data ?? []).map((componente) => ({
-              ...componente,
-              codigo: null,
-              composicao_referencia_id: null,
-            }));
-          }
-        }
+         if (!erroComponentes) {
+           componentes = componentesModernos;
+         } else {
+           // Bases antigas podem ainda nao ter as colunas de referencias
+           // adicionadas na migracao 0020. Os componentes basicos continuam
+           // validos para a decomposicao da medicao.
+           const componentesLegados: ComposicaoComponenteRow[] = [];
+           let erroLegado: { code?: string; message?: string; details?: string; hint?: string } | null = null;
+           for (const lote of lotes<string>(idsComposicoesParaComponentes)) {
+             const resultadoLegado = await supabase
+               .from("composicao_componentes")
+               .select("id, composicao_id, nome, categoria, unidade, quantidade, custo_unitario, criado_em")
+               .in("composicao_id", lote);
+             if (resultadoLegado.error) {
+               erroLegado = resultadoLegado.error;
+               break;
+             }
+             componentesLegados.push(...(resultadoLegado.data ?? []).map((componente) => ({
+               ...componente,
+               codigo: null,
+               composicao_referencia_id: null,
+             })));
+           }
+           if (erroLegado) {
+              console.error(
+                "Erro ao buscar componentes das composicoes:",
+                JSON.stringify({
+                  code: erroLegado.code,
+                  message: erroLegado.message,
+                  details: erroLegado.details,
+                  hint: erroLegado.hint,
+                }),
+              );
+           } else {
+             componentes = componentesLegados;
+           }
+         }
       }
 
       const componentesPorComposicao = new Map<string, ComposicaoComponenteRow[]>();
       for (const componente of componentes ?? []) {
+         const categoriaCorrigida = classificarCategoria(componente.categoria, "", componente.nome);
         const lista = componentesPorComposicao.get(componente.composicao_id) ?? [];
-        lista.push(componente);
+        lista.push({ ...componente, categoria: categoriaCorrigida });
         componentesPorComposicao.set(componente.composicao_id, lista);
       }
 
@@ -425,27 +459,31 @@ async function buscarDados(
       const composicaoIds = [...new Set(itensOrcamento.map((i) => i.composicao_id).filter((id): id is string => Boolean(id)))];
       if (composicaoIds.length > 0) {
 
+      const composicaoIdsConhecidas = new Set((composicoes ?? []).map((composicao) => composicao.id));
       const custosPorComposicao = new Map<string, Record<string, number>>();
-      for (const row of custosPorCat ?? []) {
-        if (!composicaoIds.includes(row.composicao_id)) continue;
-        const atual = custosPorComposicao.get(row.composicao_id) ?? {};
-        atual[row.categoria] = (atual[row.categoria] ?? 0) + row.total;
-        custosPorComposicao.set(row.composicao_id, atual);
+      const calcularCustos = (composicaoId: string, fator = 1, visitados = new Set<string>()): Record<string, number> => {
+        if (visitados.has(composicaoId)) return {};
+        const proximosVisitados = new Set(visitados).add(composicaoId);
+        const custos: Record<string, number> = {};
+        for (const componente of componentesPorComposicao.get(composicaoId) ?? []) {
+          const quantidade = fator * Number(componente.quantidade);
+          if (componente.composicao_referencia_id && composicaoIdsConhecidas.has(componente.composicao_referencia_id)) {
+            const aninhados = calcularCustos(componente.composicao_referencia_id, quantidade, proximosVisitados);
+            for (const [categoria, valor] of Object.entries(aninhados)) {
+              custos[categoria] = (custos[categoria] ?? 0) + valor;
+            }
+          } else {
+            custos[componente.categoria] = (custos[componente.categoria] ?? 0) + quantidade * Number(componente.custo_unitario);
+          }
+        }
+        return custos;
+      };
+      for (const composicaoId of composicaoIds) {
+        custosPorComposicao.set(composicaoId, calcularCustos(composicaoId));
       }
        for (const item of itensOrcamento) {
          if (item.composicao_id) {
-           const custosRpc = custosPorComposicao.get(item.composicao_id) ?? {};
-           const custos = Object.keys(custosRpc).length > 0
-             ? custosRpc
-             : (componentesPorComposicao.get(item.composicao_id) ?? []).reduce<Record<string, number>>(
-                 (acumulado, componente) => {
-                   acumulado[componente.categoria] =
-                     (acumulado[componente.categoria] ?? 0) +
-                     Number(componente.quantidade) * Number(componente.custo_unitario);
-                   return acumulado;
-                 },
-                 {},
-               );
+            const custos = custosPorComposicao.get(item.composicao_id) ?? {};
            mapCustosPorItem.set(item.id, custos);
           item.valor_mao_obra = custos.mao_de_obra ?? 0;
           item.valor_equipamento = custos.equipamento ?? 0;
@@ -453,8 +491,6 @@ async function buscarDados(
           item.valor_composicao = valorComposicao > 0 ? valorComposicao : item.valor_composicao;
         }
       }
-
-       const composicaoIdsConhecidas = new Set((composicoes ?? []).map((composicao) => composicao.id));
 
       function expandirComposicao(composicaoId: string, fator = 1, visitados = new Set<string>()): ComponenteComposicao[] {
         if (visitados.has(composicaoId)) return [];
@@ -687,6 +723,7 @@ export default async function MedicaoDetalhePage({
       valorConstrutoraExecutado,
       valorConstrutoraPendente,
       valorExecutorExecutado: [...itens.values()].reduce((total, item) => total + item.valorExecutorExecutado, 0),
+      valorExecutorPendente: [...itens.values()].reduce((total, item) => total + item.valorExecutorPendente, 0),
     };
   }
 
@@ -700,18 +737,23 @@ export default async function MedicaoDetalhePage({
 
   const resumoFonteDaVerdade = await buscarResumoDaMedicao(medicao.id, medicao.obra_id);
   const valorPago = resumoFonteDaVerdade.pago;
-  const saldoExecutor = resumoFonteDaVerdade.executorExecutado - valorPago;
+  const saldoExecutor = agregadoGlobal.valorExecutorExecutado - valorPago;
   const custosOrcamento = [...agregadoGlobal.itens].reduce<Record<string, number>>((total, item) => {
     for (const [categoria, valor] of Object.entries(item.composicaoCustos)) {
       total[categoria] = (total[categoria] ?? 0) + valor;
     }
     return total;
   }, {});
-  const orcamentoClienteTotal = agregadoGlobal.itens.reduce(
-    (total, item) => total + item.orcamentoItens.reduce(
-      (subtotal, orcamentoItem) => subtotal + Number(orcamentoItem.quantidade) * Number(orcamentoItem.valor_unitario),
-      0,
-    ),
+  const itensOrcamentoUnicos = new Map<string, ItemOrcamentoParaCatalogo>();
+  for (const item of agregadoGlobal.itens) {
+    for (const orcamentoItem of item.orcamentoItens) {
+      if (orcamentoItem.ativo && orcamentoItem.tipo === "item") {
+        itensOrcamentoUnicos.set(orcamentoItem.id, orcamentoItem);
+      }
+    }
+  }
+  const orcamentoClienteTotal = [...itensOrcamentoUnicos.values()].reduce(
+    (total, orcamentoItem) => total + Number(orcamentoItem.quantidade) * Number(orcamentoItem.valor_unitario),
     0,
   );
 
@@ -751,7 +793,7 @@ export default async function MedicaoDetalhePage({
         </CartaoCabecalho>
         <CartaoConteudo className="grid gap-3 text-sm text-superficie-700 md:grid-cols-3">
           <div>
-            <p className="font-semibold text-superficie-900">Orçamento do cliente</p>
+           <p className="font-semibold text-superficie-900">Orçamento previsto da construtora</p>
             <p className="mt-1 text-xs">Quantidade e composição previstas, com mão de obra, materiais e equipamentos.</p>
           </div>
           <div>
@@ -808,7 +850,7 @@ export default async function MedicaoDetalhePage({
         </Cartao>
         <Cartao>
           <CartaoCabecalho>
-            <CartaoTitulo>Orçamento do cliente</CartaoTitulo>
+             <CartaoTitulo>Orçamento previsto da construtora</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
             <p className="text-2xl font-bold text-superficie-900">
@@ -821,11 +863,11 @@ export default async function MedicaoDetalhePage({
         </Cartao>
         <Cartao>
           <CartaoCabecalho>
-            <CartaoTitulo>Valor medido executado</CartaoTitulo>
+             <CartaoTitulo>Construtora — medido executado</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
             <p className="text-2xl font-bold text-emerald-600">
-               {formatarMoeda(resumoFonteDaVerdade.construtoraExecutado)}
+               {formatarMoeda(agregadoGlobal.valorConstrutoraExecutado)}
             </p>
             <p className="mt-1 text-xs text-superficie-500">
               Valor do orçamento × quantidade de tarefas concluídas
@@ -834,11 +876,11 @@ export default async function MedicaoDetalhePage({
         </Cartao>
         <Cartao>
           <CartaoCabecalho>
-            <CartaoTitulo>Medido do executor</CartaoTitulo>
+             <CartaoTitulo>Executor — medido executado</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
             <p className="text-2xl font-bold text-azul-600">
-               {formatarMoeda(resumoFonteDaVerdade.executorExecutado)}
+               {formatarMoeda(agregadoGlobal.valorExecutorExecutado)}
             </p>
             <p className="mt-1 text-xs text-superficie-500">
               Quantidade executada × preço acordado no contrato executor
@@ -847,11 +889,11 @@ export default async function MedicaoDetalhePage({
         </Cartao>
         <Cartao>
           <CartaoCabecalho>
-            <CartaoTitulo>A medir do executor</CartaoTitulo>
+             <CartaoTitulo>Executor — a medir</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
             <p className="text-2xl font-bold text-amber-600">
-               {formatarMoeda(resumoFonteDaVerdade.executorPendente)}
+               {formatarMoeda(agregadoGlobal.valorExecutorPendente)}
             </p>
             <p className="mt-1 text-xs text-superficie-500">
               Quantidade ainda não concluída × preço do executor
@@ -875,11 +917,11 @@ export default async function MedicaoDetalhePage({
         ))}
         <Cartao>
           <CartaoCabecalho>
-            <CartaoTitulo>Valor a medir</CartaoTitulo>
+             <CartaoTitulo>Construtora — a medir</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
             <p className="text-2xl font-bold text-amber-600">
-               {formatarMoeda(resumoFonteDaVerdade.construtoraPendente)}
+               {formatarMoeda(agregadoGlobal.valorConstrutoraPendente)}
             </p>
             <p className="mt-1 text-xs text-superficie-500">
               Valor do orçamento × quantidade ainda não concluída
@@ -888,11 +930,11 @@ export default async function MedicaoDetalhePage({
         </Cartao>
         <Cartao>
           <CartaoCabecalho>
-            <CartaoTitulo>Total medido da construtora</CartaoTitulo>
+             <CartaoTitulo>Construtora — total medido</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
             <p className="text-2xl font-bold text-superficie-900">
-              {formatarMoeda(agregadoGlobal.valorConstrutoraTotal)}
+               {formatarMoeda(agregadoGlobal.valorConstrutoraExecutado + agregadoGlobal.valorConstrutoraPendente)}
             </p>
             <p className="mt-1 text-xs text-superficie-500">
               Soma dos itens do orçamento para as quantidades cadastradas
@@ -903,11 +945,11 @@ export default async function MedicaoDetalhePage({
 
       <GraficosProgressoMedicao
         itens={agregadoGlobal.itens}
-        valorExecutado={resumoFonteDaVerdade.construtoraExecutado}
-        valorPendente={resumoFonteDaVerdade.construtoraPendente}
-        valorTotalCadastrado={agregadoGlobal.valorConstrutoraTotal}
+         valorExecutado={agregadoGlobal.valorConstrutoraExecutado}
+         valorPendente={agregadoGlobal.valorConstrutoraPendente}
+         valorTotalCadastrado={agregadoGlobal.valorConstrutoraExecutado + agregadoGlobal.valorConstrutoraPendente}
         valorContrato={medicao.valor_contrato}
-        valorExecutorExecutado={resumoFonteDaVerdade.executorExecutado}
+         valorExecutorExecutado={agregadoGlobal.valorExecutorExecutado}
       />
 
       <Cartao>

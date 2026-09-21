@@ -84,6 +84,20 @@ function diagnosticoComposicao(item: ItemMedicao): string {
   return "Decomposicao disponivel";
 }
 
+function situacaoMaoDeObra(item: ItemMedicao): "calculada" | "nao_informada" | "indisponivel" {
+  const possuiComponenteMaoDeObra = item.composicaoComponentes.some(
+    (componente) => componente.categoria === "mao_de_obra",
+  );
+  const valor = item.composicaoCustos.mao_de_obra ?? 0;
+  if (valor > 0) return "calculada";
+  if (possuiComponenteMaoDeObra) return "nao_informada";
+  return "indisponivel";
+}
+
+function exibirCustoComponente(valor: number): string {
+  return valor > 0 ? formatarMoeda(valor) : "Não informado";
+}
+
 function baixarCsv(itens: ItemMedicao[], medicaoId: string) {
   const linhas: string[][] = [
     ["BLOCO", "ITENS"],
@@ -548,23 +562,25 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
             <CelulaCabecalho className="w-10" />
             <CelulaCabecalho>Item</CelulaCabecalho>
             <CelulaCabecalho>Unidade</CelulaCabecalho>
-            <CelulaCabecalho title="Preço unitário negociado para o contrato executor deste item">Preço do contrato executor</CelulaCabecalho>
-            <CelulaCabecalho className="text-right" title="Custo previsto da composição = custo unitário dos componentes × quantidade prevista no orçamento">
-              Custo composição
+            <CelulaCabecalho title="Preço unitário cobrado pelo executor neste item de medição">
+              Preço cobrado executor
+            </CelulaCabecalho>
+            <CelulaCabecalho className="text-right" title="Preço unitário previsto no orçamento da construtora. Não é o preço cobrado pelo executor.">
+              Composição / orçamento
             </CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. total</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Qtd. executada</CelulaCabecalho>
-            <CelulaCabecalho className="text-right" title="Quantidade medida × valor unitário do orçamento/composição vinculado">
-              Total construtora
+            <CelulaCabecalho className="text-right" title="Quantidade medida × preço unitário do item orçamentário associado">
+              Valor orçamento construtora
             </CelulaCabecalho>
-            <CelulaCabecalho className="text-right" title="Preço do orçamento × quantidade das tarefas concluídas">
-              Medido construtora
+            <CelulaCabecalho className="text-right" title="Preço do orçamento × quantidade concluída e aprovada">
+              Construtora executado
             </CelulaCabecalho>
-            <CelulaCabecalho className="text-right" title="Preço do contrato executor × quantidade das tarefas concluídas">
-              Medido executor
+            <CelulaCabecalho className="text-right" title="Preço cobrado pelo executor × quantidade concluída e aprovada. Este valor é separado do valor da construtora.">
+              Executor cobrado executado
             </CelulaCabecalho>
-            <CelulaCabecalho className="text-right" title="Custo previsto de mão de obra da composição correspondente à quantidade concluída; não é pagamento do executor">
-              Custo MO executado
+            <CelulaCabecalho className="text-right" title="Custo previsto de mão de obra da composição × quantidade concluída. Não é pagamento do executor.">
+              MO composição executada
             </CelulaCabecalho>
             <CelulaCabecalho className="text-right">A medir construtora</CelulaCabecalho>
             <CelulaCabecalho className="text-right">Ações</CelulaCabecalho>
@@ -608,7 +624,25 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                       placeholder="Nome do item"
                       className="w-full min-w-[150px] rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-superficie-900 focus:border-azul-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-azul-500 hover:border-borda"
                     />
-                      <SeletorItemOrcamento
+                    {vinculo.length > 0 && (
+                      <div className="mt-2 rounded-lg border border-azul-200 bg-azul-50/60 p-2" aria-label="Item do orçamento associado">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-azul-700">
+                          Item do orçamento associado
+                        </p>
+                        <div className="mt-1 space-y-1">
+                        {vinculo.map((orcamento) => (
+                          <div
+                            key={orcamento.id}
+                            className="text-xs text-azul-950"
+                          >
+                            <span className="font-bold">{orcamento.codigo ?? "Sem código"}</span>
+                            <span className="ml-1">· {orcamento.descricao ?? "Descrição não informada"}</span>
+                          </div>
+                        ))}
+                        </div>
+                      </div>
+                    )}
+                    <SeletorItemOrcamento
                         obraId={obraId}
                         medicaoId={medicaoId}
                       selecionados={vinculo}
@@ -640,7 +674,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                           {item.composicaoComponentes.map((componente, indice) => (
                             <li key={`${componente.nome}-${indice}`} className="flex flex-wrap justify-between gap-x-3">
                               <span>{componente.nome} ({CATEGORIA_COMPOSICAO[componente.categoria]?.rotulo ?? componente.categoria})</span>
-                              <span>{formatarMoeda(componente.valorUnitario)}/un · {formatarMoeda(componente.valorContribuicao)}</span>
+                               <span>{exibirCustoComponente(componente.valorUnitario)}/un · {exibirCustoComponente(componente.valorContribuicao)}</span>
                             </li>
                           ))}
                         </ul>
@@ -653,7 +687,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                             key={cat}
                             className="inline-flex items-center gap-1 rounded-full bg-superficie-100 px-2 py-0.5 text-[10px] font-medium text-superficie-600"
                           >
-                            {CATEGORIA_COMPOSICAO[cat]?.rotulo ?? cat}: {formatarMoeda(total)}
+                             {CATEGORIA_COMPOSICAO[cat]?.rotulo ?? cat}: {exibirCustoComponente(total)}
                           </span>
                         ))}
                       </div>
@@ -695,6 +729,10 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                   <Celula className="text-right whitespace-nowrap">
                     {vinculo.length > 0 ? (
                       <div>
+                        {(() => {
+                          const situacao = situacaoMaoDeObra(item);
+                          return (
+                            <>
                         {item.temBaseMaoObra ? (
                           <p className="font-semibold text-azul-700">
                             Custo unitário da composição: {formatarMoeda(item.valorUnitarioComposicao)}
@@ -707,7 +745,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                           {vinculo.length === 1 ? "item vinculado" : "itens vinculados"}
                         </p>
                          <p className="mt-1 text-[10px] leading-tight text-superficie-400">
-                           Custo previsto total da composição: {formatarMoeda(somarPrevisto(vinculo))}
+                              Custo previsto total da composição: {formatarMoeda(somarPrevisto(vinculo))}
                            {item.composicaoCustos.material != null && (
                              <> · Material: {formatarMoeda(item.composicaoCustos.material)}</>
                            )}
@@ -715,12 +753,34 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                              <> · Equipamento: {formatarMoeda(item.composicaoCustos.equipamento)}</>
                            )}
                          </p>
-                        <p className="text-xs text-superficie-500">Medição da construtora: {formatarMoeda(item.valorConstrutoraTotal)}</p>
-                         <p className="text-xs text-emerald-600">Medido construtora executado: {formatarMoeda(item.valorConstrutoraExecutado)}</p>
-                         <p className="text-xs text-azul-600">Medido executor executado: {formatarMoeda(item.valorExecutorExecutado)}</p>
-                         <p className="text-xs text-azul-600">
-                            Custo orçamentário de mão de obra executada: {item.temBaseMaoObra ? formatarMoeda(item.valorContabilizado) : "Indisponível"}
-                        </p>
+                         <div className="mt-2 space-y-1 rounded-md bg-superficie-50 p-2">
+                           <p className="text-xs font-semibold text-superficie-700">
+                             Preço da composição/orçamento: {formatarMoeda(item.valorUnitarioComposicao)}/un
+                           </p>
+                           <p className="text-xs font-semibold text-amber-700">
+                              Mão de obra prevista na composição: {situacao === "calculada" ? `${formatarMoeda(item.valorUnitarioMaoObra)}/un` : situacao === "nao_informada" ? "Não informada na fonte analítica" : "Indisponível"}
+                            </p>
+                            {situacao === "nao_informada" && (
+                              <p className="text-[11px] leading-tight text-amber-800">
+                                O preço final do item está disponível no orçamento, mas os custos unitários dos componentes foram importados como zero. Esse preço final não é distribuído artificialmente entre mão de obra e material.
+                              </p>
+                            )}
+                           <p className="text-xs text-superficie-600">
+                             Valor total previsto da construtora: {formatarMoeda(item.valorConstrutoraTotal)}
+                           </p>
+                           <p className="text-xs text-emerald-600">
+                             Valor da construtora executado: {formatarMoeda(item.valorConstrutoraExecutado)}
+                           </p>
+                           <p className="text-xs font-semibold text-azul-600">
+                             Valor cobrado pelo executor executado: {formatarMoeda(item.valorExecutorExecutado)}
+                           </p>
+                           <p className="text-xs text-violeta-700">
+                             Custo previsto de MO da composição executado: {situacao === "calculada" ? formatarMoeda(item.valorContabilizado) : situacao === "nao_informada" ? "Não informado na fonte analítica" : "Indisponível"}
+                           </p>
+                         </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <span className="text-superficie-400">—</span>
@@ -767,7 +827,7 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                            : "text-superficie-500"
                        }
                       >
-                        {item.temBaseMaoObra ? formatarMoeda(item.valorContabilizado) : "—"}
+                         {situacaoMaoDeObra(item) === "calculada" ? formatarMoeda(item.valorContabilizado) : situacaoMaoDeObra(item) === "nao_informada" ? "Não informado" : "Indisponível"}
                       </span>
                     </Celula>
                   <Celula className="text-right font-medium whitespace-nowrap">
