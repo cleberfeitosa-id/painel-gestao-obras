@@ -21,7 +21,12 @@ export type DetalheLocalizacaoLevantamento = {
   categoria?: string;
   altura?: number;
   pontos?: { x: number; y: number }[];
-  segmentos?: Array<{ pontos: { x: number; y: number }[]; comprimento?: number }>;
+  segmentos?: Array<{
+    segmentoId?: string;
+    pontos: { x: number; y: number }[];
+    comprimento?: number;
+    distanciaCabo?: number;
+  }>;
   comprimento?: number;
   area?: number;
   perimetro?: number;
@@ -41,6 +46,19 @@ export type DetalheLocalizacaoLevantamento = {
   nivelOrigemId?: string;
   nivelDestinoId?: string;
 };
+
+export function extrairSegmentosCircuito(
+  detalhe?: DetalheLocalizacaoLevantamento | null,
+): { segmentoId?: string; pontos: { x: number; y: number }[]; comprimento?: number; distanciaCabo?: number }[] {
+  if (!detalhe) return [];
+  if (Array.isArray(detalhe.segmentos) && detalhe.segmentos.length > 0) {
+    const segmentos = detalhe.segmentos.filter((segmento) => segmento.pontos.length >= 2);
+    if (segmentos.length > 0) return segmentos;
+  }
+  return Array.isArray(detalhe.pontos) && detalhe.pontos.length >= 2
+    ? [{ pontos: detalhe.pontos, comprimento: detalhe.comprimento, distanciaCabo: undefined }]
+    : [];
+}
 
 export type TarefaPlanta = {
   id: string;

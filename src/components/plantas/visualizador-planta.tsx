@@ -85,6 +85,7 @@ import type {
   PropsAreaPlanta,
   TarefaPlanta,
 } from "./tipos";
+import { extrairSegmentosCircuito as extrairSegmentosCircuitoCompartilhado } from "./tipos";
 import type { SituacaoTarefa } from "@/lib/domain/rotulos";
 
 type Ferramenta = "navegar" | "medir" | "pino" | "regiao" | "calibrar" | "associar";
@@ -267,25 +268,6 @@ function obterLinhasCondutoresCircuito(detalhe?: Record<string, unknown> | null)
   return linhas;
 }
 
-function extrairSegmentosCircuito(
-  detalhe?: TarefaPlanta["localizacao_detalhe"],
-): PontoPdf[][] {
-  if (!detalhe) return [];
-  if (Array.isArray(detalhe.segmentos) && detalhe.segmentos.length > 0) {
-    const lista: PontoPdf[][] = [];
-    for (const seg of detalhe.segmentos) {
-      if (Array.isArray(seg.pontos) && seg.pontos.length >= 2) {
-        lista.push(seg.pontos);
-      }
-    }
-    if (lista.length > 0) return lista;
-  }
-  if (Array.isArray(detalhe.pontos) && detalhe.pontos.length >= 2) {
-    return [detalhe.pontos];
-  }
-  return [];
-}
-
 function DicaTarefa({ tarefa }: { tarefa: TarefaPlanta }) {
   const prazoInfo = situacaoPrazo(tarefa.prazo, tarefa.status === "concluido");
   const situacao = situacaoDaTarefa({
@@ -466,7 +448,7 @@ export function VisualizadorPlanta({
   const [filtroPrioridade, setFiltroPrioridade] = useState<"todas" | PrioridadeTarefa>("todas");
   const [filtroExecutor, setFiltroExecutor] = useState<"todos" | "sem" | string>("todos");
   const [filtroTag, setFiltroTag] = useState<"todas" | "sem" | string>("todas");
-  const [filtroCircuito, setFiltroCircuito] = useState<"todos" | "nenhum" | string>("todos");
+  const [circuitosSelecionados, setCircuitosSelecionados] = useState<string[]>([]);
 
   const [calibracoesPorPagina, setCalibracoesPorPagina] = useState<
     Map<number, PlantaCalibracaoRow>
@@ -562,8 +544,7 @@ export function VisualizadorPlanta({
       if (filtroTag === "sem" && t.tags_tarefa != null) return false;
       if (filtroTag !== "todas" && filtroTag !== "sem" && t.tags_tarefa?.id !== filtroTag) return false;
       if (t.localizacao_tipo === "circuito") {
-        if (filtroCircuito === "nenhum") return false;
-        if (filtroCircuito !== "todos") {
+        if (circuitosSelecionados.length > 0) {
           const circ =
             t.localizacao_detalhe?.circuito?.trim() ||
             t.titulo
@@ -571,7 +552,7 @@ export function VisualizadorPlanta({
               .replace(/^Circuito /, "")
               .trim() ||
             t.titulo;
-          if (circ !== filtroCircuito) return false;
+          if (!circuitosSelecionados.includes(circ)) return false;
         }
       }
       return true;
@@ -583,7 +564,7 @@ export function VisualizadorPlanta({
     filtroPrioridade,
     filtroExecutor,
     filtroTag,
-    filtroCircuito,
+    circuitosSelecionados,
   ]);
 
   const aplicarAjusteLargura = useCallback(() => {
@@ -606,6 +587,7 @@ export function VisualizadorPlanta({
   function trocarPagina(novaPagina: number) {
     setPaginaAtual(novaPagina);
     setNomesTarefasSelecionados([]);
+    setCircuitosSelecionados([]);
     setPontosMedicao([]);
     setPontosCalibracao([]);
     setRegiaoAtual(null);
@@ -817,9 +799,9 @@ export function VisualizadorPlanta({
         return pontoEmRegiao(pontoPdf, t.regiao);
       }
       if (t.localizacao_tipo === "circuito") {
-        const segmentos = extrairSegmentosCircuito(t.localizacao_detalhe);
+      const segmentos = extrairSegmentosCircuitoCompartilhado(t.localizacao_detalhe);
         for (const seg of segmentos) {
-          if (distanciaPontoPolilinha(pontoPdf, seg) <= 15) return true;
+          if (distanciaPontoPolilinha(pontoPdf, seg.pontos) <= 15) return true;
         }
         return false;
       }
@@ -1256,22 +1238,31 @@ export function VisualizadorPlanta({
               <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
               <div className="flex items-center gap-1.5 rounded-lg border border-borda bg-superficie-50 px-2 py-1">
                 <Zap className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                <select
-                  value={filtroCircuito}
-                  onChange={(e) => setFiltroCircuito(e.target.value)}
-                  className="bg-transparent text-xs font-medium text-superficie-800 focus:outline-none cursor-pointer"
-                  title="Filtrar circuitos visíveis na prancha"
-                >
-                  <option value="todos">
-                    Todos os circuitos ({circuitosDisponiveis.length})
-                  </option>
-                  <option value="nenhum">Ocultar todos os circuitos</option>
-                  {circuitosDisponiveis.map((c) => (
-                    <option key={c} value={c}>
-                      Circuito {c}
-                    </option>
-                  ))}
-                </select>
+                 <details className="relative">
+                   <summary className="cursor-pointer list-none text-xs font-medium text-superficie-800" aria-label="Selecionar circuitos visíveis">
+                     Circuitos ({circuitosSelecionados.length === 0 ? "todos" : `${circuitosSelecionados.length}/${circuitosDisponiveis.length}`})
+                   </summary>
+                   <fieldset className="absolute right-0 top-full z-50 mt-2 w-56 space-y-1 rounded-lg border border-borda bg-white p-2 shadow-lg">
+                     <legend className="sr-only">Circuitos visíveis</legend>
+                     {circuitosDisponiveis.map((circuito) => {
+                       const marcado = circuitosSelecionados.includes(circuito);
+                       return (
+                         <label key={circuito} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-superficie-50">
+                           <input
+                             type="checkbox"
+                             checked={marcado}
+                             onChange={() => setCircuitosSelecionados((atuais) => marcado ? atuais.filter((item) => item !== circuito) : [...atuais, circuito])}
+                             className="h-3.5 w-3.5 accent-azul-600"
+                           />
+                           <span>Circuito {circuito}</span>
+                         </label>
+                       );
+                     })}
+                     <button type="button" className="w-full rounded px-2 py-1 text-left text-xs font-medium text-azul-700 hover:bg-azul-50" onClick={() => setCircuitosSelecionados([])}>
+                       Mostrar todos
+                     </button>
+                   </fieldset>
+                 </details>
               </div>
             </>
           )}
@@ -1796,7 +1787,7 @@ export function VisualizadorPlanta({
                   {tarefasFiltradas
                     .filter((t) => t.localizacao_tipo === "circuito")
                     .map((tarefa) => {
-                      const segmentos = extrairSegmentosCircuito(
+                      const segmentos = extrairSegmentosCircuitoCompartilhado(
                         tarefa.localizacao_detalhe,
                       );
                       if (segmentos.length === 0) return null;
@@ -1814,7 +1805,7 @@ export function VisualizadorPlanta({
                       });
                       const emDestaque = tarefaDestaque === tarefa.id;
 
-                      const p0 = segmentos[0]?.[0];
+                       const p0 = segmentos[0]?.pontos[0];
                       const p0Pct = p0
                         ? pdfParaPercentual(
                             p0,
@@ -1836,7 +1827,8 @@ export function VisualizadorPlanta({
                             preserveAspectRatio="none"
                             className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
                           >
-                            {segmentos.map((pontos, sIdx) => {
+                             {segmentos.map((segmento, sIdx) => {
+                               const pontos = segmento.pontos;
                               const corredor = corredorDaPolilinha(
                                 pontos,
                                 larguraCorredor,
@@ -1844,7 +1836,7 @@ export function VisualizadorPlanta({
                               if (corredor.length < 3) return null;
 
                               return (
-                                <g key={`seg-${sIdx}`}>
+                                <g key={segmento.segmentoId ?? `seg-${sIdx}`}>
                                   <polygon
                                     points={corredor
                                       .map((p) => {
@@ -2372,9 +2364,6 @@ export function VisualizadorPlanta({
           aoMudarExecutor={setFiltroExecutor}
           filtroTag={filtroTag}
           aoMudarTag={setFiltroTag}
-          circuitosDisponiveis={circuitosDisponiveis}
-          filtroCircuito={filtroCircuito}
-          aoMudarCircuito={setFiltroCircuito}
           tags={tags}
           tarefaDestaque={tarefaDestaque}
           aoDestaque={setTarefaDestaque}
