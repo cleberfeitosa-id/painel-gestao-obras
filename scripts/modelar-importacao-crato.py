@@ -68,7 +68,15 @@ def find_header(data: list[list[str]], required: set[str]) -> tuple[int, list[st
 
 
 def columns(header: list[str]) -> dict[str, int]:
-    return {key(value): index for index, value in enumerate(header)}
+    # Alguns relatórios possuem cabeçalhos repetidos (por exemplo,
+    # PRECO UNITARIO em COMPOSICOES NOVAS). O primeiro é o preço do
+    # componente; o último é o preço unitário da composição-pai.
+    # Preservar a primeira ocorrência evita substituir os preços dos
+    # componentes por células vazias do cabeçalho-pai.
+    result: dict[str, int] = {}
+    for index, value in enumerate(header):
+        result.setdefault(key(value), index)
+    return result
 
 
 def cell(row: list[str], indexes: dict[str, int], name: str) -> str:
@@ -240,6 +248,7 @@ def main() -> None:
         compositions.append({"codigo": item["codigo"], "nome": item["nome"], "unidade": item["unidade"], "custoUnitarioCalculado": custo, "componentes": clean_components})
 
     columns_json = [
+        {"id": "item", "nome": "Item", "tipo": "texto", "selecionada": True, "funcao": "item"},
         {"id": "codigo", "nome": "Código", "tipo": "texto", "selecionada": True, "funcao": "codigo"},
         {"id": "descricao", "nome": "Descrição", "tipo": "texto", "selecionada": True, "funcao": "descricao"},
         {"id": "unidade", "nome": "Unidade", "tipo": "texto", "selecionada": True, "funcao": "unidade"},
@@ -262,6 +271,7 @@ def main() -> None:
             "__tipo": item_type,
             "__grupo": current_group,
             "__aba": "PO",
+            "item": line["item"],
             "codigo": line["codigo"],
             "descricao": line["descricao"],
             "unidade": line["unidade"],
