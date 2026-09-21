@@ -159,14 +159,14 @@ async function buscarDados() {
   let somaTotalPago = 0;
 
   const medicoesCalculadas: MedicaoResumo[] = await Promise.all(
-    medicoesRaw.slice(0, 15).map(async (m) => {
+    medicoesRaw.map(async (m) => {
       const resumo = await buscarResumoDaMedicao(m.id, m.obra_id);
       const contrato = Number(m.valor_contrato) || 0;
       const executado = resumo.executorExecutado;
       const pago = resumo.pago;
 
       somaTotalContrato += contrato;
-      somaTotalExecutado += executado;
+        somaTotalExecutado += executado;
       somaTotalPago += pago;
 
       return {
@@ -415,7 +415,7 @@ export default async function PainelPage() {
                 <TrendingUp className="h-5 w-5 text-azul-600" />
                 <CartaoTitulo>Resumo Consolidado de Medições</CartaoTitulo>
               </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-azul-50 text-azul-700">
+     <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-azul-50 text-azul-700">
                 {dados.resumoFinanceiroGlobal.percentualExecutado}% Executado
               </span>
             </div>
@@ -432,7 +432,7 @@ export default async function PainelPage() {
               </div>
               <div className="rounded-lg bg-emerald-50/60 p-3 border border-emerald-100">
                 <span className="text-xs text-emerald-700 font-medium block">
-                   Total medido executor
+                   Total executado pelo executor
                 </span>
                 <p className="text-lg font-bold text-emerald-900 mt-1">
                   {formatarMoeda(dados.resumoFinanceiroGlobal.totalExecutado)}
@@ -658,7 +658,7 @@ export default async function PainelPage() {
                         <p className="text-sm font-medium text-superficie-900 group-hover:text-azul-600 truncate">
                           {m.titulo}
                         </p>
-                        <span className="text-xs font-semibold text-emerald-700">
+                       <span className="text-xs font-semibold text-emerald-700">
                           {formatarMoeda(m.valorExecutado)}
                         </span>
                       </div>

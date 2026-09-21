@@ -105,7 +105,7 @@ export default async function MedicoesObraPage({
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {lista.map((medicao) => {
-            const saldoMedidoExecutor = medicao.valor_executor_executado - medicao.valor_pago;
+            const saldoExecutor = medicao.valor_executor_executado - medicao.valor_pago;
             const baseMedida = medicao.valor_construtora_executado + medicao.valor_construtora_pendente;
             const percentualExecutado =
               baseMedida > 0
@@ -132,32 +132,32 @@ export default async function MedicoesObraPage({
                     </div>
                     {medicao.valor_contrato != null && (
                       <div className="flex items-center justify-between">
-                          <span className="text-sm text-superficie-500">Saldo medido do executor</span>
-                        <span className="text-sm font-semibold text-azul-600">
-                           {formatarMoeda(saldoMedidoExecutor)}
+                        <span className="text-sm text-superficie-500">Saldo do executor</span>
+                        <span className={`text-sm font-semibold ${saldoExecutor < 0 ? "text-perigo" : "text-azul-600"}`}>
+                           {formatarMoeda(saldoExecutor)}
                         </span>
                       </div>
                     )}
                     <div className="flex items-center justify-between">
-                        <span className="text-sm text-superficie-500">Medido executor</span>
+                         <span className="text-sm text-superficie-500">Executor — medido executado</span>
                       <span className="text-sm font-semibold text-emerald-600">
                         {formatarMoeda(medicao.valor_executor_executado)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-superficie-500">A medir executor</span>
+                       <span className="text-sm text-superficie-500">Executor — a medir</span>
                       <span className="text-sm font-semibold text-amber-600">
                         {formatarMoeda(medicao.valor_executor_pendente)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-superficie-500">Medido construtora</span>
+                        <span className="text-sm text-superficie-500">Construtora — medido executado</span>
                       <span className="text-sm font-semibold text-emerald-700">
                         {formatarMoeda(medicao.valor_construtora_executado)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-superficie-500">A medir construtora</span>
+                       <span className="text-sm text-superficie-500">Construtora — a medir</span>
                       <span className="text-sm font-semibold text-amber-700">
                         {formatarMoeda(medicao.valor_construtora_pendente)}
                       </span>

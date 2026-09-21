@@ -178,7 +178,7 @@ async function buscarDados(
     .from("tarefas")
     .select(
         `id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome),
-       tarefa_medicoes(catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
+        tarefa_medicoes(id, criado_em, catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
     )
     .eq("obra_id", obraId);
 
@@ -207,7 +207,7 @@ async function buscarDados(
         .from("tarefas")
         .select(
           `id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome),
-           tarefa_medicoes(catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
+            tarefa_medicoes(id, criado_em, catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
         )
         .eq("obra_id", obraId)
         .order("titulo"),
@@ -225,7 +225,7 @@ async function buscarDados(
     ? await supabase
         .from("tarefa_medicoes")
         .select(
-          "tarefa_id, catalogo_id, quantidade, tarefas!inner(id, obra_id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome)), catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id)",
+           "id, criado_em, tarefa_id, catalogo_id, quantidade, tarefas!inner(id, obra_id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome)), catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id)",
         )
         .in("catalogo_id", catalogoIdsDaMedicao)
         .eq("tarefas.obra_id", obraId)
@@ -237,19 +237,25 @@ async function buscarDados(
       const tarefa = vinculo.tarefas;
       if (!tarefa) continue;
       const existente = porId.get(tarefa.id);
-      const medicao = {
-        id: vinculo.tarefa_id,
-        tarefa_id: vinculo.tarefa_id,
-        catalogo_id: vinculo.catalogo_id,
-        quantidade: vinculo.quantidade,
-        criado_por: null,
-        criado_em: "",
-        catalogo_precos: vinculo.catalogo_precos,
-      } as TarefaMedicaoRow & { catalogo_precos: CatalogoPrecoRow };
-      if (existente) {
-        if (!existente.tarefa_medicoes.some((item) => item.catalogo_id === medicao.catalogo_id)) {
-          existente.tarefa_medicoes.push(medicao);
-        }
+       const medicao = {
+         id: vinculo.id,
+         tarefa_id: vinculo.tarefa_id,
+         catalogo_id: vinculo.catalogo_id,
+         quantidade: vinculo.quantidade,
+         criado_por: null,
+         criado_em: vinculo.criado_em,
+         catalogo_precos: vinculo.catalogo_precos,
+       } as TarefaMedicaoRow & { catalogo_precos: CatalogoPrecoRow };
+       if (existente) {
+         const indice = existente.tarefa_medicoes.findIndex((item) => item.catalogo_id === medicao.catalogo_id);
+         if (indice === -1) {
+           existente.tarefa_medicoes.push(medicao);
+         } else {
+           const atual = existente.tarefa_medicoes[indice];
+           if (medicao.criado_em > atual.criado_em || (medicao.criado_em === atual.criado_em && medicao.id > atual.id)) {
+             existente.tarefa_medicoes[indice] = medicao;
+           }
+         }
       } else {
         porId.set(tarefa.id, { ...tarefa, tarefa_medicoes: [medicao] } as TarefaComRelacoes);
       }
@@ -295,13 +301,14 @@ async function buscarDados(
   if (idsOrcamentoDoCatalogo.length > 0) {
      const { data: dadosItens } = await supabase
       .from("orcamento_itens")
-      .select("id, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id, ativo, tipo, orcamentos!inner(obra_id)")
+       .select("id, item, codigo, descricao, unidade, quantidade, valor_unitario, valor_total, composicao_id, ativo, tipo, orcamentos!inner(obra_id)")
       .in("id", idsOrcamentoDoCatalogo);
      const itensOrcamento: ItemOrcamentoParaCatalogo[] = (dadosItens ?? [])
        .filter((item) => item.orcamentos?.obra_id === medicao?.obra_id)
        .map((item) => ({
-      id: item.id,
-      codigo: item.codigo,
+       id: item.id,
+       item: item.item,
+       codigo: item.codigo,
       descricao: item.descricao,
       unidade: item.unidade,
       quantidade: item.quantidade,
@@ -619,7 +626,10 @@ export default async function MedicaoDetalhePage({
     let valorConstrutoraTotal = 0;
 
     for (const tarefa of tarefasParaAgregar) {
-    for (const medicaoTarefa of tarefa.tarefa_medicoes) {
+     const medicoesDaTarefa = new Map(
+       tarefa.tarefa_medicoes.map((medicaoTarefa) => [medicaoTarefa.catalogo_id, medicaoTarefa]),
+     );
+     for (const medicaoTarefa of medicoesDaTarefa.values()) {
       const catalogoItem = medicaoTarefa.catalogo_precos;
       if (!catalogoItem) continue;
       // Uma tarefa pode estar vinculada a mais de um boletim. O filtro
@@ -738,6 +748,11 @@ export default async function MedicaoDetalhePage({
   const resumoFonteDaVerdade = await buscarResumoDaMedicao(medicao.id, medicao.obra_id);
   const valorPago = resumoFonteDaVerdade.pago;
   const saldoExecutor = agregadoGlobal.valorExecutorExecutado - valorPago;
+  const maoDeObraExecutada = agregadoGlobal.itens.reduce(
+    (total, item) => total + item.valorContabilizado,
+    0,
+  );
+  const saldoMaoDeObra = maoDeObraExecutada - valorPago;
   const custosOrcamento = [...agregadoGlobal.itens].reduce<Record<string, number>>((total, item) => {
     for (const [categoria, valor] of Object.entries(item.composicaoCustos)) {
       total[categoria] = (total[categoria] ?? 0) + valor;
@@ -808,13 +823,13 @@ export default async function MedicaoDetalhePage({
       </Cartao>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <div className="col-span-full border-b border-azul-100 pb-1 text-sm font-semibold text-azul-700">
+        <div className="col-span-full rounded-lg border border-azul-100 bg-azul-50/40 px-4 py-3 text-sm font-semibold text-azul-700">
           Contrato executor
+          <p className="mt-0.5 text-xs font-normal text-superficie-500">
+            Valores acordados, pagos e medidos no contrato do executor.
+          </p>
         </div>
         <ValorContrato medicaoId={medicao.id} valorContrato={medicao.valor_contrato} />
-        <div className="col-span-full mt-2 border-b border-superficie-200 pb-1 text-sm font-semibold text-superficie-700">
-          Orçamento e medição da construtora
-        </div>
         <Cartao>
           <CartaoCabecalho>
             <CartaoTitulo>Total pago ao executor</CartaoTitulo>
@@ -850,6 +865,38 @@ export default async function MedicaoDetalhePage({
         </Cartao>
         <Cartao>
           <CartaoCabecalho>
+            <CartaoTitulo>Executor — medido executado</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className="text-2xl font-bold text-azul-600">
+              {formatarMoeda(agregadoGlobal.valorExecutorExecutado)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Quantidade concluída e aprovada × preço do contrato executor
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        <Cartao>
+          <CartaoCabecalho>
+            <CartaoTitulo>Executor — a medir</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className="text-2xl font-bold text-amber-600">
+              {formatarMoeda(agregadoGlobal.valorExecutorPendente)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Quantidade ainda não concluída × preço do contrato executor
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        <div className="col-span-full mt-2 rounded-lg border border-superficie-200 bg-superficie-50 px-4 py-3 text-sm font-semibold text-superficie-700">
+          Orçamento e medição da construtora
+          <p className="mt-0.5 text-xs font-normal text-superficie-500">
+            Valores do orçamento da obra e das quantidades medidas nas tarefas.
+          </p>
+        </div>
+        <Cartao>
+          <CartaoCabecalho>
              <CartaoTitulo>Orçamento previsto da construtora</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
@@ -863,6 +910,32 @@ export default async function MedicaoDetalhePage({
         </Cartao>
         <Cartao>
           <CartaoCabecalho>
+            <CartaoTitulo>Mão de obra prevista nos itens executados</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className="text-2xl font-bold text-violeta-700">
+              {formatarMoeda(maoDeObraExecutada)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Custo da mão de obra da composição nos itens concluídos e aprovados
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        <Cartao>
+          <CartaoCabecalho>
+            <CartaoTitulo>Saldo da mão de obra</CartaoTitulo>
+          </CartaoCabecalho>
+          <CartaoConteudo>
+            <p className={cn("text-2xl font-bold", saldoMaoDeObra < 0 ? "text-perigo" : "text-violeta-700")}>
+              {formatarMoeda(saldoMaoDeObra)}
+            </p>
+            <p className="mt-1 text-xs text-superficie-500">
+              Mão de obra dos itens executados menos pagamentos ao executor
+            </p>
+          </CartaoConteudo>
+        </Cartao>
+        <Cartao>
+          <CartaoCabecalho>
              <CartaoTitulo>Construtora — medido executado</CartaoTitulo>
           </CartaoCabecalho>
           <CartaoConteudo>
@@ -871,32 +944,6 @@ export default async function MedicaoDetalhePage({
             </p>
             <p className="mt-1 text-xs text-superficie-500">
               Valor do orçamento × quantidade de tarefas concluídas
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-             <CartaoTitulo>Executor — medido executado</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-azul-600">
-               {formatarMoeda(agregadoGlobal.valorExecutorExecutado)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Quantidade executada × preço acordado no contrato executor
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-             <CartaoTitulo>Executor — a medir</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-amber-600">
-               {formatarMoeda(agregadoGlobal.valorExecutorPendente)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Quantidade ainda não concluída × preço do executor
             </p>
           </CartaoConteudo>
         </Cartao>

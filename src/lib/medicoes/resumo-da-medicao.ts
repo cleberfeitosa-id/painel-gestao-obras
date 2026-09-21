@@ -28,17 +28,30 @@ export async function buscarResumoDaMedicao(
     return { executorMedido: 0, executorExecutado: 0, executorPendente: 0, construtoraExecutado: 0, construtoraPendente: 0, pago };
   }
 
-  const [{ data: vinculos }, { data: tarefasMedidas }] = await Promise.all([
+  const [{ data: vinculos }, { data: tarefasDaObra }] = await Promise.all([
     supabase
       .from("catalogo_precos_orcamento_itens")
       .select("catalogo_id, orcamento_item_id")
       .in("catalogo_id", catalogoIds),
     supabase
-      .from("tarefa_medicoes")
-      .select("catalogo_id, quantidade, tarefas!inner(status, aprovacao, obra_id)")
-      .in("catalogo_id", catalogoIds)
-      .eq("tarefas.obra_id", obraId),
+      .from("tarefas")
+      .select("id, status, aprovacao, obra_id, tarefa_medicoes(id, criado_em, catalogo_id, quantidade, catalogo_precos!inner(id, medicao_id))")
+      .eq("obra_id", obraId),
   ]);
+
+  const tarefasMedidas = (tarefasDaObra ?? []).flatMap((tarefa) =>
+    (tarefa.tarefa_medicoes ?? [])
+      .filter((medicao) => medicao.catalogo_precos?.medicao_id === medicaoId)
+      .map((medicao) => ({
+        id: medicao.id,
+        criado_em: medicao.criado_em,
+        tarefa_id: tarefa.id,
+        catalogo_id: medicao.catalogo_id,
+        quantidade: medicao.quantidade,
+        status: tarefa.status,
+        aprovacao: tarefa.aprovacao,
+      })),
+  );
 
   const links = [...(vinculos ?? [])];
   for (const item of catalogo ?? []) {
@@ -83,11 +96,19 @@ export async function buscarResumoDaMedicao(
   let executorPendente = 0;
   let construtoraExecutado = 0;
   let construtoraPendente = 0;
-  for (const medicao of tarefasMedidas ?? []) {
+  const linhasUnicas = new Map<string, (typeof tarefasMedidas)[number]>();
+  for (const medicao of tarefasMedidas) {
+    const chave = `${medicao.tarefa_id}:${medicao.catalogo_id}`;
+    const anterior = linhasUnicas.get(chave);
+    if (!anterior || medicao.criado_em > anterior.criado_em || (medicao.criado_em === anterior.criado_em && medicao.id > anterior.id)) {
+      linhasUnicas.set(chave, medicao);
+    }
+  }
+  for (const medicao of linhasUnicas.values()) {
     const quantidade = Number(medicao.quantidade ?? 0);
     const valorExecutor = quantidade * (precosExecutorPorCatalogo.get(medicao.catalogo_id) ?? 0);
     const valorConstrutora = quantidade * (valoresPorCatalogo.get(medicao.catalogo_id) ?? 0);
-    const executada = medicao.tarefas?.status === "concluido" && medicao.tarefas.aprovacao === "aprovado";
+    const executada = medicao.status === "concluido" && medicao.aprovacao === "aprovado";
     executorMedido += valorExecutor;
     if (executada) {
       executorExecutado += valorExecutor;
