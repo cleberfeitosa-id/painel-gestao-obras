@@ -930,11 +930,21 @@ export function TabelaMedicao({ medicaoId, obraId, itens, temFiltros }: TabelaMe
                                        <span title="Identificação operacional; não define o beneficiário financeiro do contrato executor">
                                          Colaborador identificado: {tarefa.executor?.nome ?? "Não definido"}
                                        </span>
-                                      <span>
-                                        {tarefa.prazo
-                                          ? `Prazo: ${formatarData(tarefa.prazo)}`
-                                          : "Sem prazo"}
-                                      </span>
+                                       <span>
+                                         {tarefa.prazo
+                                           ? `Prazo: ${formatarData(tarefa.prazo)}`
+                                           : "Sem prazo"}
+                                       </span>
+                                       {tarefa.segmentosCircuito && tarefa.segmentosCircuito.length > 0 && (
+                                         <span className="font-medium text-azul-600">
+                                            Circuito: {tarefa.segmentosCircuito.length} trecho(s), {tarefa.segmentosCircuito
+                                             .reduce(
+                                               (total, segmento) => total + (segmento.distanciaCabo ?? segmento.comprimento ?? 0),
+                                               0,
+                                             )
+                                              .toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m associados
+                                         </span>
+                                       )}
                                        {tarefa.quantidade != null && tarefa.quantidade > 0 && (
                                          <>
                                            <span className="font-medium text-superficie-700">

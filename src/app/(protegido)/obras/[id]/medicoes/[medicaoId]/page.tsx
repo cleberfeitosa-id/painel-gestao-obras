@@ -23,6 +23,13 @@ import type {
 import type { ItemOrcamentoParaCatalogo } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
 import { buscarResumoDaMedicao } from "@/lib/medicoes/resumo-da-medicao";
 import { classificarCategoria } from "@/lib/orcamento/classificar-categoria";
+import { z } from "zod";
+
+const esquemaSegmentosCircuito = z.array(z.object({
+  segmentoId: z.string().trim().min(1),
+  comprimento: z.number().finite().nonnegative().nullable(),
+  distanciaCabo: z.number().finite().nonnegative().nullable(),
+}));
 
 export interface TarefaMedicao {
   id: string;
@@ -35,6 +42,12 @@ export interface TarefaMedicao {
   responsavel: { nome: string } | null;
   executor: { nome: string } | null;
   catalogoId: string | null;
+  segmentosCircuito: Array<{ segmentoId: string; comprimento: number | null; distanciaCabo: number | null }> | null;
+}
+
+function normalizarSegmentosCircuito(valor: unknown): TarefaMedicao["segmentosCircuito"] {
+  const resultado = esquemaSegmentosCircuito.safeParse(valor);
+  return resultado.success && resultado.data.length > 0 ? resultado.data : null;
 }
 
 export interface ItemMedicao {
@@ -178,7 +191,7 @@ async function buscarDados(
     .from("tarefas")
     .select(
         `id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome),
-        tarefa_medicoes(id, criado_em, catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
+         tarefa_medicoes(id, criado_em, catalogo_id, quantidade, segmentos_circuito, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
     )
     .eq("obra_id", obraId);
 
@@ -207,7 +220,7 @@ async function buscarDados(
         .from("tarefas")
         .select(
           `id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome),
-            tarefa_medicoes(id, criado_em, catalogo_id, quantidade, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
+           tarefa_medicoes(id, criado_em, catalogo_id, quantidade, segmentos_circuito, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
         )
         .eq("obra_id", obraId)
         .order("titulo"),
@@ -225,7 +238,7 @@ async function buscarDados(
     ? await supabase
         .from("tarefa_medicoes")
         .select(
-           "id, criado_em, tarefa_id, catalogo_id, quantidade, tarefas!inner(id, obra_id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome)), catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id)",
+           "id, criado_em, tarefa_id, catalogo_id, quantidade, segmentos_circuito, tarefas!inner(id, obra_id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome)), catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id)",
         )
         .in("catalogo_id", catalogoIdsDaMedicao)
         .eq("tarefas.obra_id", obraId)
@@ -241,7 +254,8 @@ async function buscarDados(
          id: vinculo.id,
          tarefa_id: vinculo.tarefa_id,
          catalogo_id: vinculo.catalogo_id,
-         quantidade: vinculo.quantidade,
+          quantidade: vinculo.quantidade,
+          segmentos_circuito: vinculo.segmentos_circuito,
          criado_por: null,
          criado_em: vinculo.criado_em,
          catalogo_precos: vinculo.catalogo_precos,
@@ -637,7 +651,8 @@ export default async function MedicaoDetalhePage({
       if (catalogoItem.medicao_id !== medicaoId) continue;
 
       const item = itens.get(catalogoItem.id) ?? {
-        catalogoId: catalogoItem.id,
+          catalogoId: catalogoItem.id,
+          segmentosCircuito: normalizarSegmentosCircuito(medicaoTarefa.segmentos_circuito),
         nome: catalogoItem.nome,
         unidade: catalogoItem.unidade,
           valorUnitario: precoEfetivoDoCatalogo(catalogoItem.valor_unitario),
@@ -661,7 +676,7 @@ export default async function MedicaoDetalhePage({
         progressoPercentual: 0,
         contribuicaoProgresso: 0,
         orcamentoItens: [],
-        tarefas: [],
+        tarefas: [] as TarefaMedicao[],
         composicaoCustos: {},
         composicaoComponentes: [],
         temBaseMaoObra: false,
@@ -677,8 +692,9 @@ export default async function MedicaoDetalhePage({
         planta: tarefa.plantas,
          responsavel: tarefa.perfis,
          executor: tarefa.executor,
-        catalogoId: catalogoItem.id,
-      });
+         catalogoId: catalogoItem.id,
+         segmentosCircuito: normalizarSegmentosCircuito(medicaoTarefa.segmentos_circuito),
+       });
 
       const qtd = Number(medicaoTarefa.quantidade ?? 0);
       const valor = qtd * item.valorUnitario;
