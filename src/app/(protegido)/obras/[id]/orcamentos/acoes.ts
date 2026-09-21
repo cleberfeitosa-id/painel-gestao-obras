@@ -10,7 +10,7 @@ const colunaSchema = z.object({
   nome: z.string().trim().min(1).max(120),
   tipo: z.enum(["texto", "numero", "moeda"]),
   selecionada: z.boolean(),
-  funcao: z.enum(["codigo", "descricao", "unidade", "quantidade", "valor_unitario", "valor_total", "valor_bdi", "custo_real", "grupo", "fonte", "categoria", "composicao", "bdi", "quantidade_executada"]).optional(),
+  funcao: z.enum(["item", "codigo", "descricao", "unidade", "quantidade", "valor_unitario", "valor_total", "valor_bdi", "custo_real", "grupo", "fonte", "categoria", "composicao", "bdi", "quantidade_executada"]).optional(),
   formula: z.string().max(500).optional(),
 });
 

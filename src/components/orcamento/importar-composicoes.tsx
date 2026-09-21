@@ -20,14 +20,16 @@ function corrigirTexto(valor: unknown): string {
     return original;
   }
 }
-function numero(valor: unknown) {
-  if (typeof valor === "number") return Number.isFinite(valor) ? valor : 0;
+function numero(valor: unknown): number | null {
+  if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
+  if (texto(valor) === "") return null;
   const bruto = texto(valor).replace(/[^0-9,.-]/g, "");
+  if (bruto === "") return null;
   const normalizado = bruto.includes(",")
     ? bruto.replace(/\./g, "").replace(",", ".")
     : bruto.replace(/\.(?=.*\.)/g, "");
   const resultado = Number(normalizado);
-  return Number.isFinite(resultado) ? resultado : 0;
+  return Number.isFinite(resultado) ? resultado : null;
 }
 function indicePorNome(cabecalho: string[], padroes: RegExp[], fallback: number) {
   for (const padrao of padroes) {
@@ -75,7 +77,7 @@ export function ImportarComposicoes({ obraId }: { obraId: string }) {
   }
 
   function importar() {
-    const nomes = colunas.map((coluna) => coluna.toLowerCase());
+    const nomes = colunas.map(chaveCabecalho);
     const codigo = indicePorNome(nomes, [/codigo.*compos/, /c[oó]digo/], 0);
     const nome = indicePorNome(nomes, [/descri.*compos/, /^descri/, /nome/], 1);
     const unidade = indicePorNome(nomes, [/^un(?:d|id|idade)?\.?$/, /unidade/], 2);
@@ -98,6 +100,7 @@ export function ImportarComposicoes({ obraId }: { obraId: string }) {
     const tipoLinha = colunaTipoLinha(linhas.slice(cabecalho + 1), nomes.length);
     const grupos = new Map<string, { nome: string; unidade: string; componentes: ComponenteImportado[] }>();
     const codigosVistos = new Set<string>();
+    const errosNumericos: string[] = [];
     let linhasResumo = 0;
     for (const linha of linhas.slice(cabecalho + 1)) {
       const codigoValor = texto(linha[codigo]);
@@ -133,6 +136,10 @@ export function ImportarComposicoes({ obraId }: { obraId: string }) {
       const nomeItem = texto(linha[nomeComponente]) || nomeValor;
       const quantidadeValor = numero(linha[quantidade]);
       const custoUnitarioValor = numero(linha[custo]);
+      if (quantidadeValor === null || custoUnitarioValor === null) {
+        errosNumericos.push(`${codigoValor} / ${nomeItem}`);
+        continue;
+      }
       const tipoComponente = tipo >= 0 ? texto(linha[tipo]) : "";
       const classificacaoComponente = classificacao >= 0 ? texto(linha[classificacao]) : "";
       grupo.componentes.push({
@@ -145,10 +152,22 @@ export function ImportarComposicoes({ obraId }: { obraId: string }) {
       });
       grupos.set(codigoValor, grupo);
     }
+    if (errosNumericos.length > 0) {
+      setMensagem(`Importacao interrompida: quantidade ou custo unitario ausente/invalido em ${errosNumericos.slice(0, 3).join(", ")}${errosNumericos.length > 3 ? ` e mais ${errosNumericos.length - 3}` : ""}. Revise as colunas da planilha.`);
+      return;
+    }
     const composicoes = [...grupos.entries()].map(([codigoValor, grupo]) => ({ codigo: codigoValor, ...grupo }));
+    const composicoesSemAbertura = composicoes.filter((composicao) => {
+      const temPrecoFinal = composicao.componentes.length > 0 && composicao.componentes.some((componente) => componente.custoUnitario > 0);
+      const temComponentesZerados = composicao.componentes.length > 0 && composicao.componentes.every((componente) => componente.custoUnitario === 0);
+      return temComponentesZerados && !temPrecoFinal;
+    }).map((composicao) => composicao.codigo);
     iniciarTransicao(async () => {
       const resultado = await importarComposicoes({ obraId, composicoes });
-      setMensagem(resultado.erro ?? `${resultado.quantidade ?? 0} composições importadas. ${linhasResumo > 0 ? `${linhasResumo} linhas-resumo foram excluídas do cálculo; o custo usa os coeficientes dos insumos e composições auxiliares.` : "O custo foi calculado pela soma dos componentes."}`);
+      const avisoSemAbertura = composicoesSemAbertura.length > 0
+        ? ` ${composicoesSemAbertura.length} composição(ões) ficaram sem abertura analítica porque os componentes não possuem preço: ${composicoesSemAbertura.slice(0, 5).join(", ")}${composicoesSemAbertura.length > 5 ? "..." : ""}.`
+        : "";
+      setMensagem(resultado.erro ?? `${resultado.quantidade ?? 0} composições importadas.${linhasResumo > 0 ? ` ${linhasResumo} linhas-resumo foram excluídas do cálculo; o custo usa os coeficientes dos insumos e composições auxiliares.` : " O custo foi calculado pela soma dos componentes."}${avisoSemAbertura}`);
       if (!resultado.erro) router.refresh();
     });
   }

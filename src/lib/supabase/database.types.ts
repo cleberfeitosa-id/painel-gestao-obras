@@ -83,6 +83,7 @@ export type Database = {
           orcamento_id: string
           chave_estavel: string
           ordem: number
+          item: string | null
           codigo: string | null
           descricao: string | null
           unidade: string | null
@@ -104,6 +105,7 @@ export type Database = {
           orcamento_id: string
           chave_estavel: string
           ordem?: number
+          item?: string | null
           codigo?: string | null
           descricao?: string | null
           unidade?: string | null
@@ -125,6 +127,7 @@ export type Database = {
           orcamento_id?: string
           chave_estavel?: string
           ordem?: number
+          item?: string | null
           codigo?: string | null
           descricao?: string | null
           unidade?: string | null
