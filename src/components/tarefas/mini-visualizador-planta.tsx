@@ -47,7 +47,7 @@ import { formatarData, situacaoPrazo } from "@/lib/datas";
 import { cn } from "@/lib/utils";
 import { MenuTarefasSobrepostas } from "@/components/plantas/menu-tarefas-sobrepostas";
 import { associarLocalizacao } from "@/app/(protegido)/tarefas/acoes";
-import type { TarefaPlanta } from "@/components/plantas/tipos";
+import { extrairSegmentosCircuito, type TarefaPlanta } from "@/components/plantas/tipos";
 import type { PontoPdf, RegiaoPdf } from "@/lib/supabase/database.types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -311,6 +311,7 @@ export function MiniVisualizadorPlanta({
   const [arrastando, setArrastando] = useState(false);
   const [dicaTarefa, setDicaTarefa] = useState<string | null>(null);
   const [tarefaDestaque, setTarefaDestaque] = useState<string | null>(null);
+  const [circuitosSelecionados, setCircuitosSelecionados] = useState<string[]>([]);
   const [tarefaSelecionada, setTarefaSelecionada] = useState<TarefaPlanta | null>(null);
   const [menuSobreposicao, setMenuSobreposicao] = useState<{
     posicao: { x: number; y: number };
@@ -337,6 +338,25 @@ export function MiniVisualizadorPlanta({
     [tarefas, tarefaAtualId],
   );
 
+  const circuitosDisponiveis = useMemo(() => {
+    const nomes = new Set<string>();
+    for (const tarefa of tarefas) {
+      if (tarefa.localizacao_tipo !== "circuito") continue;
+      const nome = tarefa.localizacao_detalhe?.circuito?.trim();
+      if (nome) nomes.add(nome);
+    }
+    return Array.from(nomes).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+  }, [tarefas]);
+
+  const tarefasCircuitoVisiveis = useMemo(
+    () => tarefas.filter((tarefa) => {
+      if (tarefa.localizacao_tipo !== "circuito") return false;
+      if (circuitosSelecionados.length === 0) return true;
+      return circuitosSelecionados.includes(tarefa.localizacao_detalhe?.circuito?.trim() ?? "");
+    }),
+    [tarefas, circuitosSelecionados],
+  );
+
   const pontoFocoTarefaAtual = useMemo<PontoPdf | null>(() => {
     if (modoEdicao) {
       if (ferramentaEdicao === "pino" && edicaoPonto) return edicaoPonto;
@@ -358,10 +378,13 @@ export function MiniVisualizadorPlanta({
       (tarefaAtual.localizacao_tipo === "distancia" ||
         tarefaAtual.localizacao_tipo === "circuito" ||
         tarefaAtual.localizacao_tipo === "area") &&
-      tarefaAtual.localizacao_detalhe?.pontos &&
-      tarefaAtual.localizacao_detalhe.pontos.length > 0
+      (tarefaAtual.localizacao_tipo !== "circuito"
+        ? (tarefaAtual.localizacao_detalhe?.pontos?.length ?? 0) > 0
+        : extrairSegmentosCircuito(tarefaAtual.localizacao_detalhe).length > 0)
     ) {
-      const pts = tarefaAtual.localizacao_detalhe.pontos;
+      const pts = tarefaAtual.localizacao_tipo === "circuito"
+        ? extrairSegmentosCircuito(tarefaAtual.localizacao_detalhe).flatMap((segmento) => segmento.pontos)
+        : tarefaAtual.localizacao_detalhe?.pontos ?? [];
       const sumX = pts.reduce((acc, p) => acc + p.x, 0);
       const sumY = pts.reduce((acc, p) => acc + p.y, 0);
       return { x: sumX / pts.length, y: sumY / pts.length };
@@ -762,14 +785,14 @@ export function MiniVisualizadorPlanta({
       if (
         (t.localizacao_tipo === "distancia" ||
           t.localizacao_tipo === "circuito") &&
-        t.localizacao_detalhe?.pontos &&
-        t.localizacao_detalhe.pontos.length >= 2
+        (t.localizacao_tipo !== "circuito"
+          ? (t.localizacao_detalhe?.pontos?.length ?? 0) >= 2
+          : extrairSegmentosCircuito(t.localizacao_detalhe).length > 0)
       ) {
-        const distPdf = distanciaPontoPolilinha(
-          pontoPdf,
-          t.localizacao_detalhe.pontos,
-        );
-        return distPdf <= 15;
+        const segmentos = t.localizacao_tipo === "circuito"
+          ? extrairSegmentosCircuito(t.localizacao_detalhe)
+          : [{ pontos: t.localizacao_detalhe?.pontos ?? [] }];
+        return segmentos.some((segmento) => distanciaPontoPolilinha(pontoPdf, segmento.pontos) <= 15);
       }
       if (
         t.localizacao_tipo === "area" &&
@@ -916,8 +939,41 @@ export function MiniVisualizadorPlanta({
             <span className="shrink-0 whitespace-nowrap text-superficie-600">Página {pagina}</span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1 shrink-0">
-            <button
+           <div className="flex flex-wrap items-center gap-1 shrink-0">
+             {circuitosDisponiveis.length > 0 && (
+               <details className="relative">
+                 <summary className="inline-flex h-7 cursor-pointer list-none items-center gap-1 rounded-md border border-borda bg-white px-2 text-[11px] font-medium text-superficie-700 shadow-2xs hover:bg-superficie-100">
+                   Circuitos ({circuitosSelecionados.length === 0 ? "todos" : `${circuitosSelecionados.length}/${circuitosDisponiveis.length}`})
+                 </summary>
+                 <div className="absolute right-0 z-50 mt-1 max-h-56 min-w-56 overflow-y-auto rounded-lg border border-borda bg-white p-2 shadow-lg">
+                   <div className="mb-1 flex items-center justify-between gap-2 border-b border-superficie-100 pb-1">
+                     <span className="text-[10px] font-semibold uppercase tracking-wide text-superficie-500">Exibir circuitos</span>
+                     <button
+                       type="button"
+                       className="text-[10px] font-medium text-azul-700 hover:underline"
+                       onClick={() => setCircuitosSelecionados([])}
+                     >
+                       Todos
+                     </button>
+                   </div>
+                   {circuitosDisponiveis.map((circuito) => (
+                     <label key={circuito} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-superficie-700 hover:bg-superficie-50">
+                       <input
+                         type="checkbox"
+                         checked={circuitosSelecionados.includes(circuito)}
+                         onChange={(evento) => setCircuitosSelecionados((atuais) => evento.target.checked
+                           ? [...atuais, circuito]
+                           : atuais.filter((item) => item !== circuito))}
+                         className="h-3.5 w-3.5 rounded border-borda text-azul-600"
+                       />
+                       <span className="truncate">{circuito}</span>
+                     </label>
+                   ))}
+                 </div>
+               </details>
+             )}
+
+             <button
               type="button"
               onClick={() => centralizarNaTarefa()}
               className="inline-flex h-7 items-center gap-1 rounded-md border border-borda bg-white px-2 text-[11px] font-medium text-azul-700 hover:bg-azul-50 hover:border-azul-300 transition-colors shadow-2xs"
@@ -1205,8 +1261,7 @@ export function MiniVisualizadorPlanta({
                     .filter(
                       (t) =>
                         t.localizacao_tipo === "distancia" &&
-                        t.localizacao_detalhe?.pontos &&
-                        t.localizacao_detalhe.pontos.length >= 2 &&
+                        (t.localizacao_detalhe?.pontos?.length ?? 0) >= 2 &&
                         (!modoEdicao || t.id !== tarefaAtualId),
                     )
                     .map((tarefa) => {
@@ -1323,24 +1378,22 @@ export function MiniVisualizadorPlanta({
                       );
                     })}
 
-                  {tarefas
-                    .filter(
-                      (t) =>
-                        t.localizacao_tipo === "circuito" &&
-                        t.localizacao_detalhe?.pontos &&
-                        t.localizacao_detalhe.pontos.length >= 2 &&
-                        (!modoEdicao || t.id !== tarefaAtualId),
-                    )
+                   {tarefasCircuitoVisiveis
+                     .filter((t) =>
+                       extrairSegmentosCircuito(t.localizacao_detalhe).length > 0 &&
+                       (!modoEdicao || t.id !== tarefaAtualId),
+                     )
                     .map((tarefa) => {
-                      const pontos = tarefa.localizacao_detalhe!.pontos!;
+                      const segmentos = extrairSegmentosCircuito(tarefa.localizacao_detalhe);
+                      const pontos = segmentos.flatMap((segmento) => segmento.pontos);
                       const linhas = obterLinhasCondutoresCircuito(
                         tarefa.localizacao_detalhe,
                       );
                       const K = linhas.length;
                       const gap = 2.4;
                       const larguraCorredor = Math.max(14, K * gap + 10);
-                      const corredor = corredorDaPolilinha(pontos, larguraCorredor);
-                      if (corredor.length < 3) return null;
+                      const corredores = segmentos.map((segmento) => corredorDaPolilinha(segmento.pontos, larguraCorredor));
+                      if (corredores.every((corredor) => corredor.length < 3)) return null;
 
                       const eAtual = tarefa.id === tarefaAtualId;
                       const sit = situacaoDaTarefa({
@@ -1376,26 +1429,24 @@ export function MiniVisualizadorPlanta({
                             preserveAspectRatio="none"
                             className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
                           >
-                            <polygon
-                              points={corredor
-                                .map((p) => {
-                                  const pct = pdfParaPercentual(
-                                    p,
-                                    dimensoes.largura,
-                                    dimensoes.altura,
-                                  );
-                                  return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
-                                })
-                                .join(" ")}
-                              fill={CORES_CORREDOR[sit]}
-                              fillOpacity={eAtual ? 0.8 : 0.55}
-                              stroke={eAtual ? "#2563EB" : CORES_CORREDOR[sit]}
-                              strokeWidth={eAtual ? 2.5 : 0.5}
-                              vectorEffect="non-scaling-stroke"
-                            />
-                            {linhas.map((linha, idx) => {
+                            {segmentos.map((segmento, segmentoIdx) => {
+                              const corredor = corredores[segmentoIdx];
+                              if (corredor.length < 3) return null;
+                              return <g key={segmento.segmentoId ?? segmentoIdx}>
+                                <polygon
+                                  points={corredor.map((p) => {
+                                    const pct = pdfParaPercentual(p, dimensoes.largura, dimensoes.altura);
+                                    return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
+                                  }).join(" ")}
+                                  fill={CORES_CORREDOR[sit]}
+                                  fillOpacity={eAtual ? 0.8 : 0.55}
+                                  stroke={eAtual ? "#2563EB" : CORES_CORREDOR[sit]}
+                                  strokeWidth={eAtual ? 2.5 : 0.5}
+                                  vectorEffect="non-scaling-stroke"
+                                />
+                                {linhas.map((linha, idx) => {
                               const offset = (idx - (K - 1) / 2) * gap;
-                              const ptsDeslocados = deslocarPolilinha(pontos, offset);
+                              const ptsDeslocados = deslocarPolilinha(segmento.pontos, offset);
                               const pathData = ptsDeslocados
                                 .map((p, pIdx) => {
                                   const pct = pdfParaPercentual(
@@ -1433,6 +1484,8 @@ export function MiniVisualizadorPlanta({
                                   />
                                 </g>
                               );
+                                })}
+                              </g>;
                             })}
                           </svg>
 

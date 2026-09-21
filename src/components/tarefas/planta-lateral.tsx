@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -15,6 +15,7 @@ import {
 import { CORES_CORREDOR, SITUACAO_TAREFA, situacaoDaTarefa } from "@/lib/domain/rotulos";
 import { cn } from "@/lib/utils";
 import type { TarefaPlanta } from "@/components/plantas/tipos";
+import { extrairSegmentosCircuito } from "@/components/plantas/tipos";
 import type { PlantaRow, PlantaCalibracaoRow } from "@/lib/supabase/database.types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -173,16 +174,85 @@ export function PlantaLateral({
   const [pagina, setPagina] = useState(paginaInicial || 1);
   const [dimensoes, setDimensoes] = useState<{ largura: number; altura: number } | null>(null);
   const [erroPdf, setErroPdf] = useState(false);
+  const [circuitosSelecionados, setCircuitosSelecionados] = useState<string[]>([]);
+  const [filtroCircuitosAberto, setFiltroCircuitosAberto] = useState(false);
+  const filtroCircuitosRef = useRef<HTMLDivElement>(null);
 
   const tarefasDaPagina = tarefas.filter((t) => t.pagina === pagina);
+  const circuitosDisponiveis = Array.from(
+    new Set(
+      tarefasDaPagina
+        .filter((tarefa) => tarefa.localizacao_tipo === "circuito")
+        .map((tarefa) => tarefa.localizacao_detalhe?.circuito?.trim())
+        .filter((circuito): circuito is string => Boolean(circuito)),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+  const circuitosSelecionadosAtivos = circuitosSelecionados.filter((circuito) =>
+    circuitosDisponiveis.includes(circuito),
+  );
+  const tarefasVisiveis = tarefasDaPagina.filter((tarefa) =>
+    tarefa.localizacao_tipo !== "circuito" ||
+    circuitosSelecionadosAtivos.length === 0 ||
+    circuitosSelecionadosAtivos.includes(tarefa.localizacao_detalhe?.circuito?.trim() ?? ""),
+  );
+
+  useEffect(() => {
+    if (!filtroCircuitosAberto) return;
+    function fecharAoClicarFora(evento: MouseEvent) {
+      if (!filtroCircuitosRef.current?.contains(evento.target as Node)) {
+        setFiltroCircuitosAberto(false);
+      }
+    }
+    document.addEventListener("mousedown", fecharAoClicarFora);
+    return () => document.removeEventListener("mousedown", fecharAoClicarFora);
+  }, [filtroCircuitosAberto]);
 
   return (
     <div className="sticky top-6 flex h-[70vh] min-h-[420px] flex-col overflow-hidden rounded-lg border border-borda bg-superficie-100 shadow-sm lg:h-[calc(100dvh-3rem)]">
-      <div className="flex items-center justify-between border-b border-borda bg-white px-3 py-2">
-        <span className="text-sm font-medium text-superficie-700 truncate max-w-[200px]" title={planta.nome}>
-          {planta.nome}
-        </span>
-        <div className="flex items-center gap-1">
+       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borda bg-white px-3 py-2">
+         <span className="min-w-0 max-w-[200px] truncate text-sm font-medium text-superficie-700" title={planta.nome}>
+           {planta.nome}
+         </span>
+         <div className="flex flex-wrap items-center justify-end gap-1">
+           {circuitosDisponiveis.length > 0 && (
+             <div ref={filtroCircuitosRef} className="relative mr-1">
+               <button
+                 type="button"
+                 aria-expanded={filtroCircuitosAberto}
+                 onClick={() => setFiltroCircuitosAberto((aberto) => !aberto)}
+                 className="inline-flex h-8 items-center rounded-md border border-borda bg-white px-2 text-[11px] font-medium text-superficie-700 shadow-2xs hover:bg-superficie-100"
+               >
+                 Circuitos ({circuitosSelecionadosAtivos.length === 0 ? "todos" : `${circuitosSelecionadosAtivos.length}/${circuitosDisponiveis.length}`})
+               </button>
+               {filtroCircuitosAberto && (
+                 <div className="absolute right-0 z-50 mt-1 max-h-56 min-w-56 overflow-y-auto rounded-lg border border-borda bg-white p-2 text-left shadow-lg">
+                 <div className="mb-1 flex items-center justify-between gap-2 border-b border-superficie-100 pb-1">
+                   <span className="text-[10px] font-semibold uppercase tracking-wide text-superficie-500">Exibir circuitos</span>
+                   <button
+                     type="button"
+                     className="text-[10px] font-medium text-azul-700 hover:underline"
+                     onClick={() => setCircuitosSelecionados([])}
+                   >
+                     Todos
+                   </button>
+                 </div>
+                 {circuitosDisponiveis.map((circuito) => (
+                   <label key={circuito} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-superficie-700 hover:bg-superficie-50">
+                     <input
+                       type="checkbox"
+                       checked={circuitosSelecionadosAtivos.includes(circuito)}
+                       onChange={(evento) => setCircuitosSelecionados((atuais) => evento.target.checked
+                         ? [...atuais, circuito]
+                         : atuais.filter((item) => item !== circuito))}
+                       className="h-3.5 w-3.5 rounded border-borda text-azul-600"
+                     />
+                     <span className="truncate">{circuito}</span>
+                   </label>
+                 ))}
+                 </div>
+               )}
+             </div>
+           )}
            <Botao type="button" variante="fantasma" className="h-8 w-8 p-0" onClick={() => setEscala((e) => Math.max(0.2, e - 0.2))}>
              <ZoomOut className="h-4 w-4" />
            </Botao>
@@ -231,7 +301,7 @@ export function PlantaLateral({
 
           {dimensoes && (
             <div className="absolute inset-0 pointer-events-none">
-              {tarefasDaPagina.map((tarefa) => {
+               {tarefasVisiveis.map((tarefa) => {
                 const sit = situacaoDaTarefa({ status: tarefa.status, aprovacao: tarefa.aprovacao });
                 const isSelecionada = selecionadas.has(tarefa.id);
                 const isDestaque = tarefaDestaque === tarefa.id;
@@ -423,25 +493,15 @@ export function PlantaLateral({
 
                 if (
                   tarefa.localizacao_tipo === "circuito" &&
-                  tarefa.localizacao_detalhe?.pontos &&
-                  tarefa.localizacao_detalhe.pontos.length >= 2
+                  tarefa.localizacao_detalhe
                 ) {
-                  const pontos = tarefa.localizacao_detalhe!.pontos!;
+                  const segmentos = extrairSegmentosCircuito(tarefa.localizacao_detalhe);
+                  if (segmentos.length === 0) return null;
                   const linhas = obterLinhasCondutoresCircuito(tarefa.localizacao_detalhe);
                   const K = linhas.length;
                   const gap = 2.4;
                   const larguraCorredor = Math.max(14, K * gap + 10);
-                  const corredor = corredorDaPolilinha(pontos, larguraCorredor);
-                  if (corredor.length < 3) return null;
-
-                  const corredorSvg = corredor
-                    .map((p) => {
-                      const pct = pdfParaPercentual(p, dimensoes.largura, dimensoes.altura);
-                      return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
-                    })
-                    .join(" ");
-
-                  return (
+                   return (
                     <div
                       key={tarefa.id}
                       className={cn(
@@ -454,23 +514,14 @@ export function PlantaLateral({
                         preserveAspectRatio="none"
                         className="absolute inset-0 h-full w-full overflow-visible"
                       >
-                        <polygon
-                          points={corredorSvg}
-                          fill={CORES_CORREDOR[sit]}
-                          fillOpacity={isSelecionada ? 0.8 : isDestaque ? 0.7 : 0.55}
-                          stroke={isSelecionada ? "#2563EB" : isDestaque ? "#3B82F6" : CORES_CORREDOR[sit]}
-                          strokeWidth={isSelecionada ? 2.5 : 0.5}
-                          vectorEffect="non-scaling-stroke"
-                          pointerEvents="auto"
-                          className="cursor-pointer"
-                          onMouseEnter={() => aoDestaque(tarefa.id)}
-                          onMouseLeave={() => aoDestaque(null)}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            aoAlternarSelecao(tarefa.id);
-                          }}
-                        />
-                        {linhas.map((linha, idx) => {
+                         {segmentos.map((segmento, segmentoIdx) => {
+                           const pontos = segmento.pontos;
+                           const corredor = corredorDaPolilinha(pontos, larguraCorredor);
+                           if (corredor.length < 3) return null;
+                           const corredorSvg = corredor.map((p) => { const pct = pdfParaPercentual(p, dimensoes.largura, dimensoes.altura); return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`; }).join(" ");
+                           return <g key={segmento.segmentoId ?? segmentoIdx}>
+                           <polygon points={corredorSvg} fill={CORES_CORREDOR[sit]} fillOpacity={isSelecionada ? 0.8 : isDestaque ? 0.7 : 0.55} stroke={isSelecionada ? "#2563EB" : isDestaque ? "#3B82F6" : CORES_CORREDOR[sit]} strokeWidth={isSelecionada ? 2.5 : 0.5} vectorEffect="non-scaling-stroke" pointerEvents="auto" className="cursor-pointer" onMouseEnter={() => aoDestaque(tarefa.id)} onMouseLeave={() => aoDestaque(null)} onClick={(e) => { e.stopPropagation(); aoAlternarSelecao(tarefa.id); }} />
+                         {linhas.map((linha, idx) => {
                           const offset = (idx - (K - 1) / 2) * gap;
                           const ptsDeslocados = deslocarPolilinha(pontos, offset);
                           const pathData = ptsDeslocados
@@ -506,7 +557,8 @@ export function PlantaLateral({
                               />
                             </g>
                           );
-                        })}
+                         })}</g>;
+                         })}
                       </svg>
                     </div>
                   );
