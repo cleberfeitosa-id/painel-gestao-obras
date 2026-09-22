@@ -160,6 +160,51 @@ interface PlantaLateralProps {
   aoDestaque: (id: string | null) => void;
 }
 
+const PDF_DPR_MAX = 1.2;
+const PDF_MAX_RENDER_PIXELS = 12_000_000;
+const PDF_MAX_RENDER_DIMENSION = 4096;
+const PDF_RENDER_DEBOUNCE_MS = 150;
+const PDF_INITIAL_RENDER_SCALE = 0.1;
+
+function escalaRenderizacaoSegura(
+  escalaSolicitada: number,
+  dimensoes: { largura: number; altura: number },
+  dpr: number,
+) : number {
+  if (
+    !Number.isFinite(escalaSolicitada) ||
+    !Number.isFinite(dpr) ||
+    dpr <= 0 ||
+    !Number.isFinite(dimensoes.largura) ||
+    !Number.isFinite(dimensoes.altura) ||
+    dimensoes.largura <= 0 ||
+    dimensoes.altura <= 0
+  ) {
+    return PDF_INITIAL_RENDER_SCALE;
+  }
+
+  const area = dimensoes.largura * dimensoes.altura * dpr * dpr;
+  if (!Number.isFinite(area) || area <= 0) return PDF_INITIAL_RENDER_SCALE;
+
+  const escalaPorArea = Math.sqrt(PDF_MAX_RENDER_PIXELS / area);
+  const escalaPorLargura = PDF_MAX_RENDER_DIMENSION / (dimensoes.largura * dpr);
+  const escalaPorAltura = PDF_MAX_RENDER_DIMENSION / (dimensoes.altura * dpr);
+  const escalaSegura = Math.min(
+    escalaPorArea,
+    escalaPorLargura,
+    escalaPorAltura,
+  );
+
+  if (!Number.isFinite(escalaSegura) || escalaSegura <= 0) {
+    return PDF_INITIAL_RENDER_SCALE;
+  }
+
+  return Math.min(
+    Math.max(PDF_INITIAL_RENDER_SCALE, escalaSolicitada),
+    escalaSegura,
+  );
+}
+
 export function PlantaLateral({
   planta,
   urlPdf,
@@ -171,14 +216,50 @@ export function PlantaLateral({
   aoDestaque,
 }: PlantaLateralProps) {
   const [escala, setEscala] = useState(1);
+  const [escalaRenderizada, setEscalaRenderizada] = useState({
+    chave: "",
+    valor: PDF_INITIAL_RENDER_SCALE,
+  });
   const [pagina, setPagina] = useState(paginaInicial || 1);
-  const [dimensoes, setDimensoes] = useState<{ largura: number; altura: number } | null>(null);
+  const [dimensoes, setDimensoes] = useState<{
+    chave: string;
+    largura: number;
+    altura: number;
+  } | null>(null);
   const [erroPdf, setErroPdf] = useState(false);
+  const [erroRenderizacao, setErroRenderizacao] = useState<{
+    chave: string;
+    ocorreu: boolean;
+  } | null>(null);
   const [circuitosSelecionados, setCircuitosSelecionados] = useState<string[]>([]);
   const [filtroCircuitosAberto, setFiltroCircuitosAberto] = useState(false);
   const filtroCircuitosRef = useRef<HTMLDivElement>(null);
+  const chaveRenderizacaoRef = useRef("");
+  const [dpr] = useState(() =>
+    typeof window === "undefined" ? 1 : Math.min(PDF_DPR_MAX, window.devicePixelRatio || 1),
+  );
+  const paginaAtual = Math.min(Math.max(1, pagina), Math.max(1, planta.total_paginas));
+  const chavePagina = `${urlPdf}:${paginaAtual}`;
+  const dimensoesAtuais = dimensoes?.chave === chavePagina ? dimensoes : null;
+  const escalaRenderizadaAtual =
+    escalaRenderizada.chave === chavePagina
+      ? escalaRenderizada.valor
+      : PDF_INITIAL_RENDER_SCALE;
 
-  const tarefasDaPagina = tarefas.filter((t) => t.pagina === pagina);
+  useEffect(() => {
+    chaveRenderizacaoRef.current = chavePagina;
+  }, [chavePagina]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setEscalaRenderizada({ chave: chavePagina, valor: escala });
+      setErroRenderizacao(null);
+    }, PDF_RENDER_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [chavePagina, escala]);
+
+  const tarefasDaPagina = tarefas.filter((t) => t.pagina === paginaAtual);
   const circuitosDisponiveis = Array.from(
     new Set(
       tarefasDaPagina
@@ -266,40 +347,88 @@ export function PlantaLateral({
         </div>
       </div>
       
-      <div className="relative flex-1 overflow-auto bg-superficie-200 p-4 select-none touch-pan-x touch-pan-y">
-        <div className="relative m-auto shadow-md shrink-0 bg-white w-fit">
-          <Document
-            file={urlPdf}
-            onLoadSuccess={() => setErroPdf(false)}
-            onLoadError={() => setErroPdf(true)}
-            loading={
-              <div className="flex items-center justify-center p-8">
-                <Spinner className="h-6 w-6 text-azul-600" />
-                </div>
-            }
-            error={
-              <div className="flex min-h-64 min-w-[280px] items-center justify-center p-8 text-center text-xs text-perigo">
-                {erroPdf
-                  ? "Não foi possível carregar a planta. Tente recarregar a página."
-                  : "Não foi possível carregar a planta."}
-              </div>
+       <div className="relative flex-1 overflow-auto bg-superficie-200 select-none touch-pan-x touch-pan-y">
+         <div className="flex min-h-full min-w-full p-4">
+          <div
+           className="relative m-auto shadow-md shrink-0 bg-white w-fit"
+           style={
+             dimensoesAtuais
+               ? {
+                   width: dimensoesAtuais.largura * escala,
+                   height: dimensoesAtuais.altura * escala,
+                 }
+               : undefined
+           }
+         >
+          <div
+            className="relative"
+            style={
+              dimensoesAtuais
+                ? {
+                    transform: `scale(${escala / escalaRenderizacaoSegura(escalaRenderizadaAtual, dimensoesAtuais, dpr)})`,
+                    transformOrigin: "top left",
+                    willChange: "transform",
+                  }
+                : undefined
             }
           >
-            <Page
-              pageNumber={pagina}
-              scale={escala}
-              renderTextLayer={false}
-              renderAnnotationLayer={false}
-              onLoadSuccess={(paginaPdf) => {
-                setDimensoes({
-                  largura: paginaPdf.originalWidth,
-                  altura: paginaPdf.originalHeight,
-                });
-              }}
-            />
-          </Document>
-
-          {dimensoes && (
+            <Document
+              file={urlPdf}
+               onLoadSuccess={() => {
+                 if (chaveRenderizacaoRef.current !== chavePagina) return;
+                 setErroPdf(false);
+                 setErroRenderizacao(null);
+               }}
+               onLoadError={() => {
+                 if (chaveRenderizacaoRef.current === chavePagina) setErroPdf(true);
+               }}
+              loading={
+                <div className="flex items-center justify-center p-8">
+                  <Spinner className="h-6 w-6 text-azul-600" />
+                </div>
+              }
+              error={
+                <div className="flex min-h-64 min-w-[280px] items-center justify-center p-8 text-center text-xs text-perigo">
+                  {erroPdf
+                    ? "Não foi possível carregar a planta. Tente recarregar a página."
+                    : "Não foi possível carregar a planta."}
+                </div>
+              }
+            >
+              <Page
+                 pageNumber={paginaAtual}
+                scale={
+                  dimensoesAtuais
+                    ? escalaRenderizacaoSegura(escalaRenderizadaAtual, dimensoesAtuais, dpr)
+                    : PDF_INITIAL_RENDER_SCALE
+                }
+                devicePixelRatio={dpr}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+                 onRenderError={() => {
+                   if (chaveRenderizacaoRef.current === chavePagina) {
+                     setErroRenderizacao({ chave: chavePagina, ocorreu: true });
+                   }
+                 }}
+                error={
+                  <div className="flex min-h-64 min-w-[280px] items-center justify-center p-8 text-center text-xs text-perigo">
+                    {erroRenderizacao?.chave === chavePagina && erroRenderizacao.ocorreu
+                      ? "Não foi possível renderizar esta página. Reduza o zoom e tente novamente."
+                      : "Não foi possível renderizar esta página."}
+                  </div>
+                }
+                 onLoadSuccess={(paginaPdf) => {
+                   if (chaveRenderizacaoRef.current !== chavePagina) return;
+                   const viewport = paginaPdf.getViewport({ scale: 1 });
+                  setDimensoes({
+                    chave: chavePagina,
+                    largura: viewport.width,
+                    altura: viewport.height,
+                  });
+                }}
+              />
+            </Document>
+            {dimensoesAtuais && (
             <div className="absolute inset-0 pointer-events-none">
                {tarefasVisiveis.map((tarefa) => {
                 const sit = situacaoDaTarefa({ status: tarefa.status, aprovacao: tarefa.aprovacao });
@@ -307,7 +436,7 @@ export function PlantaLateral({
                 const isDestaque = tarefaDestaque === tarefa.id;
 
                 if (tarefa.localizacao_tipo === "ponto" && tarefa.ponto_x != null && tarefa.ponto_y != null) {
-                  const pos = pdfParaPercentual({ x: tarefa.ponto_x, y: tarefa.ponto_y }, dimensoes.largura, dimensoes.altura);
+                   const pos = pdfParaPercentual({ x: tarefa.ponto_x, y: tarefa.ponto_y }, dimensoesAtuais.largura, dimensoesAtuais.altura);
                   return (
                     <div
                       key={tarefa.id}
@@ -342,8 +471,8 @@ export function PlantaLateral({
                   const min = { x: ret.x, y: ret.y };
                   const max = { x: ret.x + ret.largura, y: ret.y + ret.altura };
                   
-                  const infEsq = pdfParaPercentual(min, dimensoes.largura, dimensoes.altura);
-                  const supDir = pdfParaPercentual(max, dimensoes.largura, dimensoes.altura);
+                   const infEsq = pdfParaPercentual(min, dimensoesAtuais.largura, dimensoesAtuais.altura);
+                   const supDir = pdfParaPercentual(max, dimensoesAtuais.largura, dimensoesAtuais.altura);
                   const left = infEsq.esquerda;
                   const top = supDir.topo;
                   const width = supDir.esquerda - infEsq.esquerda;
@@ -382,8 +511,8 @@ export function PlantaLateral({
                 ) {
                   const pos = pdfParaPercentual(
                     { x: tarefa.ponto_x, y: tarefa.ponto_y },
-                    dimensoes.largura,
-                    dimensoes.altura,
+                     dimensoesAtuais.largura,
+                     dimensoesAtuais.altura,
                   );
                   return (
                     <div
@@ -433,14 +562,14 @@ export function PlantaLateral({
 
                   const corredorSvg = corredor
                     .map((p) => {
-                      const pct = pdfParaPercentual(p, dimensoes.largura, dimensoes.altura);
+                       const pct = pdfParaPercentual(p, dimensoesAtuais.largura, dimensoesAtuais.altura);
                       return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
                     })
                     .join(" ");
 
                   const polylineSvg = pontos
                     .map((p) => {
-                      const pct = pdfParaPercentual(p, dimensoes.largura, dimensoes.altura);
+                       const pct = pdfParaPercentual(p, dimensoesAtuais.largura, dimensoesAtuais.altura);
                       return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
                     })
                     .join(" ");
@@ -518,7 +647,7 @@ export function PlantaLateral({
                            const pontos = segmento.pontos;
                            const corredor = corredorDaPolilinha(pontos, larguraCorredor);
                            if (corredor.length < 3) return null;
-                           const corredorSvg = corredor.map((p) => { const pct = pdfParaPercentual(p, dimensoes.largura, dimensoes.altura); return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`; }).join(" ");
+                            const corredorSvg = corredor.map((p) => { const pct = pdfParaPercentual(p, dimensoesAtuais.largura, dimensoesAtuais.altura); return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`; }).join(" ");
                            return <g key={segmento.segmentoId ?? segmentoIdx}>
                            <polygon points={corredorSvg} fill={CORES_CORREDOR[sit]} fillOpacity={isSelecionada ? 0.8 : isDestaque ? 0.7 : 0.55} stroke={isSelecionada ? "#2563EB" : isDestaque ? "#3B82F6" : CORES_CORREDOR[sit]} strokeWidth={isSelecionada ? 2.5 : 0.5} vectorEffect="non-scaling-stroke" pointerEvents="auto" className="cursor-pointer" onMouseEnter={() => aoDestaque(tarefa.id)} onMouseLeave={() => aoDestaque(null)} onClick={(e) => { e.stopPropagation(); aoAlternarSelecao(tarefa.id); }} />
                          {linhas.map((linha, idx) => {
@@ -526,7 +655,7 @@ export function PlantaLateral({
                           const ptsDeslocados = deslocarPolilinha(pontos, offset);
                           const pathData = ptsDeslocados
                             .map((p, pIdx) => {
-                              const pct = pdfParaPercentual(p, dimensoes.largura, dimensoes.altura);
+                               const pct = pdfParaPercentual(p, dimensoesAtuais.largura, dimensoesAtuais.altura);
                               return `${pIdx === 0 ? "M" : "L"} ${pct.esquerda.toFixed(3)} ${pct.topo.toFixed(3)}`;
                             })
                             .join(" ");
@@ -572,7 +701,7 @@ export function PlantaLateral({
                   const pontos = tarefa.localizacao_detalhe!.pontos!;
                   const pontosSvg = pontos
                     .map((p) => {
-                      const pct = pdfParaPercentual(p, dimensoes.largura, dimensoes.altura);
+                       const pct = pdfParaPercentual(p, dimensoesAtuais.largura, dimensoesAtuais.altura);
                       return `${pct.esquerda.toFixed(3)},${pct.topo.toFixed(3)}`;
                     })
                     .join(" ");
@@ -615,9 +744,11 @@ export function PlantaLateral({
                 return null;
               })}
             </div>
-          )}
-        </div>
-      </div>
+           )}
+            </div>
+           </div>
+          </div>
+       </div>
       
       {planta.total_paginas > 1 && (
         <div className="flex items-center justify-between border-t border-borda bg-white px-3 py-2">
@@ -625,19 +756,19 @@ export function PlantaLateral({
              type="button"
              variante="secundario" 
              tamanho="sm" 
-             disabled={pagina <= 1}
+              disabled={paginaAtual <= 1}
              onClick={() => setPagina(p => p - 1)}
            >
              Anterior
            </Botao>
            <span className="text-sm font-medium text-superficie-700">
-             {pagina} / {planta.total_paginas}
+              {paginaAtual} / {planta.total_paginas}
            </span>
            <Botao 
              type="button"
              variante="secundario" 
              tamanho="sm" 
-             disabled={pagina >= planta.total_paginas}
+              disabled={paginaAtual >= planta.total_paginas}
              onClick={() => setPagina(p => p + 1)}
            >
              Próxima
