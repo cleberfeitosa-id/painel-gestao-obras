@@ -1794,6 +1794,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      excluir_medicao_atomico: {
+        Args: { p_medicao_id: string; p_obra_id: string }
+        Returns: undefined
+      }
       criar_catalogo_com_vinculos: {
         Args: {
           p_medicao_id: string
