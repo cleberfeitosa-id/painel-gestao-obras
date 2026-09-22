@@ -25,7 +25,7 @@ import type {
 } from "@/lib/supabase/database.types";
 
 export interface TarefaComDados extends TarefaRow {
-  obras: { nome: string };
+  obras: { nome: string } | null;
   plantas: { nome: string } | null;
   tags_tarefa: { id: string; nome: string } | null;
   responsavel: Pick<PerfilRow, "id" | "nome"> | null;
@@ -54,12 +54,13 @@ function escaparBuscaIlike(valor: string): string {
 }
 
 async function buscarTarefas(params: Record<string, string | undefined>) {
+  const TAMANHO_PAGINA_SUPABASE = 1000;
   const supabase = await createClient();
 
   let query = supabase
     .from("tarefas")
     .select(
-      "*, obras!inner(nome), plantas!tarefas_planta_id_fkey(nome), tags_tarefa(id, nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome), tarefa_medicoes(id, catalogo_id, quantidade, catalogo_precos(id, nome, unidade, valor_unitario, medicao_id, medicoes(id, titulo)))",
+      "*, obras(nome), plantas!tarefas_planta_id_fkey(nome), tags_tarefa(id, nome), responsavel:perfis!tarefas_responsavel_id_fkey(id, nome), executor:executores!tarefas_executor_id_fkey(id, nome), supervisor:perfis!tarefas_supervisor_id_fkey(id, nome), tarefa_medicoes(id, catalogo_id, quantidade, catalogo_precos(id, nome, unidade, valor_unitario, medicao_id, medicoes(id, titulo)))",
     );
 
   const busca = params.busca?.trim();
@@ -182,24 +183,37 @@ async function buscarTarefas(params: Record<string, string | undefined>) {
   switch (params.ordenar) {
     case "prazo":
       query = query.order("prazo", { ascending: true, nullsFirst: true });
+      query = query.order("id", { ascending: true });
       break;
     case "prioridade":
       query = query.order("prioridade", { ascending: false });
+      query = query.order("id", { ascending: true });
       break;
     case "criacao":
       query = query.order("criado_em", { ascending: false });
+      query = query.order("id", { ascending: true });
       break;
     default:
       query = query.order("criado_em", { ascending: false });
+      query = query.order("id", { ascending: true });
   }
 
-  const { data, error } = await query;
-  if (error) {
-    console.error("Erro ao buscar tarefas:", error);
-    return [];
+  const dados: TarefaRow[] = [];
+  for (let inicio = 0; ; inicio += TAMANHO_PAGINA_SUPABASE) {
+    const { data, error } = await query.range(
+      inicio,
+      inicio + TAMANHO_PAGINA_SUPABASE - 1,
+    );
+    if (error) {
+      console.error("Erro ao buscar tarefas:", error);
+      return [];
+    }
+
+    dados.push(...((data ?? []) as TarefaRow[]));
+    if ((data?.length ?? 0) < TAMANHO_PAGINA_SUPABASE) break;
   }
 
-  let lista = (data ?? []) as TarefaComDados[];
+  let lista = dados as TarefaComDados[];
 
   if (params.medicao === "com_medicao") {
     lista = lista.filter((t) => (t.tarefa_medicoes?.length ?? 0) > 0);
