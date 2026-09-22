@@ -81,14 +81,15 @@ export function ListaTarefas({
   const [recolhidos, setRecolhidos] = useState<Set<string>>(new Set());
 
   const grupos = tarefas.reduce((acc, tarefa) => {
-    const grupo = acc.find((g) => g.titulo === tarefa.titulo);
+    const tituloNormalizado = tarefa.titulo.trim().toLocaleLowerCase("pt-BR");
+    const grupo = acc.find((g) => g.chave === tituloNormalizado);
     if (grupo) {
       grupo.tarefas.push(tarefa);
     } else {
-      acc.push({ titulo: tarefa.titulo, tarefas: [tarefa] });
+      acc.push({ chave: tituloNormalizado, titulo: tarefa.titulo.trim(), tarefas: [tarefa] });
     }
     return acc;
-  }, [] as { titulo: string; tarefas: TarefaComDados[] }[]);
+  }, [] as { chave: string; titulo: string; tarefas: TarefaComDados[] }[]);
 
   const alternarRecolhido = (titulo: string) => {
     setRecolhidos((atual) => {
@@ -161,7 +162,7 @@ export function ListaTarefas({
             )}
           </div>
         </Celula>
-        <Celula>{tarefa.obras.nome}</Celula>
+        <Celula>{tarefa.obras?.nome ?? "Obra nao encontrada"}</Celula>
         <Celula>
           {tarefa.responsavel ? (
             <span className="flex items-center gap-2">
@@ -291,7 +292,9 @@ export function ListaTarefas({
                   {STATUS_TAREFA[tarefa.status].rotulo}
                 </Etiqueta>
               </div>
-              <p className="text-sm text-superficie-500">{tarefa.obras.nome}</p>
+              <p className="text-sm text-superficie-500">
+                {tarefa.obras?.nome ?? "Obra nao encontrada"}
+              </p>
               <div className="flex items-center justify-between border-t border-borda pt-3">
                 <div className="flex items-center gap-2">
                   {tarefa.responsavel ? (
@@ -404,6 +407,9 @@ export function ListaTarefas({
         </div>
       )}
 
+      <div className="mb-3 text-sm text-superficie-500">
+        {tarefas.length} {tarefas.length === 1 ? "tarefa encontrada" : "tarefas encontradas"}
+      </div>
       <Cartao className="hidden lg:block">
         <Tabela>
           <Cabecalho>
