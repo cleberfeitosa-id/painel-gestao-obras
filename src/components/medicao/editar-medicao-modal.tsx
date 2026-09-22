@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Pencil, Save } from "lucide-react";
 import { Botao, Campo, Modal } from "@/components/ui";
@@ -7,10 +8,13 @@ import { atualizarMedicao } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
 
 interface EditarMedicaoModalProps {
   medicaoId: string;
+  obraId: string;
   titulo: string;
+  compacto?: boolean;
 }
 
-export function EditarMedicaoModal({ medicaoId, titulo }: EditarMedicaoModalProps) {
+export function EditarMedicaoModal({ medicaoId, obraId, titulo, compacto = false }: EditarMedicaoModalProps) {
+  const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [tituloAtual, setTituloAtual] = useState(titulo);
   const [erro, setErro] = useState<string | null>(null);
@@ -31,12 +35,14 @@ export function EditarMedicaoModal({ medicaoId, titulo }: EditarMedicaoModalProp
     iniciarTransicao(async () => {
       const resultado = await atualizarMedicao({
         medicaoId,
+        obraId,
         titulo: tituloAtual.trim(),
       });
       if (resultado.erro) {
         setErro(resultado.erro);
       } else {
         setAberto(false);
+        router.refresh();
       }
     });
   }
@@ -48,14 +54,17 @@ export function EditarMedicaoModal({ medicaoId, titulo }: EditarMedicaoModalProp
         variante="fantasma"
         tamanho="sm"
         onClick={abrir}
-        aria-label={`Renomear medição ${titulo}`}
-      >
-        <Pencil className="h-3.5 w-3.5" />
+         aria-label={`Editar medição ${titulo}`}
+       >
+         <Pencil className="h-3.5 w-3.5" />
+         {!compacto && "Editar"}
       </Botao>
 
       <Modal
         aberto={aberto}
-        aoFechar={() => setAberto(false)}
+        aoFechar={() => {
+          if (!pendente) setAberto(false);
+        }}
         titulo="Renomear medição"
         descricao="Altere o título deste contrato de medição."
       >

@@ -768,13 +768,6 @@ export default async function MedicaoDetalhePage({
     (total, item) => total + item.valorContabilizado,
     0,
   );
-  const saldoMaoDeObra = maoDeObraExecutada - valorPago;
-  const custosOrcamento = [...agregadoGlobal.itens].reduce<Record<string, number>>((total, item) => {
-    for (const [categoria, valor] of Object.entries(item.composicaoCustos)) {
-      total[categoria] = (total[categoria] ?? 0) + valor;
-    }
-    return total;
-  }, {});
   const itensOrcamentoUnicos = new Map<string, ItemOrcamentoParaCatalogo>();
   for (const item of agregadoGlobal.itens) {
     for (const orcamentoItem of item.orcamentoItens) {
@@ -783,10 +776,24 @@ export default async function MedicaoDetalhePage({
       }
     }
   }
+  const custosOrcamento = [...itensOrcamentoUnicos.values()].reduce<Record<string, number>>((total, item) => {
+    const custos = mapCustosPorItem.get(item.id) ?? {};
+    const quantidade = Number(item.quantidade);
+    for (const [categoria, valorUnitario] of Object.entries(custos)) {
+      total[categoria] = (total[categoria] ?? 0) + valorUnitario * quantidade;
+    }
+    return total;
+  }, {});
   const orcamentoClienteTotal = [...itensOrcamentoUnicos.values()].reduce(
     (total, orcamentoItem) => total + Number(orcamentoItem.quantidade) * Number(orcamentoItem.valor_unitario),
     0,
   );
+  const custosDetalhadosTotal = ["mao_de_obra", "material", "equipamento"].reduce(
+    (total, categoria) => total + (custosOrcamento[categoria] ?? 0),
+    0,
+  );
+  const diferencaComposicao = orcamentoClienteTotal - custosDetalhadosTotal;
+  const composicaoFechaOrcamento = Math.abs(diferencaComposicao) < 0.01;
 
   return (
     <div className="space-y-6">
@@ -800,7 +807,7 @@ export default async function MedicaoDetalhePage({
         </Link>
         <div className="mt-2 flex items-center gap-3">
           <h1 className="text-2xl font-bold text-superficie-900">{medicao.titulo}</h1>
-          <EditarMedicaoModal medicaoId={medicao.id} titulo={medicao.titulo} />
+           <EditarMedicaoModal medicaoId={medicao.id} obraId={medicao.obra_id} titulo={medicao.titulo} />
           <span className="text-sm text-superficie-500">Medição</span>
         </div>
         <p className="mt-1 text-sm text-superficie-500">
@@ -838,172 +845,125 @@ export default async function MedicaoDetalhePage({
         </CartaoConteudo>
       </Cartao>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <div className="col-span-full rounded-lg border border-azul-100 bg-azul-50/40 px-4 py-3 text-sm font-semibold text-azul-700">
-          Contrato executor
-          <p className="mt-0.5 text-xs font-normal text-superficie-500">
-            Valores acordados, pagos e medidos no contrato do executor.
+      <div className="space-y-4">
+        <div className="rounded-xl border border-azul-100 bg-azul-50/40 px-5 py-4">
+          <h2 className="text-base font-bold text-azul-900">Contrato do executor</h2>
+          <p className="mt-1 text-xs text-superficie-600">
+            Valores do preço negociado com o executor, do que foi concluído e aprovado e do que já foi pago.
           </p>
         </div>
-        <ValorContrato medicaoId={medicao.id} valorContrato={medicao.valor_contrato} />
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Total pago ao executor</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-emerald-600">
-              {formatarMoeda(valorPago)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Pagamentos registrados para o contrato executor
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Saldo do executor</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p
-              className={cn(
-                "text-2xl font-bold",
-                saldoExecutor < 0
-                    ? "text-perigo"
-                    : "text-azul-600",
-              )}
-            >
-              {formatarMoeda(saldoExecutor)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Medição do executor menos pagamentos registrados
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Executor — medido executado</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-azul-600">
-              {formatarMoeda(agregadoGlobal.valorExecutorExecutado)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Quantidade concluída e aprovada × preço do contrato executor
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Executor — a medir</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-amber-600">
-              {formatarMoeda(agregadoGlobal.valorExecutorPendente)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Quantidade ainda não concluída × preço do contrato executor
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <div className="col-span-full mt-2 rounded-lg border border-superficie-200 bg-superficie-50 px-4 py-3 text-sm font-semibold text-superficie-700">
-          Orçamento e medição da construtora
-          <p className="mt-0.5 text-xs font-normal text-superficie-500">
-            Valores do orçamento da obra e das quantidades medidas nas tarefas.
-          </p>
-        </div>
-        <Cartao>
-          <CartaoCabecalho>
-             <CartaoTitulo>Orçamento previsto da construtora</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-superficie-900">
-              {formatarMoeda(orcamentoClienteTotal)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Soma dos valores orçamentários × quantidades previstas
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Mão de obra prevista nos itens executados</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-violeta-700">
-              {formatarMoeda(maoDeObraExecutada)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Custo da mão de obra da composição nos itens concluídos e aprovados
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Saldo da mão de obra</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className={cn("text-2xl font-bold", saldoMaoDeObra < 0 ? "text-perigo" : "text-violeta-700")}>
-              {formatarMoeda(saldoMaoDeObra)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Mão de obra dos itens executados menos pagamentos ao executor
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-             <CartaoTitulo>Construtora — medido executado</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-emerald-600">
-               {formatarMoeda(agregadoGlobal.valorConstrutoraExecutado)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Valor do orçamento × quantidade de tarefas concluídas
-            </p>
-          </CartaoConteudo>
-        </Cartao>
-        {(["mao_de_obra", "material", "equipamento"] as const).map((categoria) => (
-          <Cartao key={categoria}>
-            <CartaoCabecalho>
-              <CartaoTitulo>{categoria === "mao_de_obra" ? "Mão de obra prevista" : categoria === "material" ? "Material previsto" : "Equipamento previsto"}</CartaoTitulo>
-            </CartaoCabecalho>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <ValorContrato medicaoId={medicao.id} valorContrato={medicao.valor_contrato} />
+          <Cartao>
+            <CartaoCabecalho><CartaoTitulo>Valor executado pelo executor</CartaoTitulo></CartaoCabecalho>
             <CartaoConteudo>
-              <p className="text-2xl font-bold text-superficie-900">
-                {formatarMoeda(custosOrcamento[categoria] ?? 0)}
-              </p>
-              <p className="mt-1 text-xs text-superficie-500">
-                Custo previsto nas composições do orçamento
-              </p>
+              <p className="text-2xl font-bold text-azul-600">{formatarMoeda(agregadoGlobal.valorExecutorExecutado)}</p>
+              <p className="mt-1 text-xs text-superficie-500">Itens concluídos e aprovados × preço do contrato executor.</p>
             </CartaoConteudo>
           </Cartao>
-        ))}
+          <Cartao>
+            <CartaoCabecalho><CartaoTitulo>Valor ainda não executado</CartaoTitulo></CartaoCabecalho>
+            <CartaoConteudo>
+              <p className="text-2xl font-bold text-amber-600">{formatarMoeda(agregadoGlobal.valorExecutorPendente)}</p>
+              <p className="mt-1 text-xs text-superficie-500">Itens que ainda não estão concluídos e aprovados.</p>
+            </CartaoConteudo>
+          </Cartao>
+          <Cartao>
+            <CartaoCabecalho><CartaoTitulo>Saldo a pagar ao executor</CartaoTitulo></CartaoCabecalho>
+            <CartaoConteudo>
+              <p className={cn("text-2xl font-bold", saldoExecutor < 0 ? "text-perigo" : "text-azul-600")}>{formatarMoeda(saldoExecutor)}</p>
+              <p className="mt-1 text-xs text-superficie-500">Valor executado pelo executor menos pagamentos registrados.</p>
+            </CartaoConteudo>
+          </Cartao>
+        </div>
         <Cartao>
-          <CartaoCabecalho>
-             <CartaoTitulo>Construtora — a medir</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-amber-600">
-               {formatarMoeda(agregadoGlobal.valorConstrutoraPendente)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Valor do orçamento × quantidade ainda não concluída
+          <CartaoConteudo className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div>
+              <p className="text-sm font-semibold text-superficie-900">Total pago ao executor</p>
+              <p className="text-xs text-superficie-500">Soma das parcelas registradas nesta medição.</p>
+            </div>
+            <p className="text-xl font-bold text-emerald-600">{formatarMoeda(valorPago)}</p>
+          </CartaoConteudo>
+        </Cartao>
+
+        <div className="rounded-xl border border-superficie-200 bg-superficie-50 px-5 py-4">
+          <h2 className="text-base font-bold text-superficie-900">Orçamento da obra</h2>
+          <p className="mt-1 text-xs text-superficie-600">
+            O total abaixo vem do valor dos itens do orçamento. A decomposição por categoria só inclui custos analíticos informados nas composições.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Cartao className="border-superficie-300 bg-superficie-50/60">
+            <CartaoCabecalho><CartaoTitulo>Orçamento previsto total</CartaoTitulo></CartaoCabecalho>
+            <CartaoConteudo>
+              <p className="text-2xl font-bold text-superficie-900">{formatarMoeda(orcamentoClienteTotal)}</p>
+              <p className="mt-1 text-xs text-superficie-500">Itens do orçamento × quantidades previstas.</p>
+            </CartaoConteudo>
+          </Cartao>
+          {(["mao_de_obra", "material", "equipamento"] as const).map((categoria) => (
+            <Cartao key={categoria}>
+              <CartaoCabecalho>
+                <CartaoTitulo>{categoria === "mao_de_obra" ? "Mão de obra" : categoria === "material" ? "Material" : "Equipamento"} detalhado</CartaoTitulo>
+              </CartaoCabecalho>
+              <CartaoConteudo>
+                <p className="text-2xl font-bold text-superficie-900">{formatarMoeda(custosOrcamento[categoria] ?? 0)}</p>
+                <p className="mt-1 text-xs text-superficie-500">Custo encontrado na decomposição das composições.</p>
+              </CartaoConteudo>
+            </Cartao>
+          ))}
+        </div>
+        <Cartao className={composicaoFechaOrcamento ? "border-emerald-200 bg-emerald-50/30" : "border-amber-200 bg-amber-50/40"}>
+          <CartaoConteudo className="flex flex-wrap items-center justify-between gap-4 py-4">
+            <div>
+              <p className="text-sm font-semibold text-superficie-900">Diferença entre orçamento e composição</p>
+              <p className="mt-1 max-w-2xl text-xs text-superficie-600">
+                {composicaoFechaOrcamento
+                  ? "As três categorias exibidas fecham o valor previsto no orçamento."
+                  : "O valor positivo indica parcela do orçamento não detalhada nas três categorias exibidas; o valor negativo indica que elas superam o orçamento. Não há rateio artificial."}
+              </p>
+            </div>
+            <p className={cn("text-xl font-bold", composicaoFechaOrcamento ? "text-emerald-700" : "text-amber-700")}>
+              {formatarMoeda(diferencaComposicao)}
             </p>
           </CartaoConteudo>
         </Cartao>
-        <Cartao>
-          <CartaoCabecalho>
-             <CartaoTitulo>Construtora — total medido</CartaoTitulo>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <p className="text-2xl font-bold text-superficie-900">
-               {formatarMoeda(agregadoGlobal.valorConstrutoraExecutado + agregadoGlobal.valorConstrutoraPendente)}
-            </p>
-            <p className="mt-1 text-xs text-superficie-500">
-              Soma dos itens do orçamento para as quantidades cadastradas
-            </p>
-          </CartaoConteudo>
-        </Cartao>
+
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-5 py-4">
+          <h2 className="text-base font-bold text-emerald-950">Medição da construtora</h2>
+          <p className="mt-1 text-xs text-superficie-600">
+            Valores do orçamento aplicados às quantidades cadastradas nas tarefas, separados entre concluídos e aprovados e ainda não executados.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Cartao>
+            <CartaoCabecalho><CartaoTitulo>Valor medido executado</CartaoTitulo></CartaoCabecalho>
+            <CartaoConteudo>
+              <p className="text-2xl font-bold text-emerald-600">{formatarMoeda(agregadoGlobal.valorConstrutoraExecutado)}</p>
+              <p className="mt-1 text-xs text-superficie-500">Orçamento × quantidade concluída e aprovada.</p>
+            </CartaoConteudo>
+          </Cartao>
+          <Cartao>
+            <CartaoCabecalho><CartaoTitulo>Valor medido ainda não executado</CartaoTitulo></CartaoCabecalho>
+            <CartaoConteudo>
+              <p className="text-2xl font-bold text-amber-600">{formatarMoeda(agregadoGlobal.valorConstrutoraPendente)}</p>
+              <p className="mt-1 text-xs text-superficie-500">Orçamento × quantidade que ainda não está concluída e aprovada.</p>
+            </CartaoConteudo>
+          </Cartao>
+          <Cartao className="border-emerald-200 bg-emerald-50/30">
+            <CartaoCabecalho><CartaoTitulo>Valor total medido</CartaoTitulo></CartaoCabecalho>
+            <CartaoConteudo>
+              <p className="text-2xl font-bold text-superficie-900">{formatarMoeda(agregadoGlobal.valorConstrutoraExecutado + agregadoGlobal.valorConstrutoraPendente)}</p>
+              <p className="mt-1 text-xs text-superficie-500">Executado + ainda não executado nas quantidades cadastradas.</p>
+            </CartaoConteudo>
+          </Cartao>
+          <Cartao>
+            <CartaoCabecalho><CartaoTitulo>Mão de obra na execução</CartaoTitulo></CartaoCabecalho>
+            <CartaoConteudo>
+              <p className="text-2xl font-bold text-violeta-700">{formatarMoeda(maoDeObraExecutada)}</p>
+              <p className="mt-1 text-xs text-superficie-500">Custo de mão de obra da composição nos itens concluídos e aprovados.</p>
+            </CartaoConteudo>
+          </Cartao>
+        </div>
       </div>
 
       <GraficosProgressoMedicao
