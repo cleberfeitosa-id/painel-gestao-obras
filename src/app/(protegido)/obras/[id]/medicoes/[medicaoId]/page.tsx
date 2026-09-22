@@ -15,7 +15,6 @@ import type {
   AprovacaoTarefa,
   MedicaoRow,
   PlantaRow,
-  PerfilRow,
   StatusTarefa,
   TarefaMedicaoRow,
   ComposicaoComponenteRow,
@@ -106,8 +105,8 @@ interface TarefaComRelacoes {
   tarefa_medicoes: (TarefaMedicaoRow & { catalogo_precos: CatalogoPrecoRow })[];
 }
 
-function temFiltrosAtivos(filtros: { planta?: string; responsavel?: string; de?: string; ate?: string }) {
-  return Boolean(filtros.planta || filtros.responsavel || filtros.de || filtros.ate);
+function temFiltrosAtivos(filtros: { planta?: string; de?: string; ate?: string }) {
+  return Boolean(filtros.planta || filtros.de || filtros.ate);
 }
 
 function agregarComposicaoCustos(
@@ -183,7 +182,7 @@ function precoDaComposicao(itensOrcamento: ItemOrcamentoParaCatalogo[]): number 
 async function buscarDados(
   obraId: string,
   medicaoId: string,
-  filtros: { planta?: string; responsavel?: string; de?: string; ate?: string },
+  filtros: { planta?: string; de?: string; ate?: string },
 ) {
   const supabase = await createClient();
 
@@ -196,13 +195,10 @@ async function buscarDados(
     .eq("obra_id", obraId);
 
   if (filtros.planta) consulta = consulta.eq("planta_id", filtros.planta);
-  if (filtros.responsavel) {
-    consulta = consulta.eq("responsavel_id", filtros.responsavel);
-  }
   if (filtros.de) consulta = consulta.gte("prazo", filtros.de);
   if (filtros.ate) consulta = consulta.lte("prazo", filtros.ate);
 
-  const [{ data: medicao }, { data: catalogo }, { data: tarefas }, { data: tarefasGlobais }, { data: plantas }, { data: perfis }, { data: pagamentos }] =
+  const [{ data: medicao }, { data: catalogo }, { data: tarefas }, { data: tarefasGlobais }, { data: plantas }, { data: pagamentos }] =
     await Promise.all([
       supabase
         .from("medicoes")
@@ -225,7 +221,6 @@ async function buscarDados(
         .eq("obra_id", obraId)
         .order("titulo"),
       supabase.from("plantas").select("id, nome").eq("obra_id", obraId).order("nome"),
-      supabase.from("perfis").select("id, nome").order("nome"),
       supabase
         .from("medicao_pagamentos")
         .select("id, valor, data_pagamento, descricao")
@@ -234,19 +229,30 @@ async function buscarDados(
      ]);
 
   const catalogoIdsDaMedicao = (catalogo ?? []).map((item) => item.id);
+  const criarConsultaVinculosDiretos = () => supabase
+    .from("tarefa_medicoes")
+    .select(
+      "id, criado_em, tarefa_id, catalogo_id, quantidade, segmentos_circuito, tarefas!inner(id, obra_id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome)), catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id)",
+    )
+    .in("catalogo_id", catalogoIdsDaMedicao)
+    .eq("tarefas.obra_id", obraId);
+  let consultaVinculosDiretos = criarConsultaVinculosDiretos();
+  if (filtros.planta) consultaVinculosDiretos = consultaVinculosDiretos.eq("tarefas.planta_id", filtros.planta);
+  if (filtros.de) consultaVinculosDiretos = consultaVinculosDiretos.gte("tarefas.prazo", filtros.de);
+  if (filtros.ate) consultaVinculosDiretos = consultaVinculosDiretos.lte("tarefas.prazo", filtros.ate);
   const { data: vinculosDiretos } = catalogoIdsDaMedicao.length > 0
-    ? await supabase
-        .from("tarefa_medicoes")
-        .select(
-           "id, criado_em, tarefa_id, catalogo_id, quantidade, segmentos_circuito, tarefas!inner(id, obra_id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome)), catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id)",
-        )
-        .in("catalogo_id", catalogoIdsDaMedicao)
-        .eq("tarefas.obra_id", obraId)
+    ? await consultaVinculosDiretos
+    : { data: [] };
+  const { data: vinculosDiretosGlobais } = catalogoIdsDaMedicao.length > 0
+    ? await criarConsultaVinculosDiretos()
     : { data: [] };
 
-  const anexarVinculosDiretos = (lista: TarefaComRelacoes[]): TarefaComRelacoes[] => {
+  const anexarVinculosDiretos = (
+    lista: TarefaComRelacoes[],
+    vinculos: typeof vinculosDiretos = vinculosDiretos,
+  ): TarefaComRelacoes[] => {
     const porId = new Map(lista.map((tarefa) => [tarefa.id, tarefa]));
-    for (const vinculo of vinculosDiretos ?? []) {
+    for (const vinculo of vinculos ?? []) {
       const tarefa = vinculo.tarefas;
       if (!tarefa) continue;
       const existente = porId.get(tarefa.id);
@@ -278,7 +284,7 @@ async function buscarDados(
   };
 
   const tarefasComVinculosDiretos = anexarVinculosDiretos((tarefas ?? []) as TarefaComRelacoes[]);
-  const tarefasGlobaisComVinculosDiretos = anexarVinculosDiretos((tarefasGlobais ?? []) as TarefaComRelacoes[]);
+  const tarefasGlobaisComVinculosDiretos = anexarVinculosDiretos((tarefasGlobais ?? []) as TarefaComRelacoes[], vinculosDiretosGlobais ?? []);
 
   const catalogoIds = (catalogo ?? []).map((c) => c.id);
   let vinculosCatalogo: { catalogo_id: string; orcamento_item_id: string }[] = [];
@@ -548,7 +554,6 @@ async function buscarDados(
      tarefas: tarefasComVinculosDiretos,
      tarefasGlobais: tarefasGlobaisComVinculosDiretos,
     plantas: (plantas ?? []) as Pick<PlantaRow, "id" | "nome">[],
-    perfis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
     pagamentos: (pagamentos ?? []) as ItemPagamento[],
     mapaItensPorCatalogo,
     mapCustosPorItem,
@@ -561,7 +566,7 @@ export default async function MedicaoDetalhePage({
   searchParams,
 }: {
   params: Promise<{ id: string; medicaoId: string }>;
-  searchParams: Promise<{ planta?: string; responsavel?: string; de?: string; ate?: string }>;
+  searchParams: Promise<{ planta?: string; de?: string; ate?: string }>;
 }) {
   const { id, medicaoId } = await params;
   const filtros = await searchParams;
@@ -581,7 +586,7 @@ export default async function MedicaoDetalhePage({
     redirect(`/obras/${id}`);
   }
 
-  const { medicao, catalogo, tarefas, tarefasGlobais, plantas, perfis, pagamentos, mapaItensPorCatalogo, mapCustosPorItem, mapComponentesPorItem } =
+  const { medicao, catalogo, tarefas, tarefasGlobais, plantas, pagamentos, mapaItensPorCatalogo, mapCustosPorItem, mapComponentesPorItem } =
     await buscarDados(id, medicaoId, filtros);
   if (!medicao) notFound();
 
@@ -760,11 +765,12 @@ export default async function MedicaoDetalhePage({
     : agregadoGlobal.itens;
 
   const temFiltros = temFiltrosAtivos(filtros);
+  const agregadoVisual = temFiltros ? agregadoFiltrado : agregadoGlobal;
 
   const resumoFonteDaVerdade = await buscarResumoDaMedicao(medicao.id, medicao.obra_id);
   const valorPago = resumoFonteDaVerdade.pago;
-  const saldoExecutor = agregadoGlobal.valorExecutorExecutado - valorPago;
-  const maoDeObraExecutada = agregadoGlobal.itens.reduce(
+  const saldoExecutor = agregadoVisual.valorExecutorExecutado - valorPago;
+  const maoDeObraExecutada = agregadoVisual.itens.reduce(
     (total, item) => total + item.valorContabilizado,
     0,
   );
@@ -821,7 +827,12 @@ export default async function MedicaoDetalhePage({
           <CartaoTitulo>Filtros da visualização</CartaoTitulo>
         </CartaoCabecalho>
         <CartaoConteudo>
-          <FiltrosMedicao plantas={plantas} responsaveis={perfis} ativos={filtros} />
+          <FiltrosMedicao plantas={plantas} ativos={filtros} />
+          {temFiltros && (
+            <p className="mt-3 text-xs text-azul-700">
+              Os indicadores de execução, pendências, saldo, mão de obra e gráficos abaixo consideram os filtros aplicados. Orçamento previsto e pagamentos permanecem totais da medição.
+            </p>
+          )}
         </CartaoConteudo>
       </Cartao>
 
@@ -831,40 +842,40 @@ export default async function MedicaoDetalhePage({
         </CartaoCabecalho>
         <CartaoConteudo className="grid gap-3 text-sm text-superficie-700 md:grid-cols-3">
           <div>
-           <p className="font-semibold text-superficie-900">Orçamento previsto da construtora</p>
-            <p className="mt-1 text-xs">Quantidade e composição previstas, com mão de obra, materiais e equipamentos.</p>
+            <p className="font-semibold text-superficie-900">Contrato executor</p>
+            <p className="mt-1 text-xs">Quantidade executada × preço negociado no item de medição. O executor identificado na tarefa é apenas uma referência operacional.</p>
           </div>
           <div>
             <p className="font-semibold text-superficie-900">Medição da construtora</p>
             <p className="mt-1 text-xs">Quantidade medida × valor unitário do orçamento/composição vinculado.</p>
           </div>
           <div>
-            <p className="font-semibold text-superficie-900">Contrato executor</p>
-            <p className="mt-1 text-xs">Quantidade executada × preço negociado no item de medição. O executor identificado na tarefa é apenas uma referência operacional.</p>
+           <p className="font-semibold text-superficie-900">Orçamento previsto da construtora</p>
+            <p className="mt-1 text-xs">Quantidade e composição previstas, com mão de obra, materiais e equipamentos.</p>
           </div>
         </CartaoConteudo>
       </Cartao>
 
-      <div className="space-y-4">
-        <div className="rounded-xl border border-azul-100 bg-azul-50/40 px-5 py-4">
+      <div className="flex flex-col space-y-4">
+        <div className="order-1 rounded-xl border border-azul-100 bg-azul-50/40 px-5 py-4">
           <h2 className="text-base font-bold text-azul-900">Contrato do executor</h2>
           <p className="mt-1 text-xs text-superficie-600">
             Valores do preço negociado com o executor, do que foi concluído e aprovado e do que já foi pago.
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="order-1 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <ValorContrato medicaoId={medicao.id} valorContrato={medicao.valor_contrato} />
           <Cartao>
             <CartaoCabecalho><CartaoTitulo>Valor executado pelo executor</CartaoTitulo></CartaoCabecalho>
             <CartaoConteudo>
-              <p className="text-2xl font-bold text-azul-600">{formatarMoeda(agregadoGlobal.valorExecutorExecutado)}</p>
+              <p className="text-2xl font-bold text-azul-600">{formatarMoeda(agregadoVisual.valorExecutorExecutado)}</p>
               <p className="mt-1 text-xs text-superficie-500">Itens concluídos e aprovados × preço do contrato executor.</p>
             </CartaoConteudo>
           </Cartao>
           <Cartao>
             <CartaoCabecalho><CartaoTitulo>Valor ainda não executado</CartaoTitulo></CartaoCabecalho>
             <CartaoConteudo>
-              <p className="text-2xl font-bold text-amber-600">{formatarMoeda(agregadoGlobal.valorExecutorPendente)}</p>
+              <p className="text-2xl font-bold text-amber-600">{formatarMoeda(agregadoVisual.valorExecutorPendente)}</p>
               <p className="mt-1 text-xs text-superficie-500">Itens que ainda não estão concluídos e aprovados.</p>
             </CartaoConteudo>
           </Cartao>
@@ -876,7 +887,7 @@ export default async function MedicaoDetalhePage({
             </CartaoConteudo>
           </Cartao>
         </div>
-        <Cartao>
+        <Cartao className="order-1">
           <CartaoConteudo className="flex flex-wrap items-center justify-between gap-3 py-4">
             <div>
               <p className="text-sm font-semibold text-superficie-900">Total pago ao executor</p>
@@ -886,13 +897,13 @@ export default async function MedicaoDetalhePage({
           </CartaoConteudo>
         </Cartao>
 
-        <div className="rounded-xl border border-superficie-200 bg-superficie-50 px-5 py-4">
+        <div className="order-3 rounded-xl border border-superficie-200 bg-superficie-50 px-5 py-4">
           <h2 className="text-base font-bold text-superficie-900">Orçamento da obra</h2>
           <p className="mt-1 text-xs text-superficie-600">
             O total abaixo vem do valor dos itens do orçamento. A decomposição por categoria só inclui custos analíticos informados nas composições.
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="order-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Cartao className="border-superficie-300 bg-superficie-50/60">
             <CartaoCabecalho><CartaoTitulo>Orçamento previsto total</CartaoTitulo></CartaoCabecalho>
             <CartaoConteudo>
@@ -912,7 +923,7 @@ export default async function MedicaoDetalhePage({
             </Cartao>
           ))}
         </div>
-        <Cartao className={composicaoFechaOrcamento ? "border-emerald-200 bg-emerald-50/30" : "border-amber-200 bg-amber-50/40"}>
+        <Cartao className={`order-3 ${composicaoFechaOrcamento ? "border-emerald-200 bg-emerald-50/30" : "border-amber-200 bg-amber-50/40"}`}>
           <CartaoConteudo className="flex flex-wrap items-center justify-between gap-4 py-4">
             <div>
               <p className="text-sm font-semibold text-superficie-900">Diferença entre orçamento e composição</p>
@@ -928,31 +939,31 @@ export default async function MedicaoDetalhePage({
           </CartaoConteudo>
         </Cartao>
 
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-5 py-4">
+        <div className="order-2 rounded-xl border border-emerald-100 bg-emerald-50/40 px-5 py-4">
           <h2 className="text-base font-bold text-emerald-950">Medição da construtora</h2>
           <p className="mt-1 text-xs text-superficie-600">
             Valores do orçamento aplicados às quantidades cadastradas nas tarefas, separados entre concluídos e aprovados e ainda não executados.
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="order-2 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Cartao>
             <CartaoCabecalho><CartaoTitulo>Valor medido executado</CartaoTitulo></CartaoCabecalho>
             <CartaoConteudo>
-              <p className="text-2xl font-bold text-emerald-600">{formatarMoeda(agregadoGlobal.valorConstrutoraExecutado)}</p>
+              <p className="text-2xl font-bold text-emerald-600">{formatarMoeda(agregadoVisual.valorConstrutoraExecutado)}</p>
               <p className="mt-1 text-xs text-superficie-500">Orçamento × quantidade concluída e aprovada.</p>
             </CartaoConteudo>
           </Cartao>
           <Cartao>
             <CartaoCabecalho><CartaoTitulo>Valor medido ainda não executado</CartaoTitulo></CartaoCabecalho>
             <CartaoConteudo>
-              <p className="text-2xl font-bold text-amber-600">{formatarMoeda(agregadoGlobal.valorConstrutoraPendente)}</p>
+              <p className="text-2xl font-bold text-amber-600">{formatarMoeda(agregadoVisual.valorConstrutoraPendente)}</p>
               <p className="mt-1 text-xs text-superficie-500">Orçamento × quantidade que ainda não está concluída e aprovada.</p>
             </CartaoConteudo>
           </Cartao>
           <Cartao className="border-emerald-200 bg-emerald-50/30">
             <CartaoCabecalho><CartaoTitulo>Valor total medido</CartaoTitulo></CartaoCabecalho>
             <CartaoConteudo>
-              <p className="text-2xl font-bold text-superficie-900">{formatarMoeda(agregadoGlobal.valorConstrutoraExecutado + agregadoGlobal.valorConstrutoraPendente)}</p>
+              <p className="text-2xl font-bold text-superficie-900">{formatarMoeda(agregadoVisual.valorConstrutoraExecutado + agregadoVisual.valorConstrutoraPendente)}</p>
               <p className="mt-1 text-xs text-superficie-500">Executado + ainda não executado nas quantidades cadastradas.</p>
             </CartaoConteudo>
           </Cartao>
@@ -967,12 +978,12 @@ export default async function MedicaoDetalhePage({
       </div>
 
       <GraficosProgressoMedicao
-        itens={agregadoGlobal.itens}
-         valorExecutado={agregadoGlobal.valorConstrutoraExecutado}
-         valorPendente={agregadoGlobal.valorConstrutoraPendente}
-         valorTotalCadastrado={agregadoGlobal.valorConstrutoraExecutado + agregadoGlobal.valorConstrutoraPendente}
+        itens={agregadoVisual.itens}
+         valorExecutado={agregadoVisual.valorConstrutoraExecutado}
+         valorPendente={agregadoVisual.valorConstrutoraPendente}
+         valorTotalCadastrado={agregadoVisual.valorConstrutoraExecutado + agregadoVisual.valorConstrutoraPendente}
         valorContrato={medicao.valor_contrato}
-         valorExecutorExecutado={agregadoGlobal.valorExecutorExecutado}
+         valorExecutorExecutado={agregadoVisual.valorExecutorExecutado}
       />
 
       <Cartao>
@@ -1005,7 +1016,7 @@ export default async function MedicaoDetalhePage({
         </CartaoCabecalho>
         <CartaoConteudo className="p-0">
           <TabelaMedicao
-            key={`${medicao.id}-${filtros.planta ?? ""}-${filtros.responsavel ?? ""}-${filtros.de ?? ""}-${filtros.ate ?? ""}`}
+            key={`${medicao.id}-${filtros.planta ?? ""}-${filtros.de ?? ""}-${filtros.ate ?? ""}`}
             medicaoId={medicao.id}
             obraId={medicao.obra_id}
             itens={listaItens}

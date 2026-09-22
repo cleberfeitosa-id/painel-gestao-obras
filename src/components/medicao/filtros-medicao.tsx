@@ -4,17 +4,15 @@ import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { Campo, Selecao, Botao } from "@/components/ui";
-import type { PerfilRow, PlantaRow } from "@/lib/supabase/database.types";
+import type { PlantaRow } from "@/lib/supabase/database.types";
 
 interface FiltrosMedicaoProps {
   plantas: Pick<PlantaRow, "id" | "nome">[];
-  responsaveis: Pick<PerfilRow, "id" | "nome">[];
-  ativos: { planta?: string; responsavel?: string; de?: string; ate?: string };
+  ativos: { planta?: string; de?: string; ate?: string };
 }
 
 export function FiltrosMedicao({
   plantas,
-  responsaveis,
   ativos,
 }: FiltrosMedicaoProps) {
   const router = useRouter();
@@ -35,11 +33,11 @@ export function FiltrosMedicao({
   const limpar = () => router.push(pathname);
 
   const temFiltros = Boolean(
-    ativos.planta || ativos.responsavel || ativos.de || ativos.ate,
+    ativos.planta || ativos.de || ativos.ate,
   );
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Selecao
         rotulo="Planta"
         value={ativos.planta ?? ""}
@@ -49,18 +47,6 @@ export function FiltrosMedicao({
         {plantas.map((planta) => (
           <option key={planta.id} value={planta.id}>
             {planta.nome}
-          </option>
-        ))}
-      </Selecao>
-      <Selecao
-        rotulo="Responsável"
-        value={ativos.responsavel ?? ""}
-        onChange={(e) => aplicar("responsavel", e.target.value)}
-      >
-        <option value="">Todos os responsáveis</option>
-        {responsaveis.map((perfil) => (
-          <option key={perfil.id} value={perfil.id}>
-            {perfil.nome}
           </option>
         ))}
       </Selecao>
