@@ -374,6 +374,7 @@ const esquemaCriarMedicao = z.object({
 
 const esquemaAtualizarMedicao = z.object({
   medicaoId: z.string().uuid("Medicao invalida."),
+  obraId: z.string().uuid("Obra invalida."),
   titulo: z
     .string()
     .trim()
@@ -381,9 +382,15 @@ const esquemaAtualizarMedicao = z.object({
     .max(200, "O titulo deve ter no maximo 200 caracteres."),
 });
 
+const esquemaExcluirMedicao = z.object({
+  medicaoId: z.string().uuid("Medicao invalida."),
+  obraId: z.string().uuid("Obra invalida."),
+});
+
 // Atualiza o titulo de uma medicao existente.
 export async function atualizarMedicao(dados: {
   medicaoId: string;
+  obraId: string;
   titulo: string;
 }): Promise<Resultado> {
   const negado = await verificarGestor();
@@ -395,6 +402,14 @@ export async function atualizarMedicao(dados: {
   }
 
   const supabase = await createClient();
+  const { data: medicao } = await supabase
+    .from("medicoes")
+    .select("id")
+    .eq("id", resultado.data.medicaoId)
+    .eq("obra_id", resultado.data.obraId)
+    .maybeSingle();
+  if (!medicao) return { erro: "Medicao nao encontrada nesta obra." };
+
   const { error } = await supabase
     .from("medicoes")
     .update({ titulo: resultado.data.titulo })
@@ -404,8 +419,32 @@ export async function atualizarMedicao(dados: {
     return { erro: "Nao foi possivel atualizar a medicao. Tente novamente." };
   }
 
-  revalidatePath(`/obras/[id]/medicoes/${resultado.data.medicaoId}`);
-  revalidatePath(`/obras/[id]/medicoes`);
+  revalidatePath(`/obras/${resultado.data.obraId}/medicoes/${resultado.data.medicaoId}`);
+  revalidatePath(`/obras/${resultado.data.obraId}/medicoes`);
+  return {};
+}
+
+export async function excluirMedicao(dados: {
+  medicaoId: string;
+  obraId: string;
+}): Promise<Resultado> {
+  const negado = await verificarGestor();
+  if (negado) return negado;
+
+  const resultado = esquemaExcluirMedicao.safeParse(dados);
+  if (!resultado.success) {
+    return { erro: resultado.error.issues[0]?.message ?? "Dados invalidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("excluir_medicao_atomico", {
+    p_medicao_id: resultado.data.medicaoId,
+    p_obra_id: resultado.data.obraId,
+  });
+  if (error) return { erro: "Nao foi possivel excluir a medicao. Tente novamente." };
+
+  revalidatePath(`/obras/${resultado.data.obraId}/medicoes`);
+  revalidatePath(`/obras/${resultado.data.obraId}`);
   return {};
 }
 
