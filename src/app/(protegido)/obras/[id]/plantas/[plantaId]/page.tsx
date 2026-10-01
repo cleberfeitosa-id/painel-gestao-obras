@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { buscarTodasLinhas } from "@/lib/supabase/paginacao";
 import { BUCKET_PLANTAS, urlAssinada } from "@/lib/armazenamento";
 import { Botao } from "@/components/ui";
 import { AreaPlanta } from "@/components/plantas/area-planta";
@@ -32,8 +33,6 @@ export default async function DetalhePlantaPage({
   const [
     { data: planta },
     { data: calibracoes },
-    { data: tarefas },
-    { data: tarefasObra },
     { data: perfil },
     { data: executores },
     { data: tags },
@@ -47,16 +46,6 @@ export default async function DetalhePlantaPage({
       .from("planta_calibracoes")
       .select("*")
       .eq("planta_id", plantaId),
-    supabase
-      .from("tarefas")
-      .select(
-        "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, localizacao_detalhe, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
-      )
-      .eq("planta_id", plantaId),
-    supabase
-      .from("tarefas")
-      .select("id, titulo, localizacao_tipo, planta_id, pagina, ponto_x, ponto_y, regiao, plantas!tarefas_planta_id_fkey(nome)")
-      .eq("obra_id", id),
     user
       ? supabase.from("perfis").select("papel").eq("id", user.id).single()
       : Promise.resolve({ data: null }),
@@ -67,6 +56,43 @@ export default async function DetalhePlantaPage({
       .eq("ativo", true)
       .order("nome"),
     supabase.from("tags_tarefa").select("id, nome").order("nome"),
+  ]);
+
+  async function buscarTodasTarefasPlanta(pid: string) {
+    const resultado = await buscarTodasLinhas(
+      supabase
+        .from("tarefas")
+        .select(
+          "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, localizacao_detalhe, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
+        )
+        .eq("planta_id", pid)
+        .order("criado_em", { ascending: true }),
+    );
+    if (resultado.error) {
+      console.error("Erro ao carregar tarefas da planta:", resultado.error);
+    }
+    return resultado.data;
+  }
+
+  async function buscarTodasTarefasObra(obraId: string) {
+    const resultado = await buscarTodasLinhas(
+      supabase
+        .from("tarefas")
+        .select(
+          "id, titulo, localizacao_tipo, planta_id, pagina, ponto_x, ponto_y, regiao, plantas!tarefas_planta_id_fkey(nome)",
+        )
+        .eq("obra_id", obraId)
+        .order("criado_em", { ascending: true }),
+    );
+    if (resultado.error) {
+      console.error("Erro ao carregar tarefas da obra:", resultado.error);
+    }
+    return resultado.data;
+  }
+
+  const [tarefas, tarefasObra] = await Promise.all([
+    buscarTodasTarefasPlanta(plantaId),
+    buscarTodasTarefasObra(id),
   ]);
 
   if (!planta || planta.obra_id !== id) notFound();

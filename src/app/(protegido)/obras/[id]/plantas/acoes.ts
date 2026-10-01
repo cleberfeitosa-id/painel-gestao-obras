@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { buscarTodasLinhas } from "@/lib/supabase/paginacao";
 import {
   BUCKET_ANEXOS,
   BUCKET_PLANTAS,
@@ -349,7 +350,7 @@ export async function obterDadosCompletosTarefasExportacao(
     return { tarefas: [] };
   }
 
-  const consulta = supabase
+  const consultaBase = supabase
     .from("tarefas")
     .select(
       "id, titulo, descricao, status, prioridade, aprovacao, prazo, criado_em, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, localizacao_detalhe, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome), supervisor:perfis!tarefas_supervisor_id_fkey(nome), tags_tarefa(id, nome)",
@@ -358,10 +359,10 @@ export async function obterDadosCompletosTarefasExportacao(
     .eq("pagina", pagina)
     .order("criado_em", { ascending: true });
 
-  const { data: tarefasDb, error } = await consulta;
+  const { data: tarefasDb, error: erroTarefas } = await buscarTodasLinhas(consultaBase);
 
-  if (error || !tarefasDb) {
-    console.error("Erro ao carregar tarefas:", error);
+  if (erroTarefas) {
+    console.error("Erro ao carregar tarefas:", erroTarefas);
     return { tarefas: [], erro: "Não foi possível carregar as tarefas." };
   }
 
