@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Document, Page, pdfjs } from "react-pdf";
@@ -118,6 +118,35 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 type ModoVisualizacao = "2d" | "3d" | "tabelas";
 
 type ModoExibicaoMedidas = "todas" | "sem_circuitos" | "nenhuma";
+type ModoAgrupamentoDistancia = "conjunto" | "trechos";
+
+type RascunhoLocalLevantamento = {
+  salvoEm: string;
+  dados: Parameters<typeof salvarLevantamento>[0];
+};
+
+const TEMPO_LIMITE_SALVAMENTO_MS = 15_000;
+
+function chaveRascunhoLocal(
+  obraId: string,
+  plantaId: string,
+  pagina: number,
+  levantamentoId?: string,
+) {
+  return `painel_levantamento_rascunho_${obraId}_${plantaId}_${pagina}_${levantamentoId ?? "novo"}`;
+}
+
+function aguardarNoMaximo<T>(promessa: Promise<T>, milissegundos: number) {
+  return Promise.race([
+    promessa,
+    new Promise<T>((_, rejeitar) => {
+      window.setTimeout(
+        () => rejeitar(new Error("Tempo limite de salvamento excedido.")),
+        milissegundos,
+      );
+    }),
+  ]);
+}
 
 type FerramentaLevantamento =
   | "navegar"
@@ -352,6 +381,8 @@ export function VisualizadorLevantamento({
   const [calibrando, setCalibrando] = useState(false);
 
   const [pontosEmDesenho, setPontosEmDesenho] = useState<PontoPdf[]>([]);
+  const [modoAgrupamentoDistancia, setModoAgrupamentoDistancia] =
+    useState<ModoAgrupamentoDistancia>("conjunto");
   const [pontoSnap, setPontoSnap] = useState<PontoPdf | null>(null);
   const [loteDescidasPontos, setLoteDescidasPontos] = useState<PontoPdf[]>([]);
 
@@ -406,6 +437,13 @@ export function VisualizadorLevantamento({
 
   const [salvando, setSalvando] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
+  const [mensagemErro, setMensagemErro] = useState<string | null>(null);
+  const [rascunhoLocalDisponivel, setRascunhoLocalDisponivel] = useState(false);
+  const ultimoSnapshotLocalRef = useRef<string | null>(null);
+  const snapshotLocalVerificadoRef = useRef<string | null>(null);
+  const rascunhoLocalAceitoRef = useRef(false);
+  const salvamentoEmAndamentoRef = useRef<Promise<unknown> | null>(null);
+  const salvamentoComResultadoDesconhecidoRef = useRef(false);
 
   const [escala, setEscala] = useState(1);
   const [dimensoes, setDimensoes] = useState<{
@@ -1032,31 +1070,236 @@ export function VisualizadorLevantamento({
     setGruposItensOcultos([]);
   }
 
+  const dadosDoLevantamentoAtual = useCallback(() => ({
+    id: levantamentoId,
+    obraId: obraSelecionadaId,
+    plantaId: plantaSelecionadaId,
+    pagina,
+    nome: nomeLevantamento,
+    descricao: descricaoLevantamento,
+    niveis: JSON.parse(JSON.stringify(niveis)),
+    categorias: JSON.parse(JSON.stringify(categorias)),
+    itens: JSON.parse(JSON.stringify(itens)),
+    configLegenda: JSON.parse(JSON.stringify(configLegenda)),
+  }), [
+    categorias,
+    configLegenda,
+    descricaoLevantamento,
+    itens,
+    levantamentoId,
+    niveis,
+    nomeLevantamento,
+    obraSelecionadaId,
+    pagina,
+    plantaSelecionadaId,
+  ]);
+
+  const salvarRascunhoLocal = useCallback((dados: Parameters<typeof salvarLevantamento>[0]) => {
+    if (!dados.obraId || !dados.plantaId) return;
+    try {
+      const rascunho: RascunhoLocalLevantamento = {
+        salvoEm: new Date().toISOString(),
+        dados,
+      };
+      ultimoSnapshotLocalRef.current = JSON.stringify(dados);
+      localStorage.setItem(
+        chaveRascunhoLocal(dados.obraId, dados.plantaId, dados.pagina, dados.id),
+        JSON.stringify(rascunho),
+      );
+      setRascunhoLocalDisponivel(true);
+    } catch (erro) {
+      console.warn("Nao foi possivel guardar o rascunho local do levantamento.", erro);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!podeEditar || !obraSelecionadaId || !plantaSelecionadaId) return;
+    const temporizador = window.setTimeout(() => {
+      const dados = dadosDoLevantamentoAtual();
+      const chave = chaveRascunhoLocal(
+        dados.obraId,
+        dados.plantaId,
+        dados.pagina,
+        dados.id,
+      );
+      try {
+        if (
+          snapshotLocalVerificadoRef.current === chave &&
+          !rascunhoLocalAceitoRef.current &&
+          localStorage.getItem(chave) !== null
+        ) {
+          return;
+        }
+      } catch (erro) {
+        console.warn("Nao foi possivel verificar o rascunho antes do autosave.", erro);
+      }
+      if (ultimoSnapshotLocalRef.current !== JSON.stringify(dados)) {
+        salvarRascunhoLocal(dados);
+      }
+    }, 600);
+    return () => window.clearTimeout(temporizador);
+  }, [
+    dadosDoLevantamentoAtual,
+    obraSelecionadaId,
+    plantaSelecionadaId,
+    podeEditar,
+    salvarRascunhoLocal,
+  ]);
+
+  const removerRascunhoLocal = useCallback((dados: Parameters<typeof salvarLevantamento>[0]) => {
+    if (!dados.obraId || !dados.plantaId) return;
+    try {
+      localStorage.removeItem(
+        chaveRascunhoLocal(dados.obraId, dados.plantaId, dados.pagina, dados.id),
+      );
+      localStorage.removeItem(
+        chaveRascunhoLocal(dados.obraId, dados.plantaId, dados.pagina),
+      );
+      ultimoSnapshotLocalRef.current = JSON.stringify(dados);
+      setRascunhoLocalDisponivel(false);
+    } catch (erro) {
+      console.warn("Nao foi possivel remover o rascunho local do levantamento.", erro);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!obraSelecionadaId || !plantaSelecionadaId) return;
+    const temporizador = window.setTimeout(() => {
+      try {
+        setRascunhoLocalDisponivel(
+          localStorage.getItem(
+            chaveRascunhoLocal(
+              obraSelecionadaId,
+              plantaSelecionadaId,
+              pagina,
+              levantamentoId,
+            ),
+          ) !== null,
+        );
+        snapshotLocalVerificadoRef.current = chaveRascunhoLocal(
+          obraSelecionadaId,
+          plantaSelecionadaId,
+          pagina,
+          levantamentoId,
+        );
+        rascunhoLocalAceitoRef.current = false;
+      } catch (erro) {
+        console.warn("Nao foi possivel verificar o rascunho local do levantamento.", erro);
+        setRascunhoLocalDisponivel(false);
+      }
+    }, 0);
+    return () => window.clearTimeout(temporizador);
+  }, [levantamentoId, obraSelecionadaId, pagina, plantaSelecionadaId]);
+
+  function recuperarRascunhoLocal() {
+    if (!obraSelecionadaId || !plantaSelecionadaId) return;
+    try {
+      const bruto = localStorage.getItem(
+        chaveRascunhoLocal(
+          obraSelecionadaId,
+          plantaSelecionadaId,
+          pagina,
+          levantamentoId,
+        ),
+      );
+      if (!bruto) return;
+      const rascunho = JSON.parse(bruto) as RascunhoLocalLevantamento;
+      const dados = rascunho.dados;
+      if (
+        !rascunho ||
+        typeof rascunho.salvoEm !== "string" ||
+        !dados ||
+        dados.obraId !== obraSelecionadaId ||
+        dados.plantaId !== plantaSelecionadaId ||
+        dados.pagina !== pagina ||
+        !Array.isArray(dados.niveis) ||
+        !Array.isArray(dados.categorias) ||
+        !Array.isArray(dados.itens) ||
+        typeof dados.configLegenda !== "object" ||
+        dados.configLegenda === null
+      ) {
+        throw new Error("Formato de rascunho local invalido.");
+      }
+      setLevantamentoId(rascunho.dados.id);
+      setNiveis(rascunho.dados.niveis as unknown as Nivel3D[]);
+      setCategorias(rascunho.dados.categorias as unknown as CategoriaPredefinicao[]);
+      setItens(rascunho.dados.itens as unknown as ItemLevantamento[]);
+      setConfigLegenda(rascunho.dados.configLegenda as unknown as ConfigLegenda);
+      ultimoSnapshotLocalRef.current = JSON.stringify(dados);
+      rascunhoLocalAceitoRef.current = true;
+      localStorage.removeItem(
+        chaveRascunhoLocal(
+          obraSelecionadaId,
+          plantaSelecionadaId,
+          pagina,
+          levantamentoId,
+        ),
+      );
+      setMensagemSucesso("Rascunho local recuperado. Salve para enviar ao servidor.");
+      setRascunhoLocalDisponivel(false);
+    } catch (erro) {
+      console.warn("Nao foi possivel recuperar o rascunho local do levantamento.", erro);
+      setMensagemErro("O rascunho local esta corrompido e nao pode ser recuperado.");
+    }
+  }
+
   async function salvarLevantamentoAtual() {
     if (!podeEditar) return;
+    if (salvamentoComResultadoDesconhecidoRef.current) {
+      setMensagemErro("O salvamento anterior demorou e o resultado ficou indefinido. Recarregue a pagina antes de tentar novamente; o rascunho local foi preservado.");
+      return;
+    }
+    if (salvamentoEmAndamentoRef.current) {
+      setMensagemErro("Ainda existe um salvamento anterior em processamento. Aguarde alguns segundos antes de tentar novamente.");
+      return;
+    }
+    const dados = dadosDoLevantamentoAtual();
+    salvarRascunhoLocal(dados);
     setSalvando(true);
     setMensagemSucesso(null);
+    setMensagemErro(null);
 
-    const resultado = await salvarLevantamento({
-      id: levantamentoId,
-      obraId: obraSelecionadaId,
-      plantaId: plantaSelecionadaId,
-      pagina,
-      nome: nomeLevantamento,
-      descricao: descricaoLevantamento,
-      niveis: JSON.parse(JSON.stringify(niveis)),
-      categorias: JSON.parse(JSON.stringify(categorias)),
-      itens: JSON.parse(JSON.stringify(itens)),
-      configLegenda: JSON.parse(JSON.stringify(configLegenda)),
-    });
-
-    setSalvando(false);
-    if ("erro" in resultado) {
-      alert(`Erro ao salvar: ${resultado.erro}`);
-    } else {
+    try {
+      const operacao = salvarLevantamento(dados);
+      salvamentoEmAndamentoRef.current = operacao;
+      void operacao.then(
+        () => {
+          if (salvamentoEmAndamentoRef.current === operacao) {
+            salvamentoEmAndamentoRef.current = null;
+          }
+        },
+        () => {
+          if (salvamentoEmAndamentoRef.current === operacao) {
+            salvamentoEmAndamentoRef.current = null;
+          }
+        },
+      );
+      const resultado = await aguardarNoMaximo(
+        operacao,
+        TEMPO_LIMITE_SALVAMENTO_MS,
+      );
+      if ("erro" in resultado) {
+        setMensagemErro(`Erro ao salvar: ${resultado.erro}`);
+        return;
+      }
+      salvamentoComResultadoDesconhecidoRef.current = false;
       setLevantamentoId(resultado.id);
+      const dadosSalvos = { ...dados, id: resultado.id };
+      ultimoSnapshotLocalRef.current = JSON.stringify(dadosSalvos);
+      removerRascunhoLocal(dadosSalvos);
+      setRascunhoLocalDisponivel(false);
       setMensagemSucesso("Levantamento salvo com sucesso!");
       setTimeout(() => setMensagemSucesso(null), 3500);
+    } catch (erro) {
+      const mensagem = erro instanceof Error && erro.message.includes("Tempo limite")
+        ? "O servidor demorou para responder. O rascunho ficou salvo neste dispositivo; recarregue a pagina antes de tentar novamente."
+        : "Nao foi possivel salvar o levantamento. O rascunho ficou salvo neste dispositivo.";
+      if (erro instanceof Error && erro.message.includes("Tempo limite")) {
+        salvamentoComResultadoDesconhecidoRef.current = true;
+      }
+      setMensagemErro(mensagem);
+    } finally {
+      setSalvando(false);
     }
   }
 
@@ -1287,21 +1530,46 @@ export function VisualizadorLevantamento({
       setItemSelecionado(novoItem);
     } else if (elementoAtivo) {
       const { altura, nivelId } = obterAlturaENivelElemento(elementoAtivo);
-      novoItem = {
-        id: `dist_${Date.now()}`,
-        numero: getNextNumero(elementoAtivo.id),
-        tipo: "distancia",
-        categoria: elementoAtivo.categoria,
-        subtipo: elementoAtivo.id,
-        nome: elementoAtivo.nome,
-        cor: elementoAtivo.cor,
-        pontos: pontosEmDesenho,
-        altura,
-        nivelId,
-        comprimentoReal: compReal,
-        criadoEm: new Date().toISOString(),
-      };
-      registrarEstado([...itens, novoItem]);
+      const criadoEm = new Date().toISOString();
+      const itensDistancia: ItemLevantamento[] =
+        modoAgrupamentoDistancia === "conjunto"
+          ? [{
+              id: `dist_${Date.now()}`,
+              numero: getNextNumero(elementoAtivo.id),
+              tipo: "distancia",
+              categoria: elementoAtivo.categoria,
+              subtipo: elementoAtivo.id,
+              nome: elementoAtivo.nome,
+              cor: elementoAtivo.cor,
+              pontos: pontosEmDesenho,
+              altura,
+              nivelId,
+              comprimentoReal: compReal,
+              criadoEm,
+            }]
+          : pontosEmDesenho.slice(1).map((ponto, indice) => {
+              const pontosTrecho = [pontosEmDesenho[indice], ponto];
+              return {
+                id: `dist_${Date.now()}_${indice}`,
+                numero: getNextNumero(elementoAtivo.id) + indice,
+                tipo: "distancia",
+                categoria: elementoAtivo.categoria,
+                subtipo: elementoAtivo.id,
+                nome: elementoAtivo.nome,
+                cor: elementoAtivo.cor,
+                pontos: pontosTrecho,
+                altura,
+                nivelId,
+                comprimentoReal: calcularDistanciaPontos(
+                  pontosTrecho,
+                  calibracaoPagina,
+                ),
+                criadoEm,
+              } satisfies ItemLevantamento;
+            });
+      const novosItens = [...itens, ...itensDistancia];
+      registrarEstado(novosItens);
+      novoItem = itensDistancia[0] ?? null;
       setItemSelecionado(novoItem);
     }
     setPontosEmDesenho([]);
@@ -1893,6 +2161,33 @@ export function VisualizadorLevantamento({
           <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 border border-emerald-200">
             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             {mensagemSucesso}
+          </div>
+        )}
+        {mensagemErro && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-perigo-200 bg-perigo-50 px-3 py-2 text-xs font-medium text-perigo-800">
+            <span>{mensagemErro}</span>
+            <button
+              type="button"
+              className="font-bold underline hover:no-underline"
+              onClick={() => {
+                setMensagemErro(null);
+                void salvarLevantamentoAtual();
+              }}
+            >
+              Tentar novamente
+            </button>
+          </div>
+        )}
+        {rascunhoLocalDisponivel && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+            <span>Existe um rascunho local deste levantamento neste dispositivo.</span>
+            <button
+              type="button"
+              className="font-bold underline hover:no-underline"
+              onClick={recuperarRascunhoLocal}
+            >
+              Recuperar rascunho
+            </button>
           </div>
         )}
 
@@ -2837,11 +3132,26 @@ export function VisualizadorLevantamento({
 
             {pontosEmDesenho.length > 0 && (
               <div className="flex items-center justify-between rounded-xl bg-azul-50 px-4 py-2 text-xs font-medium text-azul-900 border border-azul-200">
-                <span>
-                  {ferramenta === "area"
-                    ? `Marcando vértices da área (${pontosEmDesenho.length} pontos marcados)`
-                    : `Traçando linha/tubulação (${pontosEmDesenho.length} pontos)`}
-                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span>
+                    {ferramenta === "area"
+                      ? `Marcando vértices da área (${pontosEmDesenho.length} pontos marcados)`
+                      : `Traçando linha/tubulação (${pontosEmDesenho.length} pontos)`}
+                  </span>
+                  {ferramenta === "distancia" && (
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold">
+                      <span>Agrupar:</span>
+                      <select
+                        value={modoAgrupamentoDistancia}
+                        onChange={(e) => setModoAgrupamentoDistancia(e.target.value as ModoAgrupamentoDistancia)}
+                        className="rounded-md border border-azul-200 bg-white px-1.5 py-1 text-[11px] text-superficie-800"
+                      >
+                        <option value="conjunto">um conjunto</option>
+                        <option value="trechos">trechos separados</option>
+                      </select>
+                    </label>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
