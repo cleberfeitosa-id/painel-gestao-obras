@@ -10,15 +10,15 @@ const TIPOS_TOKEN = new Set<EmailOtpType>([
   "magiclink",
 ]);
 
-function tipoTokenValido(valor: string | null): valor is EmailOtpType {
-  return valor !== null && TIPOS_TOKEN.has(valor as EmailOtpType);
+function tipoTokenValido(valor: string): valor is EmailOtpType {
+  return TIPOS_TOKEN.has(valor as EmailOtpType);
 }
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const tokenHash = searchParams.get("token_hash");
-  const code = searchParams.get("code");
-  const tipo = searchParams.get("type");
+export async function POST(request: NextRequest) {
+  const dados = await request.formData();
+  const tokenHash = String(dados.get("token_hash") ?? "");
+  const tipo = String(dados.get("type") ?? "");
+  const code = String(dados.get("code") ?? "");
 
   if ((tokenHash && code) || (!tokenHash && !code)) {
     return NextResponse.redirect(new URL("/erro", request.url));
@@ -50,22 +50,19 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      return NextResponse.redirect(new URL("/erro", request.url));
-    }
+    if (error) return NextResponse.redirect(new URL("/erro", request.url));
     return resposta;
   }
 
-  if (tokenHash && tipoTokenValido(tipo)) {
-    const { error } = await supabase.auth.verifyOtp({
-      token_hash: tokenHash,
-      type: tipo,
-    });
-    if (error) {
-      return NextResponse.redirect(new URL("/erro", request.url));
-    }
-    return resposta;
+  if (!tipoTokenValido(tipo)) {
+    return NextResponse.redirect(new URL("/erro", request.url));
   }
 
-  return NextResponse.redirect(new URL("/erro", request.url));
+  const { error } = await supabase.auth.verifyOtp({
+    token_hash: tokenHash,
+    type: tipo,
+  });
+  if (error) return NextResponse.redirect(new URL("/erro", request.url));
+
+  return resposta;
 }
