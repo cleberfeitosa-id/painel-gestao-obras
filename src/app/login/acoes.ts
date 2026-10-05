@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { urlPublicaApp } from "@/lib/url-app";
 
 function traduzirErro(mensagem: string): string {
   if (mensagem.includes("Invalid login credentials"))
@@ -43,6 +44,31 @@ export async function entrar(
 
   revalidatePath("/", "layout");
   redirect(redirecionar);
+}
+
+export async function solicitarRecuperacao(
+  _estadoAnterior: { erro?: string; sucesso?: boolean },
+  formData: FormData,
+): Promise<{ erro?: string; sucesso?: boolean }> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+
+  if (!email) return { erro: "Informe seu e-mail." };
+
+  let url: string;
+  try {
+    url = await urlPublicaApp();
+  } catch {
+    return { erro: "URL publica da aplicacao nao configurada." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${url}/auth/confirmar`,
+  });
+
+  if (error) return { erro: traduzirErro(error.message) };
+
+  return { sucesso: true };
 }
 
 export async function cadastrar(

@@ -4,7 +4,7 @@ import { Suspense, useActionState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight } from "lucide-react";
-import { entrar } from "./acoes";
+import { entrar, solicitarRecuperacao } from "./acoes";
 import { Botao, Campo, LogoAplicacao } from "@/components/ui";
 
 function FormularioLogin() {
@@ -12,6 +12,10 @@ function FormularioLogin() {
   const redirecionar = searchParams.get("redirecionar") ?? "/painel";
 
   const [estado, enviar, submetendo] = useActionState(entrar, {});
+  const [estadoRecuperacao, enviarRecuperacao, recuperando] = useActionState(
+    solicitarRecuperacao,
+    {},
+  );
 
   return (
     <div className="flex min-h-screen">
@@ -110,6 +114,46 @@ function FormularioLogin() {
               <ArrowRight className="h-4 w-4" />
             </Botao>
           </form>
+
+          <details className="mt-5 text-sm">
+            <summary className="cursor-pointer text-center font-medium text-azul-600 hover:text-azul-700">
+              Esqueci minha senha
+            </summary>
+            <form action={enviarRecuperacao} className="mt-4 space-y-3">
+              {estadoRecuperacao?.erro && (
+                <div
+                  className="rounded-lg bg-perigo-fundo border border-perigo/20 px-4 py-3 text-sm text-perigo"
+                  role="alert"
+                >
+                  {estadoRecuperacao.erro}
+                </div>
+              )}
+              {estadoRecuperacao?.sucesso && (
+                <div
+                  className="rounded-lg bg-sucesso-fundo border border-sucesso/20 px-4 py-3 text-sm text-sucesso"
+                  role="status"
+                >
+                  Se o e-mail estiver cadastrado, enviaremos um link para redefinir a senha.
+                </div>
+              )}
+              <Campo
+                rotulo="E-mail para recuperação"
+                name="email"
+                type="email"
+                obrigatorio
+                autoComplete="email"
+                placeholder="voce@empresa.com"
+              />
+              <Botao
+                type="submit"
+                variante="contorno"
+                carregando={recuperando}
+                className="w-full"
+              >
+                Enviar link de recuperação
+              </Botao>
+            </form>
+          </details>
 
           <p className="mt-8 text-center text-sm text-superficie-500">
             Ainda nao tem conta?{" "}
