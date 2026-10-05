@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   const code = String(dados.get("code") ?? "");
 
   if ((tokenHash && code) || (!tokenHash && !code)) {
-    return NextResponse.redirect(new URL("/erro", request.url));
+    return redirecionar(request, "/erro");
   }
 
   const destino = code
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     : tipo === "invite" || tipo === "recovery"
       ? "/definir-senha"
       : "/painel";
-  const resposta = NextResponse.redirect(new URL(destino, request.url));
+  const resposta = redirecionar(request, destino);
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
@@ -50,19 +50,23 @@ export async function POST(request: NextRequest) {
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) return NextResponse.redirect(new URL("/erro", request.url));
+    if (error) return redirecionar(request, "/erro");
     return resposta;
   }
 
   if (!tipoTokenValido(tipo)) {
-    return NextResponse.redirect(new URL("/erro", request.url));
+    return redirecionar(request, "/erro");
   }
 
   const { error } = await supabase.auth.verifyOtp({
     token_hash: tokenHash,
     type: tipo,
   });
-  if (error) return NextResponse.redirect(new URL("/erro", request.url));
+  if (error) return redirecionar(request, "/erro");
 
   return resposta;
+}
+
+function redirecionar(request: NextRequest, caminho: string) {
+  return NextResponse.redirect(new URL(caminho, request.url), 303);
 }
