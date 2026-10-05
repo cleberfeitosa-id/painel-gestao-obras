@@ -470,6 +470,14 @@ export function VisualizadorLevantamento({
   const [itemSelecionado, setItemSelecionado] = useState<ItemLevantamento | null>(
     null,
   );
+  const [editandoGeometriaId, setEditandoGeometriaId] = useState<string | null>(
+    null,
+  );
+  const edicaoGeometriaRef = useRef<{
+    itemId: string;
+    indicePonto: number;
+    itensIniciais: ItemLevantamento[];
+  } | null>(null);
   const [abaLateral, setAbaLateral] = useState<"catalogo" | "itens">("catalogo");
   const [itensLoteSelecionados, setItensLoteSelecionados] = useState<string[]>(
     [],
@@ -527,7 +535,90 @@ export function VisualizadorLevantamento({
     if (itemSelecionado?.id === id) {
       setItemSelecionado(null);
     }
+    if (editandoGeometriaId === id) {
+      setEditandoGeometriaId(null);
+    }
   }
+
+  function atualizarGeometriaItem(
+    itemId: string,
+    indicePonto: number,
+    ponto: PontoPdf,
+  ) {
+    setItens((itensAtuais) => {
+      return itensAtuais.map((item) => {
+      if (item.id !== itemId) return item;
+      const pontos = item.pontos.map((p, indice) =>
+        indice === indicePonto ? ponto : p,
+      );
+      const atualizado: ItemLevantamento = { ...item, pontos };
+
+      if (item.tipo === "distancia" || item.tipo === "tubulacao_cabo") {
+        atualizado.comprimentoReal = calcularDistanciaPontos(
+          pontos,
+          calibracaoPagina,
+        );
+      } else if (item.tipo === "area") {
+        const medidas = calcularAreaPoligono(pontos, calibracaoPagina);
+        atualizado.areaReal = medidas.area;
+        atualizado.perimetroReal = medidas.perimetro;
+      }
+
+      return atualizado;
+      });
+    });
+  }
+
+  function iniciarEdicaoGeometria(item: ItemLevantamento) {
+    setItemSelecionado(item);
+    setEditandoGeometriaId((atual) => (atual === item.id ? null : item.id));
+  }
+
+  function finalizarArrasteGeometria() {
+    const edicao = edicaoGeometriaRef.current;
+    if (!edicao) return;
+    edicaoGeometriaRef.current = null;
+    setHistoricoDesfazer((prev) => [
+      ...prev.slice(-30),
+      edicao.itensIniciais,
+    ]);
+    setHistoricoRefazer([]);
+  }
+
+  useEffect(() => {
+    function aoPressionarTecla(evento: KeyboardEvent) {
+      const alvo = evento.target as HTMLElement | null;
+      const elementoEditavel =
+        alvo?.tagName === "INPUT" ||
+        alvo?.tagName === "TEXTAREA" ||
+        alvo?.tagName === "SELECT" ||
+        alvo?.tagName === "BUTTON" ||
+        alvo?.tagName === "A" ||
+        alvo?.getAttribute("role") === "button" ||
+        alvo?.isContentEditable;
+
+      if (elementoEditavel || !itemSelecionado || !podeEditar) return;
+      if (evento.key === "Escape") {
+        setEditandoGeometriaId(null);
+        setItemSelecionado(null);
+      } else if (evento.key === "Enter" && editandoGeometriaId) {
+        setEditandoGeometriaId(null);
+      } else if (evento.key === "Delete" || evento.key === "Backspace") {
+        evento.preventDefault();
+        excluirItem(itemSelecionado.id);
+      }
+    }
+
+    window.addEventListener("keydown", aoPressionarTecla);
+    return () => window.removeEventListener("keydown", aoPressionarTecla);
+  }, [excluirItem, itemSelecionado, podeEditar, editandoGeometriaId, itens]);
+
+  useEffect(() => {
+    if (!itemSelecionado) return;
+    setItemSelecionado(
+      itens.find((item) => item.id === itemSelecionado.id) ?? null,
+    );
+  }, [itens]);
 
   function alternarSelecaoItem(id: string) {
     setItensLoteSelecionados((prev) =>
@@ -3328,7 +3419,7 @@ export function VisualizadorLevantamento({
                         );
                       })()}
 
-                      {itensVisiveis.map((item) => {
+                       {itensVisiveis.map((item) => {
                         if (
                           item.tipo === "distancia" ||
                           item.tipo === "tubulacao_cabo"
@@ -3570,10 +3661,96 @@ export function VisualizadorLevantamento({
                             </g>
                           );
                         }
-                        return null;
-                      })}
+                         return null;
+                       })}
 
-                      {pontosEmDesenho.length > 0 && (
+                       {editandoGeometriaId &&
+                         itensVisiveis
+                           .filter((item) => item.id === editandoGeometriaId)
+                           .flatMap((item) =>
+                             item.pontos.map((ponto, indicePonto) => {
+                               const pct = pdfParaPercentual(
+                                 ponto,
+                                 dimensoes.largura,
+                                 dimensoes.altura,
+                               );
+                               const pxX =
+                                 (pct.esquerda / 100) *
+                                 (dimensoes.largura * escala);
+                               const pxY =
+                                 (pct.topo / 100) *
+                                 (dimensoes.altura * escala);
+                               return (
+                                 <circle
+                                   key={`${item.id}-vertice-${indicePonto}`}
+                                   cx={pxX}
+                                   cy={pxY}
+                                   r="7"
+                                   fill="#ffffff"
+                                   stroke="#2563eb"
+                                   strokeWidth="2"
+                                   tabIndex={0}
+                                   role="slider"
+                                   aria-label={`Vértice ${indicePonto + 1} de ${item.nome}`}
+                                   aria-valuetext={`Coordenada ${ponto.x.toFixed(1)}, ${ponto.y.toFixed(1)}`}
+                                   className="cursor-move pointer-events-auto"
+                                   onPointerDown={(evento) => {
+                                     evento.stopPropagation();
+                                     edicaoGeometriaRef.current = {
+                                       itemId: item.id,
+                                       indicePonto,
+                                       itensIniciais: itens,
+                                     };
+                                     evento.currentTarget.setPointerCapture(
+                                       evento.pointerId,
+                                     );
+                                   }}
+                                   onPointerMove={(evento) => {
+                                     const edicao = edicaoGeometriaRef.current;
+                                     if (
+                                       !edicao ||
+                                       edicao.itemId !== item.id ||
+                                       edicao.indicePonto !== indicePonto ||
+                                       !overlayRef.current
+                                     ) {
+                                       return;
+                                     }
+                                     evento.stopPropagation();
+                                     const rect =
+                                       overlayRef.current.getBoundingClientRect();
+                                     const pontoAtual = telaParaPdf(
+                                       evento.clientX,
+                                       evento.clientY,
+                                       rect,
+                                       dimensoes.largura,
+                                       dimensoes.altura,
+                                     );
+                                     atualizarGeometriaItem(
+                                       item.id,
+                                       indicePonto,
+                                       pontoAtual,
+                                     );
+                                   }}
+                                   onPointerUp={(evento) => {
+                                     evento.stopPropagation();
+                                     try {
+                                       evento.currentTarget.releasePointerCapture(
+                                         evento.pointerId,
+                                       );
+                                     } catch {}
+                                     finalizarArrasteGeometria();
+                                   }}
+                                   onPointerCancel={(evento) => {
+                                     evento.stopPropagation();
+                                     finalizarArrasteGeometria();
+                                   }}
+                                   onLostPointerCapture={finalizarArrasteGeometria}
+                                 />
+                               );
+                             }),
+                           )}
+
+                       {pontosEmDesenho.length > 0 && (
                         <path
                           d={pontosEmDesenho
                             .map((p, idx) => {
@@ -3641,6 +3818,8 @@ export function VisualizadorLevantamento({
                               transform: "translate(-50%, -50%)",
                             }}
                             className={`absolute z-20 rounded-full flex items-center justify-center font-bold text-white shadow-md border cursor-pointer hover:scale-110 transition-transform ${
+                              editandoGeometriaId === item.id ? "pointer-events-none" : "pointer-events-auto"
+                            } ${
                               ativo
                                 ? "ring-4 ring-azul-400 border-white scale-110"
                                 : "border-white"
@@ -3675,7 +3854,9 @@ export function VisualizadorLevantamento({
                               top: `${pct.topo}%`,
                               transform: "translate(-50%, -50%)",
                             }}
-                            className={`absolute z-20 flex flex-col items-center cursor-pointer pointer-events-auto transition-transform ${
+                            className={`absolute z-20 flex flex-col items-center cursor-pointer transition-transform ${
+                              editandoGeometriaId === item.id ? "pointer-events-none" : "pointer-events-auto"
+                            } ${
                               ativo ? "scale-110" : ""
                             }`}
                             title={`Descida 3D: ${item.nome} (Δ=${item.comprimentoReal?.toFixed(2)}m)`}
@@ -3815,9 +3996,33 @@ export function VisualizadorLevantamento({
 
                   <div className="h-4 w-px bg-superficie-700 hidden sm:block shrink-0" />
 
-                  <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                     {(itemSelecionado.tipo === "tubulacao_cabo" || itemSelecionado.tipo === "descida_subida") && (
-                       <button
+                   <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                     <button
+                       type="button"
+                       onClick={() => iniciarEdicaoGeometria(itemSelecionado)}
+                       disabled={itemSelecionado.pontos.length === 0}
+                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-sm transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+                         editandoGeometriaId === itemSelecionado.id
+                           ? "bg-azul-700 text-white ring-2 ring-azul-300"
+                           : "bg-superficie-700 hover:bg-superficie-600 text-white"
+                       }`}
+                       title={
+                         editandoGeometriaId === itemSelecionado.id
+                           ? "Concluir edição da geometria"
+                           : "Mover os vértices deste elemento"
+                       }
+                       aria-pressed={editandoGeometriaId === itemSelecionado.id}
+                     >
+                       <Edit2 className="h-3.5 w-3.5" />
+                       <span>
+                         {editandoGeometriaId === itemSelecionado.id
+                           ? "Concluir edição"
+                           : "Editar geometria"}
+                       </span>
+                     </button>
+
+                      {(itemSelecionado.tipo === "tubulacao_cabo" || itemSelecionado.tipo === "descida_subida") && (
+                     <button
                         type="button"
                          onClick={() => {
                            if (itemSelecionado.tipo === "tubulacao_cabo") {
@@ -3864,10 +4069,10 @@ export function VisualizadorLevantamento({
                       type="button"
                       onClick={() => excluirItem(itemSelecionado.id)}
                       className="p-1.5 rounded-xl hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
-                      title="Excluir medição"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                       title="Excluir medição"
+                     >
+                       <Trash2 className="h-3.5 w-3.5" />
+                     </button>
                     <button
                       type="button"
                       onClick={() => setItemSelecionado(null)}
@@ -3876,8 +4081,14 @@ export function VisualizadorLevantamento({
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
-                  </div>
-                </div>
+                   </div>
+                   {editandoGeometriaId === itemSelecionado.id && (
+                     <div className="basis-full text-[11px] text-superficie-300">
+                       Arraste os vértices azuis para reposicionar o elemento. Pressione
+                       Enter ou clique em “Concluir edição” quando terminar.
+                     </div>
+                   )}
+                 </div>
               )}
             </div>
 
