@@ -69,28 +69,35 @@ export function NovaCompra({
       return;
     }
     setBuscando(true);
-    const res = await buscarInsumosCompra(obraId, termo);
-    if ("insumos" in res) {
-      setErro(null);
-      const linhas = (res.insumos ?? []).map((insumo) => ({
-        ...insumo,
-        quantidadeReal: null,
-        valorUnitarioReal: null,
-        alterado: false,
-      }));
-      setResultadosBusca(res.insumos ?? []);
-      setInsumos((prev) => {
-        const existentes = new Set(prev.map((item) => `${item.componenteId ?? "manual"}:${item.orcamentoItemId ?? item.nome}`));
-        const novos = linhas.filter((item) => !existentes.has(`${item.componenteId ?? "manual"}:${item.orcamentoItemId ?? item.nome}`));
-        return [...prev, ...novos];
-      });
-      setMostrarResultados(false);
-    } else {
+    try {
+      const res = await buscarInsumosCompra(obraId, termo);
+      if ("insumos" in res) {
+        setErro(null);
+        const linhas = (res.insumos ?? []).map((insumo) => ({
+          ...insumo,
+          quantidadeReal: null,
+          valorUnitarioReal: null,
+          alterado: false,
+        }));
+        setResultadosBusca(res.insumos ?? []);
+        setInsumos((prev) => {
+          const existentes = new Set(prev.map((item) => `${item.componenteId ?? "manual"}:${item.orcamentoItemId ?? item.nome}`));
+          const novos = linhas.filter((item) => !existentes.has(`${item.componenteId ?? "manual"}:${item.orcamentoItemId ?? item.nome}`));
+          return [...prev, ...novos];
+        });
+        setMostrarResultados(false);
+      } else {
+        setResultadosBusca([]);
+        setErro(res.erro ?? "Nao foi possivel buscar os insumos.");
+        setMostrarResultados(false);
+      }
+    } catch {
       setResultadosBusca([]);
-      setErro(res.erro ?? "Nao foi possivel buscar os insumos.");
-      setMostrarResultados(true);
+      setErro("Nao foi possivel buscar os insumos. Tente novamente.");
+      setMostrarResultados(false);
+    } finally {
+      setBuscando(false);
     }
-    setBuscando(false);
   }, [obraId]);
 
   const executarBusca = useCallback(() => {
@@ -285,6 +292,11 @@ export function NovaCompra({
                  {buscando ? "Buscando..." : "Buscar"}
                </Botao>
              </div>
+            {mostrarResultados && resultadosBusca.length === 0 && (
+               <p className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-borda bg-white px-3 py-2.5 text-sm text-superficie-600 shadow-lg">
+                 Nenhum insumo encontrado para &quot;{termoBusca.trim()}&quot;.
+               </p>
+             )}
             {mostrarResultados && resultadosBusca.length > 0 && (
               <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-borda bg-white shadow-lg">
                    <ul className="divide-y divide-superficie-100">
