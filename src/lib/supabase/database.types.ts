@@ -1766,6 +1766,10 @@ export type Database = {
            valor_comprado: number
            compras_anteriores: Json
          }[]
+       }
+      atualizar_compra_com_itens: {
+        Args: { p_compra_id: string; p_obra_id: string; p_fornecedor: string | null; p_documento: string | null; p_data_compra: string; p_observacao: string | null; p_itens: Json }
+        Returns: undefined
       }
       limpar_dados_importados_obra: {
         Args: { p_obra_id: string }
