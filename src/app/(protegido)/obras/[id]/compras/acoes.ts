@@ -41,6 +41,10 @@ const compraSchema = z.object({
   itens: z.array(itemSchema).min(1).max(500),
 });
 
+const atualizarCompraSchema = compraSchema.extend({
+  compraId: z.string().uuid(),
+});
+
 // --- Actions ---
 
 export type InsumoCompra = {
@@ -186,14 +190,60 @@ export async function criarCompra(dados: unknown): Promise<Resultado> {
   return {};
 }
 
+export async function atualizarCompra(dados: unknown): Promise<Resultado> {
+  const negado = await verificarFinanceiro();
+  if (negado) return negado;
+  const entrada = atualizarCompraSchema.safeParse(dados);
+  if (!entrada.success) return { erro: entrada.error.issues[0]?.message ?? "Dados invalidos." };
+
+  const supabase = await createClient();
+  const { data: compra } = await supabase
+    .from("compras")
+    .select("id")
+    .eq("id", entrada.data.compraId)
+    .eq("obra_id", entrada.data.obraId)
+    .single();
+  if (!compra) return { erro: "Compra nao encontrada nesta obra." };
+
+  for (const item of entrada.data.itens) {
+    if (item.orcamentoItemId) {
+      const { data: oi } = await supabase.from("orcamento_itens").select("id, orcamentos!inner(obra_id)").eq("id", item.orcamentoItemId).single();
+      if (!oi || oi.orcamentos?.obra_id !== entrada.data.obraId) return { erro: "Um item do orcamento nao pertence a esta obra." };
+    }
+    if (item.composicaoId) {
+      const { data: co } = await supabase.from("composicoes").select("id").eq("id", item.composicaoId).eq("obra_id", entrada.data.obraId).single();
+      if (!co) return { erro: "Uma composicao nao pertence a esta obra." };
+    }
+    if (item.composicaoComponenteId) {
+      const { data: componente } = await supabase.from("composicao_componentes").select("id, composicao_id, composicoes!composicao_componentes_composicao_id_fkey!inner(obra_id)").eq("id", item.composicaoComponenteId).single();
+      if (!componente || componente.composicoes?.obra_id !== entrada.data.obraId || (item.composicaoId && componente.composicao_id !== item.composicaoId)) return { erro: "Um componente de composicao nao pertence a esta obra." };
+    }
+  }
+
+  const { error } = await supabase.rpc("atualizar_compra_com_itens", {
+    p_compra_id: entrada.data.compraId,
+    p_obra_id: entrada.data.obraId,
+    p_fornecedor: entrada.data.fornecedor ?? null,
+    p_documento: entrada.data.documento ?? null,
+    p_data_compra: entrada.data.dataCompra,
+    p_observacao: entrada.data.observacao ?? null,
+    p_itens: entrada.data.itens,
+  });
+  if (error) return { erro: "Nao foi possivel atualizar a compra." };
+  revalidatePath(`/obras/${entrada.data.obraId}/compras`);
+  revalidatePath(`/obras/${entrada.data.obraId}/orcamentos/painel`);
+  return {};
+}
+
 export async function excluirCompra(compraId: string, obraId: string): Promise<Resultado> {
   const negado = await verificarFinanceiro();
   if (negado) return negado;
   const entrada = z.object({ compraId: z.string().uuid(), obraId: z.string().uuid() }).safeParse({ compraId, obraId });
   if (!entrada.success) return { erro: "Compra invalida." };
   const supabase = await createClient();
-  const { error } = await supabase.from("compras").delete().eq("id", compraId).eq("obra_id", obraId);
+  const { data: excluida, error } = await supabase.from("compras").delete().eq("id", compraId).eq("obra_id", obraId).select("id").maybeSingle();
   if (error) return { erro: "Nao foi possivel excluir a compra." };
+  if (!excluida) return { erro: "Compra nao encontrada nesta obra." };
   revalidatePath(`/obras/${obraId}/compras`);
   revalidatePath(`/obras/${obraId}/orcamentos/painel`);
   return {};
