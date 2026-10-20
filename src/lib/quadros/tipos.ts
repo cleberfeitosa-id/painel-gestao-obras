@@ -21,6 +21,42 @@ export type TipoComponenteQuadro =
   | "barramento_neutro"
   | string;
 
+export type ModoRotuloQuadro = "tag" | "descricao" | "circuito" | "tag_corrente" | "nenhum";
+export type SuperficieMontagemQuadro = "chapa" | "porta";
+export type GeometriaComponenteQuadro = "retangular" | "botoeira" | "seletora" | "sinalizadora";
+
+export interface ProtecaoAcrilicaQuadro {
+  id: string;
+  x: number;
+  y: number;
+  larguraMm: number;
+  alturaMm: number;
+  espessuraMm: number;
+  afastamentoMm: number;
+  transparencia: number;
+}
+
+export interface SuporteBarraRoscadaQuadro {
+  id: string;
+  x: number;
+  y: number;
+  diametroMm: number;
+  alturaMm: number;
+  comprimentoFixacaoMm: number;
+}
+
+export interface PortaQuadro {
+  habilitada: boolean;
+  ladoDobradiças: "esquerda" | "direita";
+  aberturaGraus: number;
+  espessuraMm: number;
+}
+
+export interface ApresentacaoQuadro {
+  modoRotulo: ModoRotuloQuadro;
+  mostrarDimensoes: boolean;
+}
+
 export interface DimensaoPadraoComponente {
   tipo: TipoComponenteQuadro;
   nome: string;
@@ -39,6 +75,12 @@ export interface DimensaoPadraoComponente {
   polos?: 1 | 2 | 3 | 4;
   curvaDisjuntor?: "B" | "C" | "D";
   personalizado?: boolean;
+  geometria?: GeometriaComponenteQuadro;
+  montagem?: SuperficieMontagemQuadro;
+  diametroFuroMm?: number;
+  diametroFaceMm?: number;
+  corLuz?: string;
+  posicoesSeletora?: number;
 }
 
 export const MODULO_DIN_MM = 17.5;
@@ -326,6 +368,159 @@ export const COMPONENTES_CATALOGO_PADRAO: Record<
     requerTrilhoDin: false,
     correntDefaultA: 100,
   },
+  botoeira_nf: {
+    tipo: "botoeira_nf",
+    nome: "Botoeira NF (Normalmente Fechada)",
+    categoria: "outros",
+    larguraMm: 22,
+    alturaMm: 22,
+    profundidadeMm: 45,
+    orientacao: "horizontal",
+    normaReferencia: "IEC 60947-5-1",
+    descricaoPadrao: "Botoeira de comando normalmente fechada para montagem em porta",
+    requerTrilhoDin: false,
+    geometria: "botoeira",
+    montagem: "porta",
+    diametroFuroMm: 22,
+    diametroFaceMm: 30,
+  },
+  botoeira_na: {
+    tipo: "botoeira_na",
+    nome: "Botoeira NA (Normalmente Aberta)",
+    categoria: "outros",
+    larguraMm: 22,
+    alturaMm: 22,
+    profundidadeMm: 45,
+    orientacao: "horizontal",
+    normaReferencia: "IEC 60947-5-1",
+    descricaoPadrao: "Botoeira de comando normalmente aberta para montagem em porta",
+    requerTrilhoDin: false,
+    geometria: "botoeira",
+    montagem: "porta",
+    diametroFuroMm: 22,
+    diametroFaceMm: 30,
+  },
+  chave_seletora_2_posicoes: {
+    tipo: "chave_seletora_2_posicoes",
+    nome: "Chave Seletora 2 Posições",
+    categoria: "outros",
+    larguraMm: 22,
+    alturaMm: 22,
+    profundidadeMm: 48,
+    orientacao: "horizontal",
+    normaReferencia: "IEC 60947-5-1",
+    descricaoPadrao: "Chave seletora mantida de 2 posições para montagem em porta",
+    requerTrilhoDin: false,
+    geometria: "seletora",
+    montagem: "porta",
+    diametroFuroMm: 22,
+    diametroFaceMm: 30,
+    posicoesSeletora: 2,
+  },
+  chave_seletora_3_posicoes: {
+    tipo: "chave_seletora_3_posicoes",
+    nome: "Chave Seletora 3 Posições",
+    categoria: "outros",
+    larguraMm: 22,
+    alturaMm: 22,
+    profundidadeMm: 48,
+    orientacao: "horizontal",
+    normaReferencia: "IEC 60947-5-1",
+    descricaoPadrao: "Chave seletora mantida de 3 posições para montagem em porta",
+    requerTrilhoDin: false,
+    geometria: "seletora",
+    montagem: "porta",
+    diametroFuroMm: 22,
+    diametroFaceMm: 30,
+    posicoesSeletora: 3,
+  },
+  contactora_forca: {
+    tipo: "contactora_forca",
+    nome: "Contactora de Força",
+    categoria: "outros",
+    larguraMm: 45,
+    alturaMm: 85,
+    profundidadeMm: 75,
+    orientacao: "vertical",
+    modulosDin: 3,
+    normaReferencia: "IEC 60947-4-1",
+    descricaoPadrao: "Contactora tripolar de força para acionamento de motores",
+    requerTrilhoDin: true,
+    correntDefaultA: 18,
+    polos: 3,
+  },
+  contactora_comando: {
+    tipo: "contactora_comando",
+    nome: "Contactora de Comando",
+    categoria: "outros",
+    larguraMm: 45,
+    alturaMm: 85,
+    profundidadeMm: 75,
+    orientacao: "vertical",
+    modulosDin: 3,
+    normaReferencia: "IEC 60947-4-1",
+    descricaoPadrao: "Contactora auxiliar para circuitos de comando",
+    requerTrilhoDin: true,
+    correntDefaultA: 6,
+  },
+  sinalizadora_led: {
+    tipo: "sinalizadora_led",
+    nome: "Sinalizadora LED",
+    categoria: "outros",
+    larguraMm: 22,
+    alturaMm: 22,
+    profundidadeMm: 38,
+    orientacao: "horizontal",
+    normaReferencia: "IEC 60947-5-1",
+    descricaoPadrao: "Sinalizadora luminosa LED para montagem em porta",
+    requerTrilhoDin: false,
+    geometria: "sinalizadora",
+    montagem: "porta",
+    diametroFuroMm: 22,
+    diametroFaceMm: 30,
+    corLuz: "#22c55e",
+  },
+  celula_fotoeletrica: {
+    tipo: "celula_fotoeletrica",
+    nome: "Célula Fotoelétrica",
+    categoria: "outros",
+    larguraMm: 35,
+    alturaMm: 55,
+    profundidadeMm: 35,
+    orientacao: "vertical",
+    normaReferencia: "NBR 5410",
+    descricaoPadrao: "Célula fotoelétrica para comando automático de iluminação",
+    requerTrilhoDin: false,
+  },
+  rele_termico_sobrecarga: {
+    tipo: "rele_termico_sobrecarga",
+    nome: "Relé Térmico de Sobrecarga",
+    categoria: "protecao",
+    larguraMm: 45,
+    alturaMm: 85,
+    profundidadeMm: 70,
+    orientacao: "vertical",
+    modulosDin: 3,
+    normaReferencia: "IEC 60947-4-1",
+    descricaoPadrao: "Relé térmico para proteção contra sobrecarga de motores",
+    requerTrilhoDin: true,
+    correntDefaultA: 10,
+  },
+  disjuntor_motor: {
+    tipo: "disjuntor_motor",
+    nome: "Disjuntor Motor",
+    categoria: "disjuntor",
+    larguraMm: 45,
+    alturaMm: 95,
+    profundidadeMm: 75,
+    orientacao: "vertical",
+    modulosDin: 3,
+    normaReferencia: "IEC 60947-4-1",
+    descricaoPadrao: "Disjuntor motor termomagnético ajustável",
+    requerTrilhoDin: true,
+    correntDefaultA: 10,
+    polos: 3,
+  },
 };
 
 export interface ElementoQuadro {
@@ -350,6 +545,14 @@ export interface ElementoQuadro {
   circuitoAssociadoId?: string;
   circuitoAssociadoNome?: string;
   corPersonalizada?: string;
+  montagem?: SuperficieMontagemQuadro;
+  geometria?: GeometriaComponenteQuadro;
+  portaX?: number;
+  portaY?: number;
+  diametroFuroMm?: number;
+  diametroFaceMm?: number;
+  corLuz?: string;
+  posicaoSeletora?: number;
 }
 
 export type UnidadeMedidaBarramento = "mm" | "pol";
@@ -443,6 +646,10 @@ export interface QuadroEletricoLayout {
   canaletas: CanaletaFiacao[];
   barramentos: BarramentoEspinhaPeixe[];
   barramentosNeutroTerra?: BarramentoNeutroTerra[];
+  protecoesAcrilicas?: ProtecaoAcrilicaQuadro[];
+  suportesBarrasRoscadas?: SuporteBarraRoscadaQuadro[];
+  porta?: PortaQuadro;
+  apresentacao?: ApresentacaoQuadro;
 }
 
 export interface CircuitoVinculado {

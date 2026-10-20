@@ -20,8 +20,10 @@ export function validarLayoutQuadro(
   const avisos: string[] = [];
 
   const { larguraMm, alturaMm } = areaUtil;
+  const elementos = layout.elementos ?? [];
+  const trilhos = layout.trilhos ?? [];
 
-  for (const el of layout.elementos) {
+  for (const el of elementos) {
     if (el.x < 0 || el.x + el.larguraMm > larguraMm) {
       erros.push(
         `Componente ${el.tag} (${el.descricao}) ultrapassa a largura da área útil (${el.x + el.larguraMm}mm > ${larguraMm}mm).`,
@@ -35,7 +37,7 @@ export function validarLayoutQuadro(
 
     const catalogo = COMPONENTES_CATALOGO_PADRAO[el.tipo];
     if (catalogo?.requerTrilhoDin && !el.trilhoId) {
-      const trilhoAbaixo = layout.trilhos.find(
+      const trilhoAbaixo = trilhos.find(
         (t) =>
           el.x >= t.x - 5 &&
           el.x + el.larguraMm <= t.x + t.larguraMm + 5 &&
@@ -50,10 +52,10 @@ export function validarLayoutQuadro(
     }
   }
 
-  for (let i = 0; i < layout.elementos.length; i++) {
-    for (let j = i + 1; j < layout.elementos.length; j++) {
-      const a = layout.elementos[i];
-      const b = layout.elementos[j];
+  for (let i = 0; i < elementos.length; i++) {
+    for (let j = i + 1; j < elementos.length; j++) {
+      const a = elementos[i];
+      const b = elementos[j];
 
       const sobrepoeX = a.x < b.x + b.larguraMm && a.x + a.larguraMm > b.x;
       const sobrepoeY = a.y < b.y + b.alturaMm && a.y + a.alturaMm > b.y;
@@ -63,6 +65,21 @@ export function validarLayoutQuadro(
           `Sobreposição física detectada entre ${a.tag} (${a.descricao}) e ${b.tag} (${b.descricao}).`,
         );
       }
+    }
+  }
+
+  for (const protecao of layout.protecoesAcrilicas ?? []) {
+    if (protecao.x < 0 || protecao.y < 0 || protecao.x + protecao.larguraMm > larguraMm || protecao.y + protecao.alturaMm > alturaMm) {
+      avisos.push(`Proteção acrílica ${protecao.id} está fora da área útil e deve ser reposicionada.`);
+    }
+  }
+
+  for (const suporte of layout.suportesBarrasRoscadas ?? []) {
+    if (suporte.x < 0 || suporte.x > larguraMm || suporte.y < 0 || suporte.y > alturaMm) {
+      avisos.push(`Suporte com barra roscada ${suporte.id} está fora da área útil.`);
+    }
+    if (suporte.alturaMm <= 0 || suporte.diametroMm <= 0) {
+      avisos.push(`Suporte com barra roscada ${suporte.id} possui dimensões inválidas.`);
     }
   }
 
@@ -86,6 +103,10 @@ export function gerarListaMateriaisQuadro(
   },
 ): ItemListaMateriais[] {
   const itens: ItemListaMateriais[] = [];
+  const elementos = layout.elementos ?? [];
+  const trilhos = layout.trilhos ?? [];
+  const canaletas = layout.canaletas ?? [];
+  const barramentos = layout.barramentos ?? [];
 
   itens.push({
     item: `Invólucro / Caixa ${quadroInfo.tipoQuadro}`,
@@ -101,7 +122,7 @@ export function gerarListaMateriaisQuadro(
     { elemento: ElementoQuadro; quantidade: number }
   >();
 
-  for (const el of layout.elementos) {
+  for (const el of elementos) {
     const chave = `${el.tipo}|${el.correnteNominal ?? ""}|${el.curvaDisjuntor ?? ""}|${el.polos ?? ""}|${el.larguraMm}`;
     const atual = agrupadoElementos.get(chave);
     if (atual) {
@@ -134,37 +155,37 @@ export function gerarListaMateriaisQuadro(
     });
   }
 
-  if (layout.trilhos.length > 0) {
-    const totalComprimentoMm = layout.trilhos.reduce(
+  if (trilhos.length > 0) {
+    const totalComprimentoMm = trilhos.reduce(
       (acc, t) => acc + t.larguraMm,
       0,
     );
     itens.push({
       item: "Trilho DIN 35mm (TS35 / EN 60715)",
       especificacao: `Trilhos perfurados metálicos (total: ${(totalComprimentoMm / 1000).toFixed(2)}m em ${layout.trilhos.length} barras)`,
-      quantidade: layout.trilhos.length,
+      quantidade: trilhos.length,
       unidade: "barras",
       norma: "EN 60715 / IEC 60715",
-      detalhes: `Comprimento individual: ${layout.trilhos.map((t) => `${t.larguraMm}mm`).join(", ")}`,
+      detalhes: `Comprimento individual: ${trilhos.map((t) => `${t.larguraMm}mm`).join(", ")}`,
     });
   }
 
-  if (layout.canaletas.length > 0) {
-    const totalComprimentoCanaletaMm = layout.canaletas.reduce(
+  if (canaletas.length > 0) {
+    const totalComprimentoCanaletaMm = canaletas.reduce(
       (acc, c) => acc + (c.orientacao === "horizontal" ? c.larguraMm : c.alturaMm),
       0,
     );
     itens.push({
       item: "Canaleta Perfurada PVC Antichama",
       especificacao: `Canaletas de fiação com tampa (total: ${(totalComprimentoCanaletaMm / 1000).toFixed(2)}m em ${layout.canaletas.length} trechos)`,
-      quantidade: layout.canaletas.length,
+      quantidade: canaletas.length,
       unidade: "trechos",
       norma: "IEC 61084 / NBR 15715",
-      detalhes: `${layout.canaletas.filter((c) => c.orientacao === "horizontal").length} horizontais, ${layout.canaletas.filter((c) => c.orientacao === "vertical").length} verticais`,
+      detalhes: `${canaletas.filter((c) => c.orientacao === "horizontal").length} horizontais, ${canaletas.filter((c) => c.orientacao === "vertical").length} verticais`,
     });
   }
 
-  for (const barramento of layout.barramentos) {
+  for (const barramento of barramentos) {
     const numBarras = barramento.tipo === "trifasico" ? 3 : barramento.tipo === "tetrapolar" ? 4 : barramento.tipo === "bifasico" ? 2 : 1;
     const larguraBarra = barramento.larguraBarraIndividualMm || Math.round(barramento.larguraTroncoMm / (numBarras || 1));
     const espacamento = barramento.espacamentoDerivacoesMm || 35;
@@ -189,6 +210,43 @@ export function gerarListaMateriaisQuadro(
       unidade: "un",
       norma: bar.tipo === "terra" ? "NBR 5410 / IEC 60947-7-2" : "NBR 5410 / IEC 60947-7-1",
       detalhes: `Tag ${bar.tag} (${circuitosConectados} circuitos conectados)`,
+    });
+  }
+
+  for (const protecao of layout.protecoesAcrilicas ?? []) {
+    itens.push({
+      item: "Proteção em acrílico transparente",
+      especificacao: `${protecao.larguraMm}x${protecao.alturaMm}mm, espessura ${protecao.espessuraMm}mm, afastamento ${protecao.afastamentoMm}mm`,
+      quantidade: 1,
+      unidade: "un",
+      norma: "NBR IEC 61439-1",
+      detalhes: `Transparência ${Math.round(protecao.transparencia * 100)}%`,
+    });
+  }
+
+  const gruposSuportes = new Map<string, { diametroMm: number; alturaMm: number; fixacaoMm: number; quantidade: number }>();
+  for (const suporte of layout.suportesBarrasRoscadas ?? []) {
+    const chave = `${suporte.diametroMm}|${suporte.alturaMm}|${suporte.comprimentoFixacaoMm}`;
+    const atual = gruposSuportes.get(chave);
+    if (atual) {
+      atual.quantidade += 1;
+    } else {
+      gruposSuportes.set(chave, {
+        diametroMm: suporte.diametroMm,
+        alturaMm: suporte.alturaMm,
+        fixacaoMm: suporte.comprimentoFixacaoMm,
+        quantidade: 1,
+      });
+    }
+  }
+  for (const grupo of gruposSuportes.values()) {
+    itens.push({
+      item: "Kit suporte com barra roscada para proteção acrílica",
+      especificacao: `${grupo.quantidade} suportes Ø ${grupo.diametroMm}mm, haste ${grupo.alturaMm}mm, fixação ${grupo.fixacaoMm}mm`,
+      quantidade: grupo.quantidade,
+      unidade: "un",
+      norma: "NBR IEC 61439-1",
+      detalhes: "Posicionamento individual conforme layout do quadro",
     });
   }
 
