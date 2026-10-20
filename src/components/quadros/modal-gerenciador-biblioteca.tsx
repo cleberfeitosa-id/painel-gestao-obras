@@ -71,6 +71,12 @@ function ModalGerenciadorConteudo({
   const [formCor, setFormCor] = useState("");
   const [formNorma, setFormNorma] = useState("NBR IEC 60898");
   const [formDescricao, setFormDescricao] = useState("");
+  const [formGeometria, setFormGeometria] = useState<DimensaoPadraoComponente["geometria"]>("retangular");
+  const [formMontagem, setFormMontagem] = useState<DimensaoPadraoComponente["montagem"]>("chapa");
+  const [formDiametroFuro, setFormDiametroFuro] = useState<number | undefined>();
+  const [formDiametroFace, setFormDiametroFace] = useState<number | undefined>();
+  const [formCorLuz, setFormCorLuz] = useState("");
+  const [formPosicoesSeletora, setFormPosicoesSeletora] = useState<number | undefined>();
 
   function iniciarCriacao() {
     setModoCriar(true);
@@ -92,6 +98,12 @@ function ModalGerenciadorConteudo({
     setFormCor("");
     setFormNorma("NBR IEC 60898");
     setFormDescricao("");
+    setFormGeometria("retangular");
+    setFormMontagem("chapa");
+    setFormDiametroFuro(undefined);
+    setFormDiametroFace(undefined);
+    setFormCorLuz("");
+    setFormPosicoesSeletora(undefined);
   }
 
   function iniciarEdicao(chave: string, item: DimensaoPadraoComponente) {
@@ -113,6 +125,12 @@ function ModalGerenciadorConteudo({
     setFormCor(item.corPersonalizada || "");
     setFormNorma(item.normaReferencia);
     setFormDescricao(item.descricaoPadrao);
+    setFormGeometria(item.geometria ?? "retangular");
+    setFormMontagem(item.montagem ?? "chapa");
+    setFormDiametroFuro(item.diametroFuroMm);
+    setFormDiametroFace(item.diametroFaceMm);
+    setFormCorLuz(item.corLuz ?? "");
+    setFormPosicoesSeletora(item.posicoesSeletora);
   }
 
   function cancelarForm() {
@@ -143,6 +161,12 @@ function ModalGerenciadorConteudo({
       normaReferencia: formNorma.trim() || "NBR 5410",
       descricaoPadrao: formDescricao.trim() || formNome.trim(),
       personalizado: true,
+      geometria: formGeometria,
+      montagem: formMontagem,
+      diametroFuroMm: formDiametroFuro,
+      diametroFaceMm: formDiametroFace,
+      corLuz: formCorLuz.trim() || undefined,
+      posicoesSeletora: formPosicoesSeletora,
     };
 
     const novoCatalogo = {
@@ -492,6 +516,50 @@ function ModalGerenciadorConteudo({
                     </select>
                   </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-superficie-700 font-medium mb-1">Geometria</label>
+                    <select
+                      value={formGeometria ?? "retangular"}
+                      onChange={(e) => setFormGeometria(e.target.value as DimensaoPadraoComponente["geometria"])}
+                      className="w-full rounded-lg border border-borda bg-white px-2 py-1 text-xs text-superficie-900"
+                    >
+                      <option value="retangular">Retangular</option>
+                      <option value="botoeira">Botoeira</option>
+                      <option value="seletora">Seletora</option>
+                      <option value="sinalizadora">Sinalizadora LED</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-superficie-700 font-medium mb-1">Montagem</label>
+                    <select
+                      value={formMontagem ?? "chapa"}
+                      onChange={(e) => setFormMontagem(e.target.value as DimensaoPadraoComponente["montagem"])}
+                      className="w-full rounded-lg border border-borda bg-white px-2 py-1 text-xs text-superficie-900"
+                    >
+                      <option value="chapa">Chapa interna</option>
+                      <option value="porta">Porta</option>
+                    </select>
+                  </div>
+                </div>
+
+                {formMontagem === "porta" && (
+                  <div className="grid grid-cols-2 gap-2 rounded-lg border border-borda bg-white p-2.5">
+                    <label className="text-[11px] text-superficie-700">Furo (mm)
+                      <input type="number" min={1} value={formDiametroFuro ?? ""} onChange={(e) => setFormDiametroFuro(Number(e.target.value) || undefined)} className="mt-1 w-full rounded border border-borda px-2 py-1 text-xs" />
+                    </label>
+                    <label className="text-[11px] text-superficie-700">Face (mm)
+                      <input type="number" min={1} value={formDiametroFace ?? ""} onChange={(e) => setFormDiametroFace(Number(e.target.value) || undefined)} className="mt-1 w-full rounded border border-borda px-2 py-1 text-xs" />
+                    </label>
+                    <label className="text-[11px] text-superficie-700">Cor da luz
+                      <input type="text" value={formCorLuz} onChange={(e) => setFormCorLuz(e.target.value)} placeholder="#22c55e" className="mt-1 w-full rounded border border-borda px-2 py-1 text-xs" />
+                    </label>
+                    <label className="text-[11px] text-superficie-700">Posições seletora
+                      <input type="number" min={2} max={3} value={formPosicoesSeletora ?? ""} onChange={(e) => setFormPosicoesSeletora(Number(e.target.value) || undefined)} className="mt-1 w-full rounded border border-borda px-2 py-1 text-xs" />
+                    </label>
+                  </div>
+                )}
 
                 {formRequerTrilho && (
                   <div>

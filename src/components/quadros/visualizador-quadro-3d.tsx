@@ -292,6 +292,46 @@ export function VisualizadorQuadro3D({
       scene.add(chapaMesh);
     }
 
+    const protecoes = layout.protecoesAcrilicas ?? [];
+    const suportes = layout.suportesBarrasRoscadas ?? [];
+    protecoes.forEach((protecao) => {
+      const pos = transformarCoords2DPara3D(protecao.x, protecao.y, protecao.larguraMm, protecao.alturaMm, protecao.afastamentoMm);
+      const material = new THREE.MeshPhysicalMaterial({
+        color: 0x7dd3fc,
+        transparent: true,
+        opacity: protecao.transparencia,
+        transmission: 0.65,
+        roughness: 0.08,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(protecao.larguraMm, protecao.alturaMm, Math.max(1, protecao.espessuraMm)), material);
+      mesh.position.copy(pos);
+      mesh.renderOrder = 20;
+      scene.add(mesh);
+    });
+
+    suportes.forEach((suporte) => {
+      const base = transformarCoords2DPara3D(suporte.x, suporte.y, 0, 0, 2);
+      const protecao = protecoes.find(
+        (item) =>
+          suporte.x >= item.x &&
+          suporte.x <= item.x + item.larguraMm &&
+          suporte.y >= item.y &&
+          suporte.y <= item.y + item.alturaMm,
+      );
+      const altura = Math.max(1, protecao?.afastamentoMm ?? suporte.alturaMm);
+      const material = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.25 });
+      const haste = new THREE.Mesh(new THREE.CylinderGeometry(suporte.diametroMm / 2, suporte.diametroMm / 2, altura, 12), material);
+      haste.rotation.x = Math.PI / 2;
+      haste.position.set(base.x, base.y, zChapa + altura / 2);
+      scene.add(haste);
+      const porca = new THREE.Mesh(new THREE.CylinderGeometry(Math.max(3, suporte.diametroMm), Math.max(3, suporte.diametroMm), 4, 8), material);
+      porca.rotation.x = Math.PI / 2;
+      porca.position.set(base.x, base.y, zChapa + altura);
+      scene.add(porca);
+    });
+
     function transformarCoords2DPara3D(x2d: number, y2d: number, w: number, h: number, zOffset = 0) {
       const x3d = -larguraMm / 2 + margemLateralMm + x2d + w / 2;
       const y3d = alturaMm / 2 - margemTopoMm - (y2d + h / 2);
@@ -533,6 +573,34 @@ export function VisualizadorQuadro3D({
         metalness: 0.15,
         roughness: 0.4,
       });
+
+      if (el.montagem === "porta" || cat?.montagem === "porta") {
+        const portaX = el.portaX ?? el.x + el.larguraMm / 2;
+        const portaY = el.portaY ?? el.y + el.alturaMm / 2;
+        const portaPos = transformarCoords2DPara3D(portaX - el.larguraMm / 2, portaY - el.alturaMm / 2, el.larguraMm, el.alturaMm, profundidadeMm + 8);
+        const face = el.diametroFaceMm ?? Math.max(el.larguraMm, el.alturaMm);
+        const materialFace = new THREE.MeshStandardMaterial({ color: el.corPersonalizada ? new THREE.Color(el.corPersonalizada) : 0x334155, metalness: 0.35, roughness: 0.3 });
+        if (el.geometria === "sinalizadora" || cat?.geometria === "sinalizadora") {
+          const led = new THREE.Mesh(new THREE.SphereGeometry(face / 2, 20, 12), new THREE.MeshStandardMaterial({ color: el.corLuz ?? cat?.corLuz ?? "#22c55e", emissive: el.corLuz ?? cat?.corLuz ?? "#22c55e", emissiveIntensity: 0.65 }));
+          led.position.copy(portaPos);
+          scene.add(led);
+        } else if (el.geometria === "seletora" || cat?.geometria === "seletora") {
+          const seletora = new THREE.Mesh(new THREE.CylinderGeometry(face / 2, face / 2, 8, 24), materialFace);
+          seletora.rotation.x = Math.PI / 2;
+          seletora.position.copy(portaPos);
+          scene.add(seletora);
+          const ponteiro = new THREE.Mesh(new THREE.BoxGeometry(3, face * 0.65, 4), new THREE.MeshStandardMaterial({ color: 0xf8fafc }));
+          ponteiro.position.set(portaPos.x, portaPos.y, portaPos.z + 5);
+          ponteiro.rotation.z = ((el.posicaoSeletora ?? 0) - 1) * Math.PI / Math.max(2, cat?.posicoesSeletora ?? 2);
+          scene.add(ponteiro);
+        } else {
+          const botao = new THREE.Mesh(new THREE.CylinderGeometry(face / 2, face / 2, 10, 24), materialFace);
+          botao.rotation.x = Math.PI / 2;
+          botao.position.copy(portaPos);
+          scene.add(botao);
+        }
+        return;
+      }
 
       const geoCorpo = new THREE.BoxGeometry(el.larguraMm, el.alturaMm, el.profundidadeMm);
       const meshCorpo = new THREE.Mesh(geoCorpo, matCorpo);

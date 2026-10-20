@@ -36,6 +36,9 @@ import {
   type TipoComponenteQuadro,
   type CircuitoVinculado,
   type DimensaoPadraoComponente,
+  type ModoRotuloQuadro,
+  type ProtecaoAcrilicaQuadro,
+  type SuporteBarraRoscadaQuadro,
   mmParaPolegadaTexto,
   polegadaParaMm,
 } from "@/lib/quadros/tipos";
@@ -105,11 +108,15 @@ export function EditorQuadro({
   const [layout, setLayout] = useState<QuadroEletricoLayout>(() => {
     const l = quadro.layout || {};
     return {
-      elementos: l.elementos || [],
-      trilhos: l.trilhos || [],
-      canaletas: l.canaletas || [],
-      barramentos: l.barramentos || [],
-      barramentosNeutroTerra: l.barramentosNeutroTerra || [],
+      ...l,
+      elementos: l.elementos ?? [],
+      trilhos: l.trilhos ?? [],
+      canaletas: l.canaletas ?? [],
+      barramentos: l.barramentos ?? [],
+      barramentosNeutroTerra: l.barramentosNeutroTerra ?? [],
+      protecoesAcrilicas: l.protecoesAcrilicas ?? [],
+      suportesBarrasRoscadas: l.suportesBarrasRoscadas ?? [],
+      apresentacao: l.apresentacao ?? { modoRotulo: "tag", mostrarDimensoes: true },
     };
   });
 
@@ -133,6 +140,9 @@ export function EditorQuadro({
   const [barramentoSelecionadoId, setBarramentoSelecionadoId] = useState<string | null>(null);
   const [barramentoNTSelecionadoId, setBarramentoNTSelecionadoId] = useState<string | null>(null);
   const [canaletaSelecionadaId, setCanaletaSelecionadaId] = useState<string | null>(null);
+  const [selecaoElementos, setSelecaoElementos] = useState<Set<string>>(new Set());
+  const [acrilicaSelecionadaId, setAcrilicaSelecionadaId] = useState<string | null>(null);
+  const [suporteSelecionadoId, setSuporteSelecionadoId] = useState<string | null>(null);
 
   const [modoVisualizacao, setModoVisualizacao] = useState<"2d" | "3d">("2d");
   const [zoom, setZoom] = useState(1);
@@ -148,9 +158,10 @@ export function EditorQuadro({
   const [categoriaAtiva, setCategoriaAtiva] = useState<string>("disjuntor");
 
   const [arrastandoId, setArrastandoId] = useState<string | null>(null);
-  const [arrastandoTipo, setArrastandoTipo] = useState<"elemento" | "trilho" | "canaleta" | "barramento" | "barramento_nt" | null>(null);
+  const [arrastandoTipo, setArrastandoTipo] = useState<"elemento" | "trilho" | "canaleta" | "barramento" | "barramento_nt" | "acrilica" | "suporte" | null>(null);
   const [offsetArrasto, setOffsetArrasto] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const startDragCoordRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const arrastoMoveuRef = useRef(false);
 
   const canvasRef = useRef<SVGSVGElement>(null);
 
@@ -165,6 +176,69 @@ export function EditorQuadro({
   const barramentoSelecionado = layout.barramentos.find((b) => b.id === barramentoSelecionadoId);
   const barramentoNTSelecionado = (layout.barramentosNeutroTerra || []).find((b) => b.id === barramentoNTSelecionadoId);
   const canaletaSelecionada = layout.canaletas.find((c) => c.id === canaletaSelecionadaId);
+  const acrilicaSelecionada = (layout.protecoesAcrilicas ?? []).find((p) => p.id === acrilicaSelecionadaId);
+  const suporteSelecionado = (layout.suportesBarrasRoscadas ?? []).find((s) => s.id === suporteSelecionadoId);
+
+  function rotuloElemento(el: ElementoQuadro): string {
+    const modo = layout.apresentacao?.modoRotulo ?? "tag";
+    const tag = el.tag.trim() || "SEM TAG";
+    const descricao = el.descricao.trim() || tag;
+    const circuito = el.circuitoAssociadoNome?.trim() || el.circuitoAssociadoId?.trim() || "SEM CIRCUITO";
+    const corrente = el.correnteNominal ? `${el.correnteNominal}A` : "In n/d";
+    if (modo === "descricao") return descricao;
+    if (modo === "circuito") return circuito;
+    if (modo === "tag_corrente") return `${tag} · ${corrente}`;
+    if (modo === "nenhum") return "";
+    return tag;
+  }
+
+  function limparSelecao() {
+    setElementoSelecionadoId(null);
+    setSelecaoElementos(new Set());
+    setTrilhoSelecionadoId(null);
+    setBarramentoSelecionadoId(null);
+    setBarramentoNTSelecionadoId(null);
+    setCanaletaSelecionadaId(null);
+    setAcrilicaSelecionadaId(null);
+    setSuporteSelecionadoId(null);
+  }
+
+  function adicionarAcrilica() {
+    const nova: ProtecaoAcrilicaQuadro = {
+      id: `acrilica-${Date.now().toString(36)}`,
+      x: 30,
+      y: 30,
+      larguraMm: Math.min(240, dimensoes.larguraUtilMm - 40),
+      alturaMm: Math.min(160, dimensoes.alturaUtilMm - 40),
+      espessuraMm: 4,
+      afastamentoMm: 25,
+      transparencia: 0.35,
+    };
+    setLayout((ant) => ({ ...ant, protecoesAcrilicas: [...(ant.protecoesAcrilicas ?? []), nova] }));
+    limparSelecao();
+    setAcrilicaSelecionadaId(nova.id);
+  }
+
+  function adicionarSuporte() {
+    const nova: SuporteBarraRoscadaQuadro = {
+      id: `suporte-${Date.now().toString(36)}`,
+      x: Math.max(10, dimensoes.larguraUtilMm / 2),
+      y: Math.max(10, dimensoes.alturaUtilMm / 2),
+      diametroMm: 8,
+      alturaMm: 25,
+      comprimentoFixacaoMm: 12,
+    };
+    setLayout((ant) => ({ ...ant, suportesBarrasRoscadas: [...(ant.suportesBarrasRoscadas ?? []), nova] }));
+    limparSelecao();
+    setSuporteSelecionadoId(nova.id);
+  }
+
+  function atualizarApresentacao(modoRotulo: ModoRotuloQuadro) {
+    setLayout((ant) => ({
+      ...ant,
+      apresentacao: { mostrarDimensoes: ant.apresentacao?.mostrarDimensoes ?? true, modoRotulo },
+    }));
+  }
 
   const adicionarComponente = useCallback(
     (tipo: TipoComponenteQuadro) => {
@@ -339,6 +413,14 @@ export function EditorQuadro({
         curvaDisjuntor: cat.categoria === "disjuntor" ? "C" : undefined,
         polos: (cat.polos ?? (cat.modulosDin as 1 | 2 | 3 | 4)) ?? 1,
         corPersonalizada: cat.corPersonalizada,
+        montagem: cat.montagem,
+        geometria: cat.geometria,
+        diametroFuroMm: cat.diametroFuroMm,
+        diametroFaceMm: cat.diametroFaceMm,
+        corLuz: cat.corLuz,
+        posicaoSeletora: cat.posicoesSeletora ? Math.floor((cat.posicoesSeletora - 1) / 2) : undefined,
+        portaX: cat.montagem === "porta" ? dimensoes.larguraUtilMm / 2 : undefined,
+        portaY: cat.montagem === "porta" ? dimensoes.alturaUtilMm / 2 : undefined,
       };
 
       setLayout((ant) => ({
@@ -550,7 +632,7 @@ export function EditorQuadro({
   function aoIniciarArrasto(
     e: React.MouseEvent,
     id: string,
-    tipo: "elemento" | "trilho" | "canaleta" | "barramento" | "barramento_nt",
+    tipo: "elemento" | "trilho" | "canaleta" | "barramento" | "barramento_nt" | "acrilica" | "suporte",
     itemX: number,
     itemY: number,
   ) {
@@ -558,13 +640,22 @@ export function EditorQuadro({
     e.stopPropagation();
 
     startDragCoordRef.current = { x: e.clientX, y: e.clientY };
+    arrastoMoveuRef.current = false;
 
     if (tipo === "elemento") {
+      const modificador = e.ctrlKey || e.metaKey || e.shiftKey;
+      const jaSelecionado = selecaoElementos.has(id);
+      const novaSelecao = modificador
+        ? new Set(jaSelecionado ? selecaoElementos : [...selecaoElementos, id])
+        : new Set([id]);
+      setSelecaoElementos(novaSelecao);
       setElementoSelecionadoId(id);
       setTrilhoSelecionadoId(null);
       setBarramentoSelecionadoId(null);
       setBarramentoNTSelecionadoId(null);
       setCanaletaSelecionadaId(null);
+      setAcrilicaSelecionadaId(null);
+      setSuporteSelecionadoId(null);
     } else if (tipo === "trilho") {
       setTrilhoSelecionadoId(id);
       setElementoSelecionadoId(null);
@@ -589,6 +680,16 @@ export function EditorQuadro({
       setTrilhoSelecionadoId(null);
       setBarramentoSelecionadoId(null);
       setCanaletaSelecionadaId(null);
+    } else if (tipo === "acrilica") {
+      setAcrilicaSelecionadaId(id);
+      setElementoSelecionadoId(null);
+      setSelecaoElementos(new Set());
+      setSuporteSelecionadoId(null);
+    } else if (tipo === "suporte") {
+      setSuporteSelecionadoId(id);
+      setElementoSelecionadoId(null);
+      setSelecaoElementos(new Set());
+      setAcrilicaSelecionadaId(null);
     }
 
     setArrastandoId(id);
@@ -623,6 +724,10 @@ export function EditorQuadro({
       novoY = Math.round(novoY / step) * step;
     }
 
+    if (Math.abs(e.clientX - startDragCoordRef.current.x) > 2 || Math.abs(e.clientY - startDragCoordRef.current.y) > 2) {
+      arrastoMoveuRef.current = true;
+    }
+
     if (arrastandoTipo === "elemento") {
       const el = layout.elementos.find((item) => item.id === arrastandoId);
       if (!el) return;
@@ -643,11 +748,13 @@ export function EditorQuadro({
         }
       }
 
+      const deltaX = novoX - el.x;
+      const deltaY = novoY - el.y;
       setLayout((ant) => ({
         ...ant,
         elementos: ant.elementos.map((item) =>
-          item.id === arrastandoId
-            ? { ...item, x: novoX, y: novoY, trilhoId: trilhoEncontrado }
+          selecaoElementos.has(item.id)
+            ? { ...item, x: Math.max(0, Math.min(dimensoes.larguraUtilMm - item.larguraMm, item.x + deltaX)), y: Math.max(0, Math.min(dimensoes.alturaUtilMm - item.alturaMm, item.y + deltaY)), trilhoId: item.id === arrastandoId ? trilhoEncontrado : item.trilhoId }
             : item,
         ),
       }));
@@ -707,6 +814,18 @@ export function EditorQuadro({
           item.id === arrastandoId ? { ...item, x: novoX, y: novoY } : item,
         ),
       }));
+    } else if (arrastandoTipo === "acrilica") {
+      const p = (layout.protecoesAcrilicas ?? []).find((item) => item.id === arrastandoId);
+      if (!p) return;
+      novoX = Math.max(0, Math.min(dimensoes.larguraUtilMm - p.larguraMm, novoX));
+      novoY = Math.max(0, Math.min(dimensoes.alturaUtilMm - p.alturaMm, novoY));
+      setLayout((ant) => ({ ...ant, protecoesAcrilicas: (ant.protecoesAcrilicas ?? []).map((item) => item.id === p.id ? { ...item, x: novoX, y: novoY } : item) }));
+    } else if (arrastandoTipo === "suporte") {
+      const s = (layout.suportesBarrasRoscadas ?? []).find((item) => item.id === arrastandoId);
+      if (!s) return;
+      novoX = Math.max(0, Math.min(dimensoes.larguraUtilMm, novoX));
+      novoY = Math.max(0, Math.min(dimensoes.alturaUtilMm, novoY));
+      setLayout((ant) => ({ ...ant, suportesBarrasRoscadas: (ant.suportesBarrasRoscadas ?? []).map((item) => item.id === s.id ? { ...item, x: novoX, y: novoY } : item) }));
     }
   }
 
@@ -782,7 +901,7 @@ export function EditorQuadro({
   const margemDireitaEfetiva = dimensoes.margemDireitaMm ?? dimensoes.margemLateralMm;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] overflow-hidden bg-superficie-100">
+    <div className="quadros-editor flex flex-col h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] overflow-hidden bg-superficie-100">
       <div className="flex flex-wrap items-center justify-between px-4 py-2.5 bg-white border-b border-borda shrink-0 gap-2">
         <div className="flex items-center gap-3 min-w-0">
           <Link
@@ -906,6 +1025,32 @@ export function EditorQuadro({
             <span className="hidden sm:inline">Dimensões & Margens</span>
           </Botao>
 
+          {modoVisualizacao === "2d" && (
+            <div className="flex items-center gap-1.5 rounded-lg border border-borda bg-white px-2 py-1 text-xs">
+              <label htmlFor="modo-rotulo" className="font-medium text-superficie-600">Rótulos</label>
+              <select
+                id="modo-rotulo"
+                value={layout.apresentacao?.modoRotulo ?? "tag"}
+                onChange={(e) => atualizarApresentacao(e.target.value as ModoRotuloQuadro)}
+                disabled={!podeEditar}
+                className="rounded border border-borda bg-white px-1.5 py-1 text-xs"
+              >
+                <option value="tag">Tag</option>
+                <option value="descricao">Descrição</option>
+                <option value="circuito">Circuito</option>
+                <option value="tag_corrente">Tag + corrente</option>
+                <option value="nenhum">Nenhum</option>
+              </select>
+            </div>
+          )}
+
+          {modoVisualizacao === "2d" && (
+            <Botao type="button" variante="contorno" tamanho="sm" onClick={() => window.print()} title="Imprimir/exportar vista 2D em PDF">
+              <FileSpreadsheet className="h-4 w-4" />
+              <span className="hidden sm:inline">PDF 2D</span>
+            </Botao>
+          )}
+
           <Botao
             type="button"
             variante="contorno"
@@ -998,7 +1143,7 @@ export function EditorQuadro({
                 </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-1 p-1 bg-superficie-100 rounded-lg text-xs">
+              <div className="grid grid-cols-4 gap-1 p-1 bg-superficie-100 rounded-lg text-xs">
                 <button
                   type="button"
                   onClick={() => setCategoriaAtiva("disjuntor")}
@@ -1032,6 +1177,17 @@ export function EditorQuadro({
                 >
                   Trilhos/Barra
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoriaAtiva("comando")}
+                  className={`py-1 rounded font-medium transition-colors ${
+                    categoriaAtiva === "comando"
+                      ? "bg-white text-azul-700 shadow-sm"
+                      : "text-superficie-600 hover:text-superficie-900"
+                  }`}
+                >
+                  Comando
+                </button>
               </div>
             </div>
 
@@ -1040,7 +1196,8 @@ export function EditorQuadro({
                 .filter(([, cat]) => {
                   if (categoriaAtiva === "disjuntor") return cat.categoria === "disjuntor";
                   if (categoriaAtiva === "protecao") return cat.categoria === "protecao" || cat.categoria === "conexao";
-                  return cat.categoria === "estrutura" || cat.categoria === "barramento" || cat.categoria === "outros";
+                   if (categoriaAtiva === "comando") return cat.categoria === "outros";
+                   return cat.categoria === "estrutura" || cat.categoria === "barramento";
                 })
                 .map(([chave, cat]) => (
                   <div
@@ -1090,8 +1247,9 @@ export function EditorQuadro({
             onMouseUp={aoFinalizarArrasto}
             onMouseLeave={aoFinalizarArrasto}
           >
+            <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } body * { visibility: hidden; } .quadros-editor .quadros-printable, .quadros-editor .quadros-printable * { visibility: visible; } .quadros-editor .quadros-printable { position: absolute; inset: 0; width: 100% !important; height: auto !important; transform: none !important; box-shadow: none !important; border: 1px solid #334155; } .quadros-editor .quadros-print-controls { display: none !important; } }`}</style>
             <div
-              className="transition-transform origin-center shadow-2xl rounded-xl bg-slate-300 border-4 border-slate-400 relative flex flex-col justify-start"
+              className="quadros-printable transition-transform origin-center shadow-2xl rounded-xl bg-slate-300 border-4 border-slate-400 relative flex flex-col justify-start"
               style={{
                 transform: `scale(${zoom})`,
                 width: `${dimensoes.larguraMm}px`,
@@ -1172,6 +1330,12 @@ export function EditorQuadro({
                     }
                   }}
                 >
+                  {(layout.suportesBarrasRoscadas ?? []).map((s) => (
+                    <g key={s.id} onMouseDown={(e) => aoIniciarArrasto(e, s.id, "suporte", s.x, s.y)} className="cursor-move">
+                      <circle cx={s.x} cy={s.y} r={Math.max(3, s.diametroMm / 2)} fill="#475569" stroke={s.id === suporteSelecionadoId ? "#2563eb" : "#0f172a"} strokeWidth={s.id === suporteSelecionadoId ? 3 : 1} />
+                      <line x1={s.x} y1={s.y - 12} x2={s.x} y2={s.y + 12} stroke="#64748b" strokeWidth={1.5} />
+                    </g>
+                  ))}
                   {layout.trilhos.map((t) => {
                     const selecionado = t.id === trilhoSelecionadoId;
                     const isVertical = t.orientacao === "vertical" || t.alturaMm > t.larguraMm;
@@ -1553,7 +1717,7 @@ export function EditorQuadro({
                   })}
 
                   {layout.elementos.map((el) => {
-                    const selecionado = el.id === elementoSelecionadoId;
+                    const selecionado = selecaoElementos.has(el.id) || el.id === elementoSelecionadoId;
                     const cat = catalogo[el.tipo] || COMPONENTES_CATALOGO_PADRAO[el.tipo];
 
                     let corFundo = "#ffffff";
@@ -1581,6 +1745,14 @@ export function EditorQuadro({
                         onMouseDown={(e) => aoIniciarArrasto(e, el.id, "elemento", el.x, el.y)}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if ((e.ctrlKey || e.metaKey || e.shiftKey) && !arrastoMoveuRef.current) {
+                            setSelecaoElementos((atual) => {
+                              const proxima = new Set(atual);
+                              if (proxima.has(el.id)) proxima.delete(el.id);
+                              else proxima.add(el.id);
+                              return proxima;
+                            });
+                          }
                           setElementoSelecionadoId(el.id);
                           setTrilhoSelecionadoId(null);
                           setBarramentoSelecionadoId(null);
@@ -1600,6 +1772,19 @@ export function EditorQuadro({
                           strokeWidth={selecionado ? 2.5 : 1}
                           filter="drop-shadow(0 2px 3px rgba(0,0,0,0.1))"
                         />
+
+                        {(el.montagem === "porta" || cat?.montagem === "porta") && (el.geometria === "botoeira" || cat?.geometria === "botoeira") && (
+                          <circle cx={el.x + el.larguraMm / 2} cy={el.y + el.alturaMm / 2} r={Math.max(5, (el.diametroFaceMm ?? 18) / 2)} fill={el.tipo === "botoeira_na" ? "#dc2626" : "#16a34a"} stroke="#172033" strokeWidth={1.5} />
+                        )}
+                        {(el.montagem === "porta" || cat?.montagem === "porta") && (el.geometria === "seletora" || cat?.geometria === "seletora") && (
+                          <g>
+                            <circle cx={el.x + el.larguraMm / 2} cy={el.y + el.alturaMm / 2} r={Math.max(6, (el.diametroFaceMm ?? 18) / 2)} fill="#475569" stroke="#172033" strokeWidth={1.5} />
+                            <line x1={el.x + el.larguraMm / 2} y1={el.y + el.alturaMm / 2} x2={el.x + el.larguraMm / 2} y2={el.y + 4} stroke="#f8fafc" strokeWidth={2} transform={`rotate(${(el.posicaoSeletora ?? 0) * 25} ${el.x + el.larguraMm / 2} ${el.y + el.alturaMm / 2})`} />
+                          </g>
+                        )}
+                        {(el.montagem === "porta" || cat?.montagem === "porta") && (el.geometria === "sinalizadora" || cat?.geometria === "sinalizadora") && (
+                          <circle cx={el.x + el.larguraMm / 2} cy={el.y + el.alturaMm / 2} r={Math.max(5, (el.diametroFaceMm ?? 18) / 2)} fill={el.corLuz ?? cat?.corLuz ?? "#22c55e"} stroke="#172033" strokeWidth={1.5} />
+                        )}
 
                         {cat?.categoria === "disjuntor" && (
                           <rect
@@ -1631,7 +1816,7 @@ export function EditorQuadro({
                           fill={el.tipo.includes("caixa_moldada") ? "#ffffff" : "#0f172a"}
                           textAnchor="middle"
                         >
-                          {el.tag}
+                          {rotuloElemento(el)}
                         </text>
 
                         {el.correnteNominal && (
@@ -1662,12 +1847,22 @@ export function EditorQuadro({
                       </g>
                     );
                   })}
-                </svg>
+                  {(layout.protecoesAcrilicas ?? []).map((p) => (
+                    <g key={p.id} onMouseDown={(e) => aoIniciarArrasto(e, p.id, "acrilica", p.x, p.y)} className="cursor-move">
+                      <rect x={p.x} y={p.y} width={p.larguraMm} height={p.alturaMm} fill="#bae6fd" fillOpacity={p.transparencia} stroke={p.id === acrilicaSelecionadaId ? "#2563eb" : "#0284c7"} strokeWidth={p.id === acrilicaSelecionadaId ? 3 : 1.5} strokeDasharray="6 3" />
+                      <text x={p.x + 4} y={p.y + 12} fontSize="8" fill="#0369a1">ACRÍLICO {p.espessuraMm}mm</text>
+                    </g>
+                  ))}
+                  </svg>
               </div>
             </div>
           </div>
 
           <div className="w-72 sm:w-80 bg-white border-l border-borda flex flex-col shrink-0 overflow-y-auto p-4 space-y-4">
+            <div className="quadros-print-controls flex gap-2 border-b border-borda pb-3">
+              <button type="button" onClick={adicionarAcrilica} disabled={!podeEditar} className="flex-1 rounded-lg border border-azul-200 bg-azul-50 px-2 py-1.5 text-[11px] font-semibold text-azul-700 disabled:opacity-50">+ Acrílico</button>
+              <button type="button" onClick={adicionarSuporte} disabled={!podeEditar} className="flex-1 rounded-lg border border-superficie-300 bg-superficie-50 px-2 py-1.5 text-[11px] font-semibold text-superficie-700 disabled:opacity-50">+ Suporte</button>
+            </div>
             {elementoSelecionado ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between border-b border-borda pb-2">
@@ -1900,6 +2095,21 @@ export function EditorQuadro({
                     </select>
                   </div>
                 </div>
+              </div>
+            ) : acrilicaSelecionada ? (
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center justify-between border-b border-borda pb-2"><h3 className="font-bold uppercase tracking-wider text-superficie-500">Proteção acrílica</h3><button type="button" onClick={() => { setLayout((ant) => ({ ...ant, protecoesAcrilicas: (ant.protecoesAcrilicas ?? []).filter((p) => p.id !== acrilicaSelecionada.id) })); setAcrilicaSelecionadaId(null); }} className="text-perigo"><Trash2 className="h-4 w-4" /></button></div>
+                <label className="block">Largura (mm)<input type="number" value={acrilicaSelecionada.larguraMm} onChange={(e) => setLayout((ant) => ({ ...ant, protecoesAcrilicas: (ant.protecoesAcrilicas ?? []).map((p) => p.id === acrilicaSelecionada.id ? { ...p, larguraMm: Number(e.target.value) || 1 } : p) }))} className="mt-1 w-full rounded border border-borda px-2 py-1" /></label>
+                <label className="block">Altura (mm)<input type="number" value={acrilicaSelecionada.alturaMm} onChange={(e) => setLayout((ant) => ({ ...ant, protecoesAcrilicas: (ant.protecoesAcrilicas ?? []).map((p) => p.id === acrilicaSelecionada.id ? { ...p, alturaMm: Number(e.target.value) || 1 } : p) }))} className="mt-1 w-full rounded border border-borda px-2 py-1" /></label>
+                <label className="block">Transparência<input type="range" min="0.1" max="0.8" step="0.05" value={acrilicaSelecionada.transparencia} onChange={(e) => setLayout((ant) => ({ ...ant, protecoesAcrilicas: (ant.protecoesAcrilicas ?? []).map((p) => p.id === acrilicaSelecionada.id ? { ...p, transparencia: Number(e.target.value) } : p) }))} className="mt-1 w-full" /></label>
+                <p className="text-[11px] text-superficie-500">Arraste o retângulo para posicionar a proteção sobre os componentes.</p>
+              </div>
+            ) : suporteSelecionado ? (
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center justify-between border-b border-borda pb-2"><h3 className="font-bold uppercase tracking-wider text-superficie-500">Suporte com barra roscada</h3><button type="button" onClick={() => { setLayout((ant) => ({ ...ant, suportesBarrasRoscadas: (ant.suportesBarrasRoscadas ?? []).filter((s) => s.id !== suporteSelecionado.id) })); setSuporteSelecionadoId(null); }} className="text-perigo"><Trash2 className="h-4 w-4" /></button></div>
+                <label className="block">Diâmetro (mm)<input type="number" value={suporteSelecionado.diametroMm} onChange={(e) => setLayout((ant) => ({ ...ant, suportesBarrasRoscadas: (ant.suportesBarrasRoscadas ?? []).map((s) => s.id === suporteSelecionado.id ? { ...s, diametroMm: Number(e.target.value) || 1 } : s) }))} className="mt-1 w-full rounded border border-borda px-2 py-1" /></label>
+                <label className="block">Altura até acrílico (mm)<input type="number" value={suporteSelecionado.alturaMm} onChange={(e) => setLayout((ant) => ({ ...ant, suportesBarrasRoscadas: (ant.suportesBarrasRoscadas ?? []).map((s) => s.id === suporteSelecionado.id ? { ...s, alturaMm: Number(e.target.value) || 1 } : s) }))} className="mt-1 w-full rounded border border-borda px-2 py-1" /></label>
+                <p className="text-[11px] text-superficie-500">Cada suporte é independente: adicione, arraste, edite ou remova conforme necessário.</p>
               </div>
             ) : trilhoSelecionado ? (
               <div className="space-y-4">
