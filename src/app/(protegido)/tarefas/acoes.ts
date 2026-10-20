@@ -480,6 +480,7 @@ const esquemaLocalizacaoLote = z
     comprimento: z.coerce.number().nullable().optional(),
     area: z.coerce.number().nullable().optional(),
     quantidade: z.coerce.number().nullable().optional(),
+    titulo_sugerido: z.string().trim().max(200).optional(),
   })
   .superRefine((dados, ctx) => {
     if (dados.localizacao_tipo === "ponto") {
@@ -525,6 +526,7 @@ const esquemaCriarLote = z
     exige_foto: z.boolean().optional(),
     exige_video: z.boolean().optional(),
     exige_arquivo: z.boolean().optional(),
+    usar_titulos_originais: z.boolean().optional(),
     lote_id: z.string().uuid().optional(),
     localizacoes: z.preprocess(
       (val) => {
@@ -604,6 +606,7 @@ export async function criarTarefasEmLote(
     exige_foto: formData.get("exige_foto") === "on",
     exige_video: formData.get("exige_video") === "on",
     exige_arquivo: formData.get("exige_arquivo") === "on",
+    usar_titulos_originais: formData.get("usar_titulos_originais") === "on",
     lote_id: formData.get("lote_id"),
     localizacoes: formData.get("localizacoes"),
     medicoes,
@@ -632,7 +635,9 @@ export async function criarTarefasEmLote(
     }
 
     return {
-      titulo: dados.titulo,
+      titulo: dados.usar_titulos_originais
+        ? (localizacao.titulo_sugerido || dados.titulo)
+        : dados.titulo,
       descricao: descFinal,
       obra_id: dados.obra_id,
       responsavel_id: dados.responsavel_id || null,
