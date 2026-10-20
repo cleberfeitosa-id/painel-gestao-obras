@@ -78,7 +78,16 @@ export function ModalEditarCircuitosLote({
     if (primeiroMeta?.fases && primeiroMeta.fases.length > 0) {
       return primeiroMeta.fases;
     }
-    return [{ nome: "R", cor: "#FFFFFF", quantidade: 1 }];
+    const quantidadeFases = primeiroMeta?.condutores?.find(
+      (condutor) => condutor.tipo === "fase",
+    )?.quantidade ?? 1;
+    const nomes = ["R", "S", "T"];
+    const cores = ["#FFFFFF", "#000000", "#EF4444"];
+    return Array.from({ length: Math.max(1, Math.min(quantidadeFases, 3)) }, (_, indice) => ({
+      nome: nomes[indice] ?? `F${indice + 1}`,
+      cor: cores[indice] ?? "#64748b",
+      quantidade: 1,
+    }));
   });
   const [qtdNeutro, setQtdNeutro] = useState(
     primeiroMeta?.condutores?.find((c) => c.tipo === "neutro")?.quantidade ?? 1,

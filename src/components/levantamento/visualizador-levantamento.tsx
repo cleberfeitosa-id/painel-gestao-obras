@@ -387,6 +387,7 @@ export function VisualizadorLevantamento({
   const [loteDescidasPontos, setLoteDescidasPontos] = useState<PontoPdf[]>([]);
 
   const [modalCaboAberto, setModalCaboAberto] = useState(false);
+  const [chaveModalCabo, setChaveModalCabo] = useState(0);
   const [itemCaboEmEdicao, setItemCaboEmEdicao] = useState<ItemLevantamento | null>(null);
   const [modalEditarLoteCircuitosAberto, setModalEditarLoteCircuitosAberto] = useState(false);
   const [modalEditarLoteDescidasAberto, setModalEditarLoteDescidasAberto] = useState(false);
@@ -847,6 +848,7 @@ export function VisualizadorLevantamento({
       ponto_y?: number | null;
       localizacao_detalhe?: Record<string, unknown>;
       levantamento_id?: string | null;
+      titulo_sugerido?: string;
       descricao_especifica?: string;
       comprimento?: number;
       area?: number;
@@ -925,6 +927,7 @@ export function VisualizadorLevantamento({
         ponto_y: p0.y,
         localizacao_detalhe: detalhe,
         levantamento_id: idLevantamentoAtual ?? null,
+        titulo_sugerido: `Executar ${primeiro.nome}`,
         descricao_especifica: descSugerida,
         comprimento: totalComprimento,
         quantidade: itensCirc.length,
@@ -941,6 +944,7 @@ export function VisualizadorLevantamento({
         ponto_y: dados.ponto_y,
         localizacao_detalhe: dados.detalhe,
         levantamento_id: idLevantamentoAtual ?? null,
+        titulo_sugerido: `Executar ${it.nome}`,
         descricao_especifica: dados.descricao,
         comprimento: it.comprimentoReal,
         area: it.areaReal,
@@ -1159,6 +1163,11 @@ export function VisualizadorLevantamento({
 
   function mostrarTodosOsGrupos() {
     setGruposItensOcultos([]);
+  }
+
+  function ocultarTodosOsGrupos() {
+    if (itemSelecionado) setItemSelecionado(null);
+    setGruposItensOcultos(gruposItens.map((grupo) => grupo.chave));
   }
 
   const dadosDoLevantamentoAtual = useCallback(() => ({
@@ -2196,15 +2205,18 @@ export function VisualizadorLevantamento({
                 {itensVisiveis.length}/{itens.length}
               </span>
             </button>
-            {gruposItensOcultos.length > 0 && (
-              <button
-                type="button"
-                onClick={mostrarTodosOsGrupos}
-                className="text-[11px] font-semibold text-azul-700 hover:underline"
-              >
-                Mostrar todos
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {gruposItensOcultos.length > 0 && (
+                <button type="button" onClick={mostrarTodosOsGrupos} className="text-[11px] font-semibold text-azul-700 hover:underline">
+                  Mostrar todos
+                </button>
+              )}
+              {gruposItens.length > 0 && (
+                <button type="button" onClick={ocultarTodosOsGrupos} className="text-[11px] font-semibold text-superficie-600 hover:text-superficie-900 hover:underline">
+                  Ocultar todos
+                </button>
+              )}
+            </div>
           </div>
           {filtroItensAberto && (
             <div className="mt-2 flex flex-wrap gap-2 rounded-xl border border-superficie-200 bg-superficie-50 p-2.5">
@@ -2504,6 +2516,7 @@ export function VisualizadorLevantamento({
                       type="button"
                       onClick={() => {
                         setItemCaboEmEdicao(null);
+                        setChaveModalCabo((atual) => atual + 1);
                         setModalCaboAberto(true);
                       }}
                       className="text-[11px] font-semibold text-amber-700 hover:underline cursor-pointer"
@@ -4403,6 +4416,7 @@ export function VisualizadorLevantamento({
       />
 
       <ModalConfigCabo
+        key={itemCaboEmEdicao?.id ?? `novo-circuito-${chaveModalCabo}`}
         aberto={modalCaboAberto}
         niveis={niveis}
         dadosIniciais={itemCaboEmEdicao?.metadadosCabo || metadadosCaboAtivo}
