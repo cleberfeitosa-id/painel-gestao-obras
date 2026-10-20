@@ -40,6 +40,7 @@ const esquemaLocalizacao = z.object({
   comprimento: z.number().nullable().optional(),
   area: z.number().nullable().optional(),
   quantidade: z.number().nullable().optional(),
+  titulo_sugerido: z.string().trim().max(200).optional(),
 });
 
 const esquemaParams = z.object({
@@ -126,6 +127,7 @@ export default async function NovaEmLotePage({
           comprimento: loc.comprimento ?? undefined,
           area: loc.area ?? undefined,
           quantidade: loc.quantidade ?? undefined,
+          titulo_sugerido: loc.titulo_sugerido ?? undefined,
         }));
       }
       obraEncontrada = opcoes.obras.find((o) => o.id === rascunho.obra_id);

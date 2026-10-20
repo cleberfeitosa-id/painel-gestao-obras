@@ -56,6 +56,7 @@ export type LocalizacaoLote = {
   comprimento?: number;
   area?: number;
   quantidade?: number;
+  titulo_sugerido?: string;
 };
 
 interface FormularioTarefaProps {
@@ -191,6 +192,7 @@ export function FormularioTarefa({
   const [criandoTag, setCriandoTag] = useState(false);
 
   const [medicoesLista, setMedicoesLista] = useState<MedicaoItem[]>(medicoes ?? []);
+  const [usarTitulosOriginais, setUsarTitulosOriginais] = useState(false);
 
   const isNovaTarefa = !tarefa;
   const hoje = hojeChave();
@@ -311,6 +313,21 @@ export function FormularioTarefa({
             name="localizacoes"
             value={JSON.stringify(localizacoesLote)}
           />
+          <label className="flex items-start gap-2 rounded-lg border border-superficie-200 bg-superficie-50 px-3 py-2 text-sm text-superficie-700">
+            <input
+              type="checkbox"
+              name="usar_titulos_originais"
+              checked={usarTitulosOriginais}
+              onChange={(e) => setUsarTitulosOriginais(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-azul-600"
+            />
+            <span>
+              <strong className="font-semibold text-superficie-900">Usar nomes dos itens nos títulos</strong>
+              <span className="block text-xs text-superficie-500">
+                Cria cada tarefa com o nome original do item, como “Executar tomada” e “Executar eletroduto rígido 3/4”.
+              </span>
+            </span>
+          </label>
           {loteId && <input type="hidden" name="lote_id" value={loteId} />}
         </>
       ) : (
