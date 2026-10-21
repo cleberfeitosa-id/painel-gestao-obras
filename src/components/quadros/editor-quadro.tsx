@@ -20,6 +20,7 @@ import {
   Box,
   Eye,
   FolderCog,
+  MousePointer2,
 } from "lucide-react";
 import { Botao } from "@/components/ui";
 import {
@@ -112,7 +113,7 @@ export function EditorQuadro({
       elementos: l.elementos ?? [],
       trilhos: l.trilhos ?? [],
       canaletas: l.canaletas ?? [],
-      barramentos: l.barramentos ?? [],
+      barramentos: (l.barramentos ?? []).map((bar) => ({ ...bar, derivacoes: bar.derivacoes ?? [] })),
       barramentosNeutroTerra: l.barramentosNeutroTerra ?? [],
       protecoesAcrilicas: l.protecoesAcrilicas ?? [],
       suportesBarrasRoscadas: l.suportesBarrasRoscadas ?? [],
@@ -134,6 +135,11 @@ export function EditorQuadro({
   });
 
   const circuitos = quadro.circuitos_vinculados || [];
+  const circuitosPorPlanta = circuitosDisponiveis.reduce<Record<string, CircuitoVinculado[]>>((grupos, circuito) => {
+    const chave = circuito.plantaId ?? "sem-planta";
+    (grupos[chave] ??= []).push(circuito);
+    return grupos;
+  }, {});
 
   const [elementoSelecionadoId, setElementoSelecionadoId] = useState<string | null>(null);
   const [trilhoSelecionadoId, setTrilhoSelecionadoId] = useState<string | null>(null);
@@ -141,6 +147,8 @@ export function EditorQuadro({
   const [barramentoNTSelecionadoId, setBarramentoNTSelecionadoId] = useState<string | null>(null);
   const [canaletaSelecionadaId, setCanaletaSelecionadaId] = useState<string | null>(null);
   const [selecaoElementos, setSelecaoElementos] = useState<Set<string>>(new Set());
+  const [modoSelecao, setModoSelecao] = useState(false);
+  const [caixaSelecao, setCaixaSelecao] = useState<{ x: number; y: number; largura: number; altura: number } | null>(null);
   const [acrilicaSelecionadaId, setAcrilicaSelecionadaId] = useState<string | null>(null);
   const [suporteSelecionadoId, setSuporteSelecionadoId] = useState<string | null>(null);
 
@@ -162,6 +170,7 @@ export function EditorQuadro({
   const [offsetArrasto, setOffsetArrasto] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const startDragCoordRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const arrastoMoveuRef = useRef(false);
+  const selecaoIniciadaRef = useRef<{ x: number; y: number } | null>(null);
 
   const canvasRef = useRef<SVGSVGElement>(null);
 
@@ -629,6 +638,77 @@ export function EditorQuadro({
     }));
   }
 
+  function pontoNoCanvas(e: React.MouseEvent): { x: number; y: number } | null {
+    const svg = canvasRef.current;
+    const ctm = svg?.getScreenCTM();
+    if (!svg || !ctm) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const p = pt.matrixTransform(ctm.inverse());
+    return { x: p.x, y: p.y };
+  }
+
+  function iniciarSelecao(e: React.MouseEvent) {
+    if (!modoSelecao || !podeEditar || e.button !== 0) return;
+    const ponto = pontoNoCanvas(e);
+    if (!ponto) return;
+    e.stopPropagation();
+    selecaoIniciadaRef.current = ponto;
+    setCaixaSelecao({ x: ponto.x, y: ponto.y, largura: 0, altura: 0 });
+    setElementoSelecionadoId(null);
+    setTrilhoSelecionadoId(null);
+    setBarramentoSelecionadoId(null);
+    setBarramentoNTSelecionadoId(null);
+    setCanaletaSelecionadaId(null);
+    setAcrilicaSelecionadaId(null);
+    setSuporteSelecionadoId(null);
+    setSelecaoElementos(new Set());
+  }
+
+  function atualizarSelecao(e: React.MouseEvent) {
+    const inicio = selecaoIniciadaRef.current;
+    if (!inicio) return;
+    const ponto = pontoNoCanvas(e);
+    if (!ponto) return;
+    const x = Math.min(inicio.x, ponto.x);
+    const y = Math.min(inicio.y, ponto.y);
+    const largura = Math.abs(ponto.x - inicio.x);
+    const altura = Math.abs(ponto.y - inicio.y);
+    setCaixaSelecao({ x, y, largura, altura });
+    const selecionados = layout.elementos.filter((el) =>
+      el.x < x + largura && el.x + el.larguraMm > x && el.y < y + altura && el.y + el.alturaMm > y,
+    );
+    setSelecaoElementos(new Set(selecionados.map((el) => el.id)));
+    setElementoSelecionadoId(selecionados[0]?.id ?? null);
+  }
+
+  function finalizarSelecao() {
+    const inicio = selecaoIniciadaRef.current;
+    if (inicio && caixaSelecao && caixaSelecao.largura < 3 && caixaSelecao.altura < 3) {
+      const clicado = layout.elementos.find((el) =>
+        inicio.x >= el.x && inicio.x <= el.x + el.larguraMm && inicio.y >= el.y && inicio.y <= el.y + el.alturaMm,
+      );
+      if (clicado) {
+        setSelecaoElementos(new Set([clicado.id]));
+        setElementoSelecionadoId(clicado.id);
+      }
+    }
+    selecaoIniciadaRef.current = null;
+    setCaixaSelecao(null);
+  }
+
+  function atualizarDerivacao(barId: string, derivacaoId: string, updates: Partial<DerivacaoBarramento>) {
+    setLayout((ant) => ({
+      ...ant,
+      barramentos: ant.barramentos.map((bar) =>
+        bar.id === barId
+          ? { ...bar, derivacoes: bar.derivacoes.map((der) => der.id === derivacaoId ? { ...der, ...updates } : der) }
+          : bar,
+      ),
+    }));
+  }
+
   function aoIniciarArrasto(
     e: React.MouseEvent,
     id: string,
@@ -637,6 +717,10 @@ export function EditorQuadro({
     itemY: number,
   ) {
     if (!podeEditar || e.button !== 0) return;
+    if (modoSelecao) {
+      iniciarSelecao(e);
+      return;
+    }
     e.stopPropagation();
 
     startDragCoordRef.current = { x: e.clientX, y: e.clientY };
@@ -645,9 +729,14 @@ export function EditorQuadro({
     if (tipo === "elemento") {
       const modificador = e.ctrlKey || e.metaKey || e.shiftKey;
       const jaSelecionado = selecaoElementos.has(id);
-      const novaSelecao = modificador
-        ? new Set(jaSelecionado ? selecaoElementos : [...selecaoElementos, id])
-        : new Set([id]);
+      const novaSelecao = new Set(selecaoElementos);
+      if (modificador) {
+        if (jaSelecionado) novaSelecao.delete(id);
+        else novaSelecao.add(id);
+      } else {
+        novaSelecao.clear();
+        novaSelecao.add(id);
+      }
       setSelecaoElementos(novaSelecao);
       setElementoSelecionadoId(id);
       setTrilhoSelecionadoId(null);
@@ -988,6 +1077,15 @@ export function EditorQuadro({
             <div className="flex items-center rounded-lg border border-borda bg-white p-0.5 text-superficie-600 mr-2">
               <button
                 type="button"
+                onClick={() => setModoSelecao((atual) => !atual)}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${modoSelecao ? "bg-azul-600 text-white" : "hover:bg-superficie-100"}`}
+                title="Arraste no quadro para selecionar vários componentes"
+              >
+                <MousePointer2 className="h-3.5 w-3.5" />
+                Selecionar
+              </button>
+              <button
+                type="button"
                 onClick={() => setZoom((z) => Math.max(0.4, Number((z - 0.1).toFixed(1))))}
                 className="p-1 rounded hover:bg-superficie-100"
                 title="Diminuir Zoom"
@@ -1243,9 +1341,9 @@ export function EditorQuadro({
 
           <div
             className="flex-1 bg-superficie-200/70 overflow-auto p-8 flex items-center justify-center select-none"
-            onMouseMove={aoMoverArrasto}
-            onMouseUp={aoFinalizarArrasto}
-            onMouseLeave={aoFinalizarArrasto}
+            onMouseMove={(e) => { atualizarSelecao(e); aoMoverArrasto(e); }}
+            onMouseUp={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
+            onMouseLeave={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
           >
             <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } body * { visibility: hidden; } .quadros-editor .quadros-printable, .quadros-editor .quadros-printable * { visibility: visible; } .quadros-editor .quadros-printable { position: absolute; inset: 0; width: 100% !important; height: auto !important; transform: none !important; box-shadow: none !important; border: 1px solid #334155; } .quadros-editor .quadros-print-controls { display: none !important; } }`}</style>
             <div
@@ -1320,8 +1418,9 @@ export function EditorQuadro({
                   ref={canvasRef}
                   className="absolute inset-0 w-full h-full"
                   viewBox={`0 0 ${dimensoes.larguraUtilMm} ${dimensoes.alturaUtilMm}`}
+                  onMouseDown={iniciarSelecao}
                   onClick={(e) => {
-                    if (e.target === canvasRef.current) {
+                    if (e.target === canvasRef.current && !modoSelecao) {
                       setElementoSelecionadoId(null);
                       setTrilhoSelecionadoId(null);
                       setBarramentoSelecionadoId(null);
@@ -1330,6 +1429,9 @@ export function EditorQuadro({
                     }
                   }}
                 >
+                  {caixaSelecao && (
+                    <rect x={caixaSelecao.x} y={caixaSelecao.y} width={caixaSelecao.largura} height={caixaSelecao.altura} fill="#2563eb" fillOpacity={0.12} stroke="#2563eb" strokeWidth={1.5} strokeDasharray="4 2" pointerEvents="none" />
+                  )}
                   {(layout.suportesBarrasRoscadas ?? []).map((s) => (
                     <g key={s.id} onMouseDown={(e) => aoIniciarArrasto(e, s.id, "suporte", s.x, s.y)} className="cursor-move">
                       <circle cx={s.x} cy={s.y} r={Math.max(3, s.diametroMm / 2)} fill="#475569" stroke={s.id === suporteSelecionadoId ? "#2563eb" : "#0f172a"} strokeWidth={s.id === suporteSelecionadoId ? 3 : 1} />
@@ -1664,7 +1766,7 @@ export function EditorQuadro({
                         })}
 
                         {bar.derivacoes.map((der) => {
-                          const corFase =
+                          const corFasePadrao =
                             der.fase === "R"
                               ? "#ef4444"
                               : der.fase === "S"
@@ -1673,7 +1775,8 @@ export function EditorQuadro({
                                   ? "#3b82f6"
                                   : "#10b981";
 
-                          const compDeriv = der.larguraDerivacaoMm || 35;
+                          const corFase = der.corPersonalizada || corFasePadrao;
+                          const compDeriv = der.comprimentoDerivacaoMm || der.larguraDerivacaoMm || 35;
                           const espessuraDeriv = der.espessuraDerivacaoMm || 10;
 
                           return (
@@ -1742,17 +1845,10 @@ export function EditorQuadro({
                     return (
                       <g
                         key={el.id}
-                        onMouseDown={(e) => aoIniciarArrasto(e, el.id, "elemento", el.x, el.y)}
+      onMouseDown={(e) => aoIniciarArrasto(e, el.id, "elemento", el.x, el.y)}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if ((e.ctrlKey || e.metaKey || e.shiftKey) && !arrastoMoveuRef.current) {
-                            setSelecaoElementos((atual) => {
-                              const proxima = new Set(atual);
-                              if (proxima.has(el.id)) proxima.delete(el.id);
-                              else proxima.add(el.id);
-                              return proxima;
-                            });
-                          }
+                          if (modoSelecao) return;
                           setElementoSelecionadoId(el.id);
                           setTrilhoSelecionadoId(null);
                           setBarramentoSelecionadoId(null);
@@ -2087,11 +2183,11 @@ export function EditorQuadro({
                       className="w-full rounded-lg border border-borda bg-white px-2.5 py-1.5 text-xs text-superficie-900"
                     >
                       <option value="">Nenhum circuito vinculado</option>
-                      {circuitosDisponiveis.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.tag} {c.condutor ? `(${c.condutor})` : ""}
-                        </option>
-                      ))}
+                       {Object.entries(circuitosPorPlanta).map(([plantaId, itens]) => (
+                         <optgroup key={plantaId} label={itens[0]?.plantaNome ?? "Circuitos sem planta"}>
+                           {itens.map((c) => <option key={c.id} value={c.id}>{c.tag} {c.condutor ? `(${c.condutor})` : ""}</option>)}
+                         </optgroup>
+                       ))}
                     </select>
                   </div>
                 </div>
@@ -2391,11 +2487,11 @@ export function EditorQuadro({
                             className="flex-1 min-w-0 rounded border border-borda bg-white px-1.5 py-0.5 text-[11px] truncate"
                           >
                             <option value="">Livre / Desconectado</option>
-                            {circuitosDisponiveis.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.tag} {c.condutor ? `(${c.condutor})` : ""}
-                              </option>
-                            ))}
+                             {Object.entries(circuitosPorPlanta).map(([plantaId, itens]) => (
+                               <optgroup key={plantaId} label={itens[0]?.plantaNome ?? "Circuitos sem planta"}>
+                                 {itens.map((c) => <option key={c.id} value={c.id}>{c.tag} {c.condutor ? `(${c.condutor})` : ""}</option>)}
+                               </optgroup>
+                             ))}
                           </select>
 
                           {podeEditar && (
@@ -2705,10 +2801,38 @@ export function EditorQuadro({
                       </div>
                     </div>
 
-                    <p className="text-[11px] text-sky-700 font-medium">
+                  <p className="text-[11px] text-sky-700 font-medium">
                       {barramentoSelecionado.derivacoes.length} derivações horizontais ativas.
-                    </p>
+                  </p>
+                  <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                    {barramentoSelecionado.derivacoes.map((derivacao, indice) => (
+                      <div key={derivacao.id} className="rounded-lg border border-sky-200 bg-white p-2 space-y-2">
+                        <div className="flex items-center justify-between text-[10px] font-semibold text-sky-900">
+                          <span>Derivação {indice + 1} · fase {derivacao.fase}</span>
+                          <input
+                            type="color"
+                            value={derivacao.corPersonalizada ?? (derivacao.fase === "R" ? "#ef4444" : derivacao.fase === "S" ? "#eab308" : derivacao.fase === "T" ? "#3b82f6" : "#10b981")}
+                            onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { corPersonalizada: e.target.value })}
+                            disabled={!podeEditar}
+                            title="Cor da derivação"
+                            className="h-6 w-8 cursor-pointer rounded border border-sky-300 p-0"
+                          />
+                        </div>
+                        <div className="grid grid-cols-4 gap-1.5 text-[10px]">
+                          <label>Posição<input type="number" min={0} value={derivacao.yOffsetMm} onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { yOffsetMm: Number(e.target.value) || 0 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1" /></label>
+                          <label>Comprimento<input type="number" min={1} value={derivacao.comprimentoDerivacaoMm ?? derivacao.larguraDerivacaoMm} onChange={(e) => { const valor = Number(e.target.value) || 1; atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { comprimentoDerivacaoMm: valor, larguraDerivacaoMm: valor }); }} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1" /></label>
+                          <label>Espessura<input type="number" min={1} value={derivacao.espessuraDerivacaoMm ?? 10} onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { espessuraDerivacaoMm: Number(e.target.value) || 1 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1" /></label>
+                          <label>Corrente<input type="number" min={1} value={derivacao.correnteNominalA} onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { correnteNominalA: Number(e.target.value) || 1 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1" /></label>
+                        </div>
+                        <label className="block text-[10px]">Fase
+                          <select value={derivacao.fase} onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { fase: e.target.value as "R" | "S" | "T" | "N", corPersonalizada: undefined })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1">
+                            <option value="R">R</option><option value="S">S</option><option value="T">T</option><option value="N">N</option>
+                          </select>
+                        </label>
+                      </div>
+                    ))}
                   </div>
+                </div>
 
                   <div>
                     <label className="block text-superficie-700 font-medium mb-1">

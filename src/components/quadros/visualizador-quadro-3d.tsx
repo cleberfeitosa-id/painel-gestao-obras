@@ -520,7 +520,7 @@ export function VisualizadorQuadro3D({
 
       bar.derivacoes.forEach((der) => {
         const yDeriv3D = posCentro.y + bar.alturaMm / 2 - der.yOffsetMm;
-        const corFaseHex =
+        const corFasePadrao =
           der.fase === "R"
             ? 0xef4444
             : der.fase === "S"
@@ -529,16 +529,18 @@ export function VisualizadorQuadro3D({
                 ? 0x3b82f6
                 : 0x10b981;
 
+        const corFase = der.corPersonalizada ? Number.parseInt(der.corPersonalizada.slice(1), 16) : corFasePadrao;
         const matFase = new THREE.MeshStandardMaterial({
-          color: corFaseHex,
+          color: corFase,
           metalness: 0.7,
           roughness: 0.3,
         });
 
-        const compLado = der.larguraDerivacaoMm || 35;
+        const compLado = der.comprimentoDerivacaoMm || der.larguraDerivacaoMm || 35;
+        const espessuraDerivacao = der.espessuraDerivacaoMm || 10;
         const geoDeriv = new THREE.BoxGeometry(
           bar.larguraTroncoMm + compLado * 2,
-          10,
+          espessuraDerivacao,
           espessura,
         );
         const meshDeriv = new THREE.Mesh(geoDeriv, matFase);
