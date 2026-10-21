@@ -83,6 +83,7 @@ interface EditorQuadroProps {
     circuitos_vinculados: CircuitoVinculado[];
   };
   circuitosDisponiveis: CircuitoVinculado[];
+  quadrosDisponiveis: Array<{ id: string; tag: string; nome: string | null; tipo_quadro: string }>;
   podeEditar: boolean;
 }
 
@@ -91,6 +92,7 @@ export function EditorQuadro({
   obraNome,
   quadro,
   circuitosDisponiveis,
+  quadrosDisponiveis,
   podeEditar,
 }: EditorQuadroProps) {
   const [tag, setTag] = useState(quadro.tag);
@@ -182,6 +184,9 @@ export function EditorQuadro({
   });
 
   const elementoSelecionado = layout.elementos.find((e) => e.id === elementoSelecionadoId);
+  const podeVincularQuadro = elementoSelecionado
+    ? (catalogo[elementoSelecionado.tipo] || COMPONENTES_CATALOGO_PADRAO[elementoSelecionado.tipo])?.categoria === "disjuntor"
+    : false;
   const trilhoSelecionado = layout.trilhos.find((t) => t.id === trilhoSelecionadoId);
   const barramentoSelecionado = layout.barramentos.find((b) => b.id === barramentoSelecionadoId);
   const barramentoNTSelecionado = (layout.barramentosNeutroTerra || []).find((b) => b.id === barramentoNTSelecionadoId);
@@ -470,6 +475,8 @@ export function EditorQuadro({
       id: novoId,
       tag: `${el.tag}-COPIA`,
       x: Math.min(dimensoes.larguraUtilMm - el.larguraMm, el.x + el.larguraMm + 5),
+      quadroDestinoId: undefined,
+      quadroDestinoTag: undefined,
     };
     setLayout((ant) => ({ ...ant, elementos: [...ant.elementos, clone] }));
     setElementoSelecionadoId(novoId);
@@ -1965,6 +1972,18 @@ export function EditorQuadro({
                             strokeWidth={0.5}
                           />
                         )}
+                        {el.quadroDestinoTag && (
+                          <text
+                            x={el.x + el.larguraMm / 2}
+                            y={el.y + el.alturaMm - (el.correnteNominal ? 19 : 8)}
+                            fontSize="7"
+                            fontWeight="600"
+                            fill="#7c3aed"
+                            textAnchor="middle"
+                          >
+                            → {el.quadroDestinoTag}
+                          </text>
+                        )}
                       </g>
                     );
                   })}
@@ -2144,8 +2163,35 @@ export function EditorQuadro({
                         <option value={3}>3 Polos (3P)</option>
                         <option value={4}>4 Polos (4P)</option>
                       </select>
-                    </div>
                   </div>
+                  {podeVincularQuadro && <div className="border-t border-borda pt-3 space-y-2">
+                    <div className="flex items-center gap-1.5 text-superficie-800 font-semibold">
+                      <LinkIcon className="h-3.5 w-3.5 text-azul-600" />
+                      Quadro alimentado / destino
+                    </div>
+                    <select
+                      value={elementoSelecionado.quadroDestinoId ?? ""}
+                      onChange={(e) => {
+                        const destinoId = e.target.value;
+                        const destino = quadrosDisponiveis.find((item) => item.id === destinoId);
+                        atualizarElemento(elementoSelecionado.id, {
+                          quadroDestinoId: destinoId || undefined,
+                          quadroDestinoTag: destino?.tag || undefined,
+                        });
+                      }}
+                      disabled={!podeEditar}
+                      className="w-full rounded-lg border border-borda bg-white px-2.5 py-1.5 text-xs text-superficie-900"
+                    >
+                      <option value="">Nenhum quadro de destino</option>
+                      {quadrosDisponiveis.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.tag}{item.nome ? ` — ${item.nome}` : ""} ({item.tipo_quadro})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-superficie-500">Use este campo em disjuntores de saída para indicar o quadro alimentado.</p>
+                  </div>}
+                </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>

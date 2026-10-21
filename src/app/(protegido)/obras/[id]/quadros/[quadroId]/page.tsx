@@ -42,15 +42,26 @@ async function buscarPapel(): Promise<PapelUsuario | null> {
   return perfil?.papel ?? null;
 }
 
+async function buscarQuadrosDisponiveis(obraId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("quadros_eletricos")
+    .select("id, tag, nome, tipo_quadro")
+    .eq("obra_id", obraId)
+    .order("tag", { ascending: true });
+  return data ?? [];
+}
+
 export default async function DetalheQuadroPage({
   params,
 }: {
   params: Promise<{ id: string; quadroId: string }>;
 }) {
   const { id: obraId, quadroId } = await params;
-  const [{ quadro, obra }, circuitosDisponiveis, papel] = await Promise.all([
+  const [{ quadro, obra }, circuitosDisponiveis, quadrosDisponiveis, papel] = await Promise.all([
     buscarQuadroEObra(quadroId, obraId),
     buscarCircuitosObra(obraId),
+    buscarQuadrosDisponiveis(obraId),
     buscarPapel(),
   ]);
 
@@ -85,6 +96,7 @@ export default async function DetalheQuadroPage({
         circuitos_vinculados: circuitosVinculados,
       }}
       circuitosDisponiveis={circuitosDisponiveis}
+      quadrosDisponiveis={quadrosDisponiveis.filter((item) => item.id !== quadro.id)}
       podeEditar={podeEditar}
     />
   );
