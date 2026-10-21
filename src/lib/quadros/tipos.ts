@@ -544,6 +544,8 @@ export interface ElementoQuadro {
   secaoCaboMm2?: number;
   circuitoAssociadoId?: string;
   circuitoAssociadoNome?: string;
+  quadroDestinoId?: string;
+  quadroDestinoTag?: string;
   corPersonalizada?: string;
   montagem?: SuperficieMontagemQuadro;
   geometria?: GeometriaComponenteQuadro;
