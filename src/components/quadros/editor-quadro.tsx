@@ -198,7 +198,7 @@ export function EditorQuadro({
     const modo = layout.apresentacao?.modoRotulo ?? "tag";
     const tag = el.tag.trim() || "SEM TAG";
     const descricao = el.descricao.trim() || tag;
-    const circuito = el.circuitoAssociadoNome?.trim() || el.circuitoAssociadoId?.trim() || "SEM CIRCUITO";
+    const circuito = el.circuitoReserva ? "RESERVA" : el.circuitoAssociadoNome?.trim() || el.circuitoAssociadoId?.trim() || "SEM CIRCUITO";
     const corrente = el.correnteNominal ? `${el.correnteNominal}A` : "In n/d";
     if (modo === "descricao") return descricao;
     if (modo === "circuito") return circuito;
@@ -1377,7 +1377,7 @@ export function EditorQuadro({
             onMouseUp={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
             onMouseLeave={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
           >
-            <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } body * { visibility: hidden; } .quadros-editor .quadros-printable, .quadros-editor .quadros-printable * { visibility: visible; } .quadros-editor .quadros-printable { position: absolute; inset: 0; width: 100% !important; height: auto !important; transform: none !important; box-shadow: none !important; border: 1px solid #334155; } .quadros-editor .quadros-print-controls { display: none !important; } }`}</style>
+            <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } body * { visibility: hidden; } .quadros-editor .quadros-printable, .quadros-editor .quadros-printable * { visibility: visible; } .quadros-editor .quadros-printable { position: absolute; left: 0; top: 0; width: 273mm !important; height: 186mm !important; max-width: 273mm !important; max-height: 186mm !important; transform: none !important; overflow: hidden !important; box-shadow: none !important; border: 1px solid #334155; } .quadros-editor .quadros-print-controls { display: none !important; } }`}</style>
             <div
               className="quadros-printable transition-transform origin-center shadow-2xl rounded-xl bg-slate-300 border-4 border-slate-400 relative flex flex-col justify-start"
               style={{
@@ -1936,18 +1936,45 @@ export function EditorQuadro({
                           />
                         )}
 
-                        <text
-                          x={el.x + el.larguraMm / 2}
-                          y={el.y + 14}
-                          fontSize={el.larguraMm > 25 ? "10" : "8"}
-                          fontWeight="bold"
-                          fill={el.tipo.includes("caixa_moldada") ? "#ffffff" : "#0f172a"}
-                          textAnchor="middle"
-                        >
-                          {rotuloElemento(el)}
-                        </text>
+                        {cat?.categoria === "disjuntor" ? (
+                          <>
+                            <text
+                              x={el.x + el.larguraMm / 2 - 7}
+                              y={el.y + el.alturaMm / 2 + 3}
+                              fontSize={el.larguraMm > 25 ? "8" : "6.5"}
+                              fontWeight="bold"
+                              fill={el.tipo.includes("caixa_moldada") ? "#ffffff" : "#0f172a"}
+                              textAnchor="end"
+                            >
+                              {rotuloElemento(el)}
+                            </text>
+                            {el.correnteNominal && (
+                              <text
+                                x={el.x + el.larguraMm / 2 + 7}
+                                y={el.y + el.alturaMm / 2 + 3}
+                                fontSize={el.larguraMm > 25 ? "8" : "6.5"}
+                                fontWeight="600"
+                                fill={el.tipo.includes("caixa_moldada") ? "#93c5fd" : "#2563eb"}
+                                textAnchor="start"
+                              >
+                                {el.curvaDisjuntor ?? ""}{el.correnteNominal}A
+                              </text>
+                            )}
+                          </>
+                        ) : (
+                          <text
+                            x={el.x + el.larguraMm / 2}
+                            y={el.y + 14}
+                            fontSize={el.larguraMm > 25 ? "10" : "8"}
+                            fontWeight="bold"
+                            fill={el.tipo.includes("caixa_moldada") ? "#ffffff" : "#0f172a"}
+                            textAnchor="middle"
+                          >
+                            {rotuloElemento(el)}
+                          </text>
+                        )}
 
-                        {el.correnteNominal && (
+                        {el.correnteNominal && cat?.categoria !== "disjuntor" && (
                           <text
                             x={el.x + el.larguraMm / 2}
                             y={el.y + el.alturaMm - 8}
@@ -2248,9 +2275,10 @@ export function EditorQuadro({
                         atualizarElemento(elementoSelecionado.id, {
                           circuitoAssociadoId: circId || undefined,
                           circuitoAssociadoNome: c ? c.tag : undefined,
+                          circuitoReserva: false,
                         });
                       }}
-                      disabled={!podeEditar}
+                      disabled={!podeEditar || elementoSelecionado.circuitoReserva}
                       className="w-full rounded-lg border border-borda bg-white px-2.5 py-1.5 text-xs text-superficie-900"
                     >
                       <option value="">Nenhum circuito vinculado</option>
@@ -2260,6 +2288,20 @@ export function EditorQuadro({
                          </optgroup>
                        ))}
                     </select>
+                    {podeVincularQuadro && <label className="flex items-center gap-2 text-xs text-superficie-700">
+                      <input
+                        type="checkbox"
+                        checked={elementoSelecionado.circuitoReserva ?? false}
+                        onChange={(e) => atualizarElemento(elementoSelecionado.id, {
+                          circuitoReserva: e.target.checked,
+                          circuitoAssociadoId: e.target.checked ? undefined : elementoSelecionado.circuitoAssociadoId,
+                          circuitoAssociadoNome: e.target.checked ? undefined : elementoSelecionado.circuitoAssociadoNome,
+                        })}
+                        disabled={!podeEditar}
+                        className="h-3.5 w-3.5 rounded border-borda text-ambar-600"
+                      />
+                      Circuito reserva (sem cadastro)
+                    </label>}
                   </div>
                 </div>
               </div>

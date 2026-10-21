@@ -107,6 +107,22 @@ export async function salvarQuadroEletrico(
     if (erroOrigem || !quadroOrigem) return { erro: "O quadro informado não pertence a esta obra." };
   }
 
+  const layoutRecebido = dados.layout as { elementos?: unknown[]; [chave: string]: unknown };
+  const layoutNormalizado = {
+    ...layoutRecebido,
+    elementos: (layoutRecebido.elementos ?? []).map((elemento) => {
+      if (typeof elemento !== "object" || elemento === null) return elemento;
+      const registro = elemento as Record<string, unknown>;
+      if (registro.circuitoReserva !== true) return elemento;
+      return Object.fromEntries(Object.entries(registro).filter(([chave]) => ![
+        "circuitoAssociadoId",
+        "circuitoAssociadoNome",
+        "quadroDestinoId",
+        "quadroDestinoTag",
+      ].includes(chave)));
+    }),
+  };
+
   const payload = {
     obra_id: dados.obraId,
     planta_id: dados.plantaId ?? null,
@@ -125,7 +141,7 @@ export async function salvarQuadroEletrico(
     altura_util_mm: dados.alturaUtilMm,
     margem_lateral_mm: dados.margemLateralMm,
     margem_topo_mm: dados.margemTopoMm,
-    layout: dados.layout as Json,
+    layout: layoutNormalizado as Json,
     circuitos_vinculados: (dados.circuitosVinculados ?? []) as Json,
     template_id: dados.templateId ?? null,
     levantamento_id: dados.levantamentoId ?? null,
