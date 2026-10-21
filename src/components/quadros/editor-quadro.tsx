@@ -33,6 +33,7 @@ import {
   type BarramentoNeutroTerra,
   type FuroBarramento,
   type DerivacaoBarramento,
+  type FaseBarramento,
   type QuadroEletricoLayout,
   type TipoComponenteQuadro,
   type CircuitoVinculado,
@@ -612,7 +613,10 @@ export function EditorQuadro({
 
     const espacamento = bar.espacamentoDerivacoesMm || 45;
     const larguraDeriv = bar.comprimentoDerivacaoMm || 35;
-    const fases = bar.tipo === "trifasico" ? ["R", "S", "T"] : bar.tipo === "tetrapolar" ? ["R", "S", "T", "N"] : bar.tipo === "bifasico" ? ["R", "S"] : ["R"];
+    const fasesBase: FaseBarramento[] = bar.tipo === "trifasico" ? ["R", "S", "T"] : bar.tipo === "tetrapolar" ? ["R", "S", "T", "N"] : bar.tipo === "bifasico" ? ["R", "S"] : ["R"];
+    const faseInicial = bar.faseInicialDerivacao && fasesBase.includes(bar.faseInicialDerivacao) ? bar.faseInicialDerivacao : fasesBase[0];
+    const indiceInicial = fasesBase.indexOf(faseInicial);
+    const fases = [...fasesBase.slice(indiceInicial), ...fasesBase.slice(0, indiceInicial)];
 
     const novasDerivacoes: DerivacaoBarramento[] = [];
     let yAtual = espacamento;
@@ -625,6 +629,9 @@ export function EditorQuadro({
         yOffsetMm: yAtual,
         fase,
         larguraDerivacaoMm: larguraDeriv,
+        espessuraDerivacaoMm: bar.espessuraDerivacaoMm || 10,
+        comprimentoDerivacaoMm: larguraDeriv,
+        corPersonalizada: bar.coresFases?.[fase],
         lado: "ambos",
         correnteNominalA: Math.round(bar.correnteSuportadaA * 0.4),
       });
@@ -636,6 +643,35 @@ export function EditorQuadro({
       ...ant,
       barramentos: ant.barramentos.map((b) => (b.id === barId ? { ...b, derivacoes: novasDerivacoes } : b)),
     }));
+  }
+
+  function atualizarConfiguracaoDerivacoes(barId: string, updates: Partial<BarramentoEspinhaPeixe>) {
+    setLayout((ant) => ({
+      ...ant,
+      barramentos: ant.barramentos.map((bar) => {
+        if (bar.id !== barId) return bar;
+        const atualizado = { ...bar, ...updates };
+        const cores = atualizado.coresFases ?? {};
+        return {
+          ...atualizado,
+          derivacoes: atualizado.derivacoes.map((derivacao) => ({
+            ...derivacao,
+            larguraDerivacaoMm: atualizado.larguraDerivacaoMm ?? derivacao.larguraDerivacaoMm,
+            comprimentoDerivacaoMm: atualizado.comprimentoDerivacaoMm ?? derivacao.comprimentoDerivacaoMm ?? derivacao.larguraDerivacaoMm,
+            espessuraDerivacaoMm: atualizado.espessuraDerivacaoMm ?? derivacao.espessuraDerivacaoMm,
+            corPersonalizada: cores[derivacao.fase] ?? undefined,
+          })),
+        };
+      }),
+    }));
+  }
+
+  function atualizarCorFase(barId: string, fase: FaseBarramento, cor: string) {
+    const bar = layout.barramentos.find((item) => item.id === barId);
+    if (!bar) return;
+    atualizarConfiguracaoDerivacoes(barId, {
+      coresFases: { ...(bar.coresFases ?? {}), [fase]: cor },
+    });
   }
 
   function pontoNoCanvas(e: React.MouseEvent): { x: number; y: number } | null {
@@ -696,17 +732,6 @@ export function EditorQuadro({
     }
     selecaoIniciadaRef.current = null;
     setCaixaSelecao(null);
-  }
-
-  function atualizarDerivacao(barId: string, derivacaoId: string, updates: Partial<DerivacaoBarramento>) {
-    setLayout((ant) => ({
-      ...ant,
-      barramentos: ant.barramentos.map((bar) =>
-        bar.id === barId
-          ? { ...bar, derivacoes: bar.derivacoes.map((der) => der.id === derivacaoId ? { ...der, ...updates } : der) }
-          : bar,
-      ),
-    }));
   }
 
   function aoIniciarArrasto(
@@ -2802,35 +2827,31 @@ export function EditorQuadro({
                     </div>
 
                   <p className="text-[11px] text-sky-700 font-medium">
-                      {barramentoSelecionado.derivacoes.length} derivações horizontais ativas.
+                    {barramentoSelecionado.derivacoes.length} derivações horizontais ativas. As configurações abaixo valem para todas.
                   </p>
-                  <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                    {barramentoSelecionado.derivacoes.map((derivacao, indice) => (
-                      <div key={derivacao.id} className="rounded-lg border border-sky-200 bg-white p-2 space-y-2">
-                        <div className="flex items-center justify-between text-[10px] font-semibold text-sky-900">
-                          <span>Derivação {indice + 1} · fase {derivacao.fase}</span>
-                          <input
-                            type="color"
-                            value={derivacao.corPersonalizada ?? (derivacao.fase === "R" ? "#ef4444" : derivacao.fase === "S" ? "#eab308" : derivacao.fase === "T" ? "#3b82f6" : "#10b981")}
-                            onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { corPersonalizada: e.target.value })}
-                            disabled={!podeEditar}
-                            title="Cor da derivação"
-                            className="h-6 w-8 cursor-pointer rounded border border-sky-300 p-0"
-                          />
-                        </div>
-                        <div className="grid grid-cols-4 gap-1.5 text-[10px]">
-                          <label>Posição<input type="number" min={0} value={derivacao.yOffsetMm} onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { yOffsetMm: Number(e.target.value) || 0 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1" /></label>
-                          <label>Comprimento<input type="number" min={1} value={derivacao.comprimentoDerivacaoMm ?? derivacao.larguraDerivacaoMm} onChange={(e) => { const valor = Number(e.target.value) || 1; atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { comprimentoDerivacaoMm: valor, larguraDerivacaoMm: valor }); }} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1" /></label>
-                          <label>Espessura<input type="number" min={1} value={derivacao.espessuraDerivacaoMm ?? 10} onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { espessuraDerivacaoMm: Number(e.target.value) || 1 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1" /></label>
-                          <label>Corrente<input type="number" min={1} value={derivacao.correnteNominalA} onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { correnteNominalA: Number(e.target.value) || 1 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1" /></label>
-                        </div>
-                        <label className="block text-[10px]">Fase
-                          <select value={derivacao.fase} onChange={(e) => atualizarDerivacao(barramentoSelecionado.id, derivacao.id, { fase: e.target.value as "R" | "S" | "T" | "N", corPersonalizada: undefined })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-200 px-1 py-1">
-                            <option value="R">R</option><option value="S">S</option><option value="T">T</option><option value="N">N</option>
-                          </select>
+                  <div className="rounded-lg border border-sky-200 bg-white p-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-[10px] text-sky-800">Fase inicial
+                        <select value={barramentoSelecionado.faseInicialDerivacao ?? "R"} onChange={(e) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { faseInicialDerivacao: e.target.value as FaseBarramento })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs">
+                          <option value="R">R</option><option value="S">S</option><option value="T">T</option>{barramentoSelecionado.tipo === "tetrapolar" && <option value="N">N</option>}
+                        </select>
+                      </label>
+                      <label className="text-[10px] text-sky-800">Espessura ({barramentoSelecionado.unidadeMedida === "pol" ? "pol" : "mm"})
+                        <input type="number" min={0.1} step={barramentoSelecionado.unidadeMedida === "pol" ? 0.01 : 0.5} value={barramentoSelecionado.unidadeMedida === "pol" ? Number(((barramentoSelecionado.espessuraDerivacaoMm ?? 10) / 25.4).toFixed(3)) : barramentoSelecionado.espessuraDerivacaoMm ?? 10} onChange={(e) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { espessuraDerivacaoMm: barramentoSelecionado.unidadeMedida === "pol" ? polegadaParaMm(Number(e.target.value)) : Number(e.target.value) || 1 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
+                      </label>
+                    </div>
+                    <label className="block text-[10px] text-sky-800">Comprimento da derivação ({barramentoSelecionado.unidadeMedida === "pol" ? "pol" : "mm"})
+                      <input type="number" min={0.1} step={barramentoSelecionado.unidadeMedida === "pol" ? 0.05 : 1} value={barramentoSelecionado.unidadeMedida === "pol" ? Number(((barramentoSelecionado.comprimentoDerivacaoMm ?? 35) / 25.4).toFixed(3)) : barramentoSelecionado.comprimentoDerivacaoMm ?? 35} onChange={(e) => { const valor = barramentoSelecionado.unidadeMedida === "pol" ? polegadaParaMm(Number(e.target.value)) : Number(e.target.value) || 1; atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valor, larguraDerivacaoMm: valor }); }} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["R", "S", "T"] as const).map((fase) => (
+                        <label key={fase} className="text-[10px] font-semibold text-sky-800">Cor fase {fase}
+                          <input type="color" value={barramentoSelecionado.coresFases?.[fase] ?? (fase === "R" ? "#ef4444" : fase === "S" ? "#eab308" : "#3b82f6")} onChange={(e) => atualizarCorFase(barramentoSelecionado.id, fase, e.target.value)} disabled={!podeEditar} className="mt-0.5 h-8 w-full cursor-pointer rounded border border-sky-300 p-0.5" />
                         </label>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-sky-700">Comprimento: {barramentoSelecionado.comprimentoDerivacaoMm ?? 35} mm = {mmParaPolegadaTexto(barramentoSelecionado.comprimentoDerivacaoMm ?? 35)} · Espessura: {barramentoSelecionado.espessuraDerivacaoMm ?? 10} mm = {mmParaPolegadaTexto(barramentoSelecionado.espessuraDerivacaoMm ?? 10)}</p>
+                    <button type="button" onClick={() => regenerarDerivacoesBarramento(barramentoSelecionado.id)} disabled={!podeEditar} className="w-full rounded bg-sky-600 px-2 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">Aplicar configuração à sequência R/S/T</button>
                   </div>
                 </div>
 

@@ -556,11 +556,12 @@ export interface ElementoQuadro {
 }
 
 export type UnidadeMedidaBarramento = "mm" | "pol";
+export type FaseBarramento = "R" | "S" | "T" | "N";
 
 export interface DerivacaoBarramento {
   id: string;
   yOffsetMm: number;
-  fase: "R" | "S" | "T" | "N";
+  fase: FaseBarramento;
   larguraDerivacaoMm: number;
   espessuraDerivacaoMm?: number;
   comprimentoDerivacaoMm?: number;
@@ -589,6 +590,8 @@ export interface BarramentoEspinhaPeixe {
   larguraDerivacaoMm?: number;
   espessuraDerivacaoMm?: number;
   comprimentoDerivacaoMm?: number;
+  faseInicialDerivacao?: FaseBarramento;
+  coresFases?: Partial<Record<FaseBarramento, string>>;
   derivacoes: DerivacaoBarramento[];
 }
 
