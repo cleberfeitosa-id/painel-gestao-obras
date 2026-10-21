@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Document, Page, pdfjs } from "react-pdf";
@@ -88,6 +88,10 @@ import {
 import { GerenciadorNiveisModal } from "./gerenciador-niveis-modal";
 import { GerenciadorCategoriasModal } from "./gerenciador-categorias-modal";
 import { ModalUploadNovaPlanta } from "./modal-upload-nova-planta";
+
+function gerarIdLevantamento(prefixo: string): string {
+  return `${prefixo}_${crypto.randomUUID()}`;
+}
 import { Visualizador3D } from "./visualizador-3d";
 import { PreviaCircuitos2D } from "./previa-circuitos-2d";
 import {
@@ -408,7 +412,7 @@ export function VisualizadorLevantamento({
     fases: [{ nome: "R", cor: "#FFFFFF", quantidade: 1 }],
   });
 
-  const circuitosDisponiveisComCor = useMemo(() => {
+  const circuitosDisponiveisComCor = (() => {
     const mapa = new Map<string, string>();
     if (metadadosCaboAtivo.circuito) {
       mapa.set(metadadosCaboAtivo.circuito, metadadosCaboAtivo.cor || "#eab308");
@@ -426,7 +430,7 @@ export function VisualizadorLevantamento({
       .sort((a, b) =>
         a.circuito.localeCompare(b.circuito, undefined, { numeric: true }),
       );
-  }, [itens, metadadosCaboAtivo]);
+  })();
 
   const [modalDescidaAberto, setModalDescidaAberto] = useState(false);
   const [pontoDescidaPendente, setPontoDescidaPendente] =
@@ -612,14 +616,7 @@ export function VisualizadorLevantamento({
 
     window.addEventListener("keydown", aoPressionarTecla);
     return () => window.removeEventListener("keydown", aoPressionarTecla);
-  }, [excluirItem, itemSelecionado, podeEditar, editandoGeometriaId, itens]);
-
-  useEffect(() => {
-    if (!itemSelecionado) return;
-    setItemSelecionado(
-      itens.find((item) => item.id === itemSelecionado.id) ?? null,
-    );
-  }, [itens]);
+  }, [excluirItem, itemSelecionado, podeEditar, editandoGeometriaId]);
 
   function alternarSelecaoItem(id: string) {
     setItensLoteSelecionados((prev) =>
@@ -1052,17 +1049,10 @@ export function VisualizadorLevantamento({
     registrarEstado([]);
   }
 
-  const plantaAtual = useMemo(
-    () => plantas.find((p) => p.id === plantaSelecionadaId),
-    [plantas, plantaSelecionadaId],
-  );
+  const plantaAtual = plantas.find((p) => p.id === plantaSelecionadaId);
+  const obraAtual = obras.find((o) => o.id === obraSelecionadaId);
 
-  const obraAtual = useMemo(
-    () => obras.find((o) => o.id === obraSelecionadaId),
-    [obras, obraSelecionadaId],
-  );
-
-  const calibracaoPagina = useMemo(() => {
+  const calibracaoPagina = (() => {
     const cal = calibracoes.find(
       (c) => c.planta_id === plantaSelecionadaId && c.pagina === pagina,
     );
@@ -1071,9 +1061,9 @@ export function VisualizadorLevantamento({
       unidadesPorPonto: cal.unidades_por_ponto,
       unidade: cal.unidade,
     } as Calibracao;
-  }, [calibracoes, plantaSelecionadaId, pagina]);
+  })();
 
-  const gruposItens = useMemo(() => {
+  const gruposItens = (() => {
     const map = new Map<
       string,
       {
@@ -1102,40 +1092,24 @@ export function VisualizadorLevantamento({
     }
 
     return Array.from(map.values());
-  }, [itens]);
+  })();
 
-  const itensVisiveis = useMemo(
-    () =>
-      itens.filter(
-        (item) => !gruposItensOcultos.includes(`${item.tipo}:::${item.nome}`),
-      ),
-    [gruposItensOcultos, itens],
+  const itensVisiveis = itens.filter(
+    (item) => !gruposItensOcultos.includes(`${item.tipo}:::${item.nome}`),
   );
 
-  const faixasTracados = useMemo(
-    () => faixasDeSegmentos(
-      itensVisiveis.filter((item) => item.tipo === "distancia" || item.tipo === "tubulacao_cabo"),
-      12,
-    ),
-    [itensVisiveis],
+  const faixasTracados = faixasDeSegmentos(
+    itensVisiveis.filter((item) => item.tipo === "distancia" || item.tipo === "tubulacao_cabo"),
+    12,
   );
 
-  const resumoVisivel = useMemo(
-    () => calcularResumoLevantamento(itensVisiveis, calibracaoPagina, niveis),
-    [itensVisiveis, calibracaoPagina, niveis],
-  );
+  const resumoVisivel = calcularResumoLevantamento(itensVisiveis, calibracaoPagina, niveis);
 
-  const itensLinearesSelecionaveis = useMemo(
-    () => itensVisiveis.filter((item) => item.tipo === "distancia"),
-    [itensVisiveis],
-  );
+  const itensLinearesSelecionaveis = itensVisiveis.filter((item) => item.tipo === "distancia");
 
-  const totalDistanciasSelecionadas = useMemo(
-    () => itensLinearesSelecionaveis
+  const totalDistanciasSelecionadas = itensLinearesSelecionaveis
       .filter((item) => distanciasSelecionadas.includes(item.id))
-      .reduce((total, item) => total + (item.comprimentoReal ?? calcularDistanciaPontos(item.pontos, calibracaoPagina)), 0),
-    [calibracaoPagina, distanciasSelecionadas, itensLinearesSelecionaveis],
-  );
+      .reduce((total, item) => total + (item.comprimentoReal ?? calcularDistanciaPontos(item.pontos, calibracaoPagina)), 0);
 
   function alternarSelecaoDistancia(id: string) {
     setDistanciasSelecionadas((prev) => prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]);
@@ -1170,29 +1144,20 @@ export function VisualizadorLevantamento({
     setGruposItensOcultos(gruposItens.map((grupo) => grupo.chave));
   }
 
-  const dadosDoLevantamentoAtual = useCallback(() => ({
-    id: levantamentoId,
-    obraId: obraSelecionadaId,
-    plantaId: plantaSelecionadaId,
-    pagina,
-    nome: nomeLevantamento,
-    descricao: descricaoLevantamento,
-    niveis: JSON.parse(JSON.stringify(niveis)),
-    categorias: JSON.parse(JSON.stringify(categorias)),
-    itens: JSON.parse(JSON.stringify(itens)),
-    configLegenda: JSON.parse(JSON.stringify(configLegenda)),
-  }), [
-    categorias,
-    configLegenda,
-    descricaoLevantamento,
-    itens,
-    levantamentoId,
-    niveis,
-    nomeLevantamento,
-    obraSelecionadaId,
-    pagina,
-    plantaSelecionadaId,
-  ]);
+  function dadosDoLevantamentoAtual() {
+    return {
+      id: levantamentoId,
+      obraId: obraSelecionadaId,
+      plantaId: plantaSelecionadaId,
+      pagina,
+      nome: nomeLevantamento,
+      descricao: descricaoLevantamento,
+      niveis: JSON.parse(JSON.stringify(niveis)),
+      categorias: JSON.parse(JSON.stringify(categorias)),
+      itens: JSON.parse(JSON.stringify(itens)),
+      configLegenda: JSON.parse(JSON.stringify(configLegenda)),
+    };
+  }
 
   const salvarRascunhoLocal = useCallback((dados: Parameters<typeof salvarLevantamento>[0]) => {
     if (!dados.obraId || !dados.plantaId) return;
@@ -1532,7 +1497,7 @@ export function VisualizadorLevantamento({
     if (ferramenta === "ponto" && elementoAtivo) {
       const { altura, nivelId } = obterAlturaENivelElemento(elementoAtivo);
       const novoItem: ItemLevantamento = {
-        id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        id: gerarIdLevantamento("item"),
         numero: getNextNumero(elementoAtivo.id),
         tipo: "ponto",
         categoria: elementoAtivo.categoria,
@@ -1608,7 +1573,7 @@ export function VisualizadorLevantamento({
         metadadosCaboAtivo.nivelId || "forro_teto";
 
       novoItem = {
-        id: `cabo_${Date.now()}`,
+         id: gerarIdLevantamento("cabo"),
         numero: getNextNumero("cabo_circuito"),
         tipo: "tubulacao_cabo",
         categoria: "Tubulações e Cabos",
@@ -1634,7 +1599,7 @@ export function VisualizadorLevantamento({
       const itensDistancia: ItemLevantamento[] =
         modoAgrupamentoDistancia === "conjunto"
           ? [{
-              id: `dist_${Date.now()}`,
+               id: gerarIdLevantamento("dist"),
               numero: getNextNumero(elementoAtivo.id),
               tipo: "distancia",
               categoria: elementoAtivo.categoria,
@@ -1650,7 +1615,7 @@ export function VisualizadorLevantamento({
           : pontosEmDesenho.slice(1).map((ponto, indice) => {
               const pontosTrecho = [pontosEmDesenho[indice], ponto];
               return {
-                id: `dist_${Date.now()}_${indice}`,
+                 id: `${gerarIdLevantamento("dist")}_${indice}`,
                 numero: getNextNumero(elementoAtivo.id) + indice,
                 tipo: "distancia",
                 categoria: elementoAtivo.categoria,
@@ -1686,7 +1651,7 @@ export function VisualizadorLevantamento({
     );
     const { altura, nivelId } = obterAlturaENivelElemento(elementoAtivo);
     const novoItem: ItemLevantamento = {
-      id: `area_${Date.now()}`,
+      id: gerarIdLevantamento("area"),
       numero: getNextNumero(elementoAtivo.id),
       tipo: "area",
       categoria: elementoAtivo.categoria,
@@ -1763,7 +1728,7 @@ export function VisualizadorLevantamento({
             : `${dados.nome} (${itemPonto.nome})`;
 
           return {
-            id: `desc_lote_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 5)}`,
+        id: `${gerarIdLevantamento("desc_lote")}_${idx}`,
             numero: getNextNumero(dados.subtipo) + idx,
             tipo: "descida_subida",
             categoria: "Tubulações e Cabos",
@@ -1793,7 +1758,7 @@ export function VisualizadorLevantamento({
     } else if (loteDescidasPontos.length > 0) {
       const novosItens: ItemLevantamento[] = loteDescidasPontos.map(
         (p, idx) => ({
-          id: `desc_lote_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 5)}`,
+        id: `${gerarIdLevantamento("desc_lote")}_${idx}`,
           numero: getNextNumero(dados.subtipo) + idx,
           tipo: "descida_subida",
           categoria: "Tubulações e Cabos",
@@ -1816,7 +1781,7 @@ export function VisualizadorLevantamento({
       setLoteDescidasPontos([]);
     } else if (pontoDescidaPendente) {
       const novoItem: ItemLevantamento = {
-        id: `desc_${Date.now()}`,
+      id: gerarIdLevantamento("desc"),
         numero: getNextNumero(dados.subtipo),
         tipo: "descida_subida",
         categoria: "Tubulações e Cabos",
@@ -2059,7 +2024,7 @@ export function VisualizadorLevantamento({
         (c) => !(c.planta_id === plantaSelecionadaId && c.pagina === pagina),
       ),
       {
-        id: `cal_${Date.now()}`,
+      id: gerarIdLevantamento("cal"),
         planta_id: plantaSelecionadaId,
         pagina,
         unidades_por_ponto: unidadesPorPonto,
