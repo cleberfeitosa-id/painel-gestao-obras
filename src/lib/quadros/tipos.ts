@@ -566,6 +566,7 @@ export interface DerivacaoBarramento {
   comprimentoDerivacaoMm?: number;
   lado: "esquerda" | "direita" | "ambos";
   correnteNominalA: number;
+  corPersonalizada?: string;
   elementoConectadoId?: string;
 }
 
@@ -662,6 +663,8 @@ export interface CircuitoVinculado {
   secaoMm2?: number;
   correnteNominalA?: number;
   elementoId?: string;
+  plantaId?: string;
+  plantaNome?: string;
 }
 
 export interface QuadroTemplateItem {
