@@ -227,7 +227,7 @@ export async function buscarCircuitosObra(obraId: string): Promise<CircuitoVincu
 
   const { data: tarefasCircuito } = await supabase
     .from("tarefas")
-    .select("id, titulo, descricao, localizacao_detalhe")
+    .select("id, titulo, descricao, localizacao_detalhe, planta_id, plantas(nome)")
     .eq("obra_id", obraId)
     .eq("localizacao_tipo", "circuito");
 
@@ -242,12 +242,14 @@ export async function buscarCircuitosObra(obraId: string): Promise<CircuitoVincu
       origemId: t.id,
       condutor: detalhe?.tipoCabo as string | undefined,
       secaoMm2: typeof detalhe?.secaoMm2 === "number" ? detalhe.secaoMm2 : undefined,
+      plantaId: t.planta_id ?? undefined,
+      plantaNome: Array.isArray(t.plantas) ? (t.plantas[0] as { nome?: string } | undefined)?.nome : (t.plantas as { nome?: string } | null)?.nome,
     });
   }
 
   const { data: levantamentos } = await supabase
     .from("levantamentos")
-    .select("id, itens")
+    .select("id, itens, planta_id, plantas(nome)")
     .eq("obra_id", obraId);
 
   for (const lev of levantamentos ?? []) {
@@ -257,13 +259,15 @@ export async function buscarCircuitosObra(obraId: string): Promise<CircuitoVincu
         const meta = item.metadadosCabo as Record<string, unknown> | undefined;
         const tag = (meta?.circuito as string) || (item.nome as string) || "Circuito";
         if (!circuitos.some((c) => c.tag.toLowerCase() === tag.toLowerCase())) {
-          circuitos.push({
+              circuitos.push({
             id: `lev-${item.id || Math.random().toString(36).slice(2)}`,
             tag,
             descricao: `Circuito levantado em planta: ${meta?.tipoCabo || ""}`,
             origem: "levantamento",
             origemId: lev.id,
-            condutor: meta?.tipoCabo as string | undefined,
+                condutor: meta?.tipoCabo as string | undefined,
+                plantaId: lev.planta_id ?? undefined,
+                plantaNome: Array.isArray(lev.plantas) ? (lev.plantas[0] as { nome?: string } | undefined)?.nome : (lev.plantas as { nome?: string } | null)?.nome,
           });
         }
       }
