@@ -853,81 +853,74 @@ export function VisualizadorLevantamento({
     }> = [];
 
     for (const [nomeCirc, itensCirc] of mapaCircuitos.entries()) {
-      const primeiro = itensCirc[0];
-      const totalComprimento = itensCirc.reduce(
-        (acc, i) => acc + (i.comprimentoReal ?? 0),
-        0,
-      );
-      const quantidadeCondutores = (primeiro.metadadosCabo?.condutores ?? []).reduce(
-        (total, condutor) => total + Math.max(0, condutor.quantidade),
-        0,
-      );
-      const segmentos = itensCirc.map((i) => ({
-        segmentoId: i.id,
-        pontos: i.pontos,
-        comprimento: i.comprimentoReal,
-        distanciaCabo: (i.comprimentoReal ?? 0) * quantidadeCondutores,
-      }));
-
-      const nivelNome = primeiro.nivelId
-        ? niveis.find((n) => n.id === primeiro.nivelId)?.nome
-        : undefined;
-
-      const descSugerida = formatarDescricaoTarefaCircuito({
-        nomeLevantamento,
-        circuito: nomeCirc,
-        tipoCabo: primeiro.metadadosCabo?.tipoCabo,
-        tipoCondutor: primeiro.metadadosCabo?.tipoCondutor,
-        comprimento: totalComprimento,
-        quantidadeTrechos: itensCirc.length,
-        altura: primeiro.altura,
-        nivelNome,
-        condutores: primeiro.metadadosCabo?.condutores,
-        fases: primeiro.metadadosCabo?.fases,
-        corFase: primeiro.metadadosCabo?.corFase,
-        corFaseR: primeiro.metadadosCabo?.corFaseR,
-        corFaseS: primeiro.metadadosCabo?.corFaseS,
-        corFaseT: primeiro.metadadosCabo?.corFaseT,
-        observacao: primeiro.metadadosCabo?.observacao || primeiro.observacao,
-      });
-
-      const p0 = primeiro.pontos[0] ?? { x: 0, y: 0 };
-
-      const detalhe: Record<string, unknown> = {
-        elemento: primeiro.nome,
-        subtipo: primeiro.subtipo,
-        categoria: primeiro.categoria,
-        circuito: nomeCirc,
-        comprimento: totalComprimento,
-        quantidade: itensCirc.length,
-        pontos: primeiro.pontos,
-        segmentos,
-        condutores: primeiro.metadadosCabo?.condutores,
-        fases: primeiro.metadadosCabo?.fases,
-        tipoCabo: primeiro.metadadosCabo?.tipoCabo,
-        tipoCondutor: primeiro.metadadosCabo?.tipoCondutor,
-        nivelId: primeiro.nivelId,
-        altura: primeiro.altura,
-        cor: primeiro.cor || primeiro.metadadosCabo?.cor,
-        corFaseR: primeiro.metadadosCabo?.corFaseR,
-        corFaseS: primeiro.metadadosCabo?.corFaseS,
-        corFaseT: primeiro.metadadosCabo?.corFaseT,
-        corFase: primeiro.metadadosCabo?.corFase,
-        observacao: primeiro.metadadosCabo?.observacao || primeiro.observacao,
-      };
-
-      localizacoes.push({
-        localizacao_tipo: "circuito",
-        planta_id: plantaSelecionadaId,
-        pagina,
-        ponto_x: p0.x,
-        ponto_y: p0.y,
-        localizacao_detalhe: detalhe,
-        levantamento_id: idLevantamentoAtual ?? null,
-        titulo_sugerido: `Executar ${primeiro.nome}`,
-        descricao_especifica: descSugerida,
-        comprimento: totalComprimento,
-        quantidade: itensCirc.length,
+      itensCirc.forEach((item, indice) => {
+        const quantidadeCondutores = (item.metadadosCabo?.condutores ?? []).reduce(
+          (total, condutor) => total + Math.max(0, condutor.quantidade),
+          0,
+        );
+        const comprimento = item.comprimentoReal ?? 0;
+        const nivelNome = item.nivelId
+          ? niveis.find((n) => n.id === item.nivelId)?.nome
+          : undefined;
+        const descSugerida = formatarDescricaoTarefaCircuito({
+          nomeLevantamento,
+          circuito: nomeCirc,
+          tipoCabo: item.metadadosCabo?.tipoCabo,
+          tipoCondutor: item.metadadosCabo?.tipoCondutor,
+          comprimento,
+          quantidadeTrechos: 1,
+          altura: item.altura,
+          nivelNome,
+          condutores: item.metadadosCabo?.condutores,
+          fases: item.metadadosCabo?.fases,
+          corFase: item.metadadosCabo?.corFase,
+          corFaseR: item.metadadosCabo?.corFaseR,
+          corFaseS: item.metadadosCabo?.corFaseS,
+          corFaseT: item.metadadosCabo?.corFaseT,
+          observacao: item.metadadosCabo?.observacao || item.observacao,
+        });
+        const p0 = item.pontos[0] ?? { x: 0, y: 0 };
+        const segmento = {
+          segmentoId: item.id,
+          pontos: item.pontos,
+          comprimento: item.comprimentoReal,
+          distanciaCabo: comprimento * quantidadeCondutores,
+        };
+        const detalhe: Record<string, unknown> = {
+          elemento: item.nome,
+          subtipo: item.subtipo,
+          categoria: item.categoria,
+          circuito: nomeCirc,
+          comprimento,
+          quantidade: 1,
+          pontos: item.pontos,
+          segmentos: [segmento],
+          condutores: item.metadadosCabo?.condutores,
+          fases: item.metadadosCabo?.fases,
+          tipoCabo: item.metadadosCabo?.tipoCabo,
+          tipoCondutor: item.metadadosCabo?.tipoCondutor,
+          nivelId: item.nivelId,
+          altura: item.altura,
+          cor: item.cor || item.metadadosCabo?.cor,
+          corFaseR: item.metadadosCabo?.corFaseR,
+          corFaseS: item.metadadosCabo?.corFaseS,
+          corFaseT: item.metadadosCabo?.corFaseT,
+          corFase: item.metadadosCabo?.corFase,
+          observacao: item.metadadosCabo?.observacao || item.observacao,
+        };
+        localizacoes.push({
+          localizacao_tipo: "circuito",
+          planta_id: plantaSelecionadaId,
+          pagina,
+          ponto_x: p0.x,
+          ponto_y: p0.y,
+          localizacao_detalhe: detalhe,
+          levantamento_id: idLevantamentoAtual ?? null,
+          titulo_sugerido: `Executar ${item.nome} - Trecho ${indice + 1}`,
+          descricao_especifica: descSugerida,
+          comprimento,
+          quantidade: 1,
+        });
       });
     }
 

@@ -323,55 +323,20 @@ export async function criarTarefasEmLoteLevantamento(
 
   const { obraId, plantaId, pagina, levantamentoId, itens } = resultado.data;
 
-  const itensProcessados: typeof itens = [];
-  const mapaCircuitos = new Map<string, (typeof itens)[number][]>();
-
-  for (const item of itens) {
-    if (item.tipo === "circuito") {
-      const nomeCirc =
-        (item.detalhe?.circuito as string)?.trim() || item.nome.trim();
-      const lista = mapaCircuitos.get(nomeCirc) || [];
-      lista.push(item);
-      mapaCircuitos.set(nomeCirc, lista);
-    } else {
-      itensProcessados.push(item);
-    }
+  const [{ data: planta }, { data: levantamento }] = await Promise.all([
+    supabase.from("plantas").select("obra_id, total_paginas").eq("id", plantaId).single(),
+    levantamentoId
+      ? supabase.from("levantamentos").select("obra_id, planta_id").eq("id", levantamentoId).single()
+      : Promise.resolve({ data: null }),
+  ]);
+  if (!planta || planta.obra_id !== obraId || pagina > planta.total_paginas) {
+    return { erro: "Planta ou pagina do lote invalida." };
+  }
+  if (levantamentoId && (!levantamento || levantamento.obra_id !== obraId || levantamento.planta_id !== plantaId)) {
+    return { erro: "Levantamento nao pertence a obra e planta informadas." };
   }
 
-  for (const [nomeCirc, itensCirc] of mapaCircuitos.entries()) {
-    if (itensCirc.length === 1) {
-      itensProcessados.push(itensCirc[0]);
-    } else {
-      const primeiro = itensCirc[0];
-      const totalComp = itensCirc.reduce(
-        (acc, i) =>
-          acc +
-          (typeof i.detalhe?.comprimento === "number"
-            ? i.detalhe.comprimento
-            : 0),
-        0,
-      );
-      const segmentos = itensCirc.map((i, indice) => ({
-        segmentoId: typeof i.detalhe?.segmentoId === "string"
-          ? i.detalhe.segmentoId
-          : `${nomeCirc}-${indice + 1}`,
-        pontos: i.detalhe?.pontos || [],
-        comprimento: i.detalhe?.comprimento,
-        distanciaCabo: i.detalhe?.distanciaCabo,
-      }));
-      const detalheFundido = {
-        ...primeiro.detalhe,
-        circuito: nomeCirc,
-        comprimento: totalComp,
-        quantidade: itensCirc.length,
-        segmentos,
-      };
-      itensProcessados.push({
-        ...primeiro,
-        detalhe: detalheFundido,
-      });
-    }
-  }
+  const itensProcessados = itens;
 
   const linhas = itensProcessados.map((item) => ({
     titulo: item.titulo,
