@@ -785,8 +785,9 @@ export function VisualizadorLevantamento({
     setCriandoLoteTarefas(true);
     setMensagemLote(null);
 
-    let idLevantamentoAtual = levantamentoId;
-    if (podeEditar) {
+    try {
+      let idLevantamentoAtual = levantamentoId;
+      if (podeEditar) {
       const resSalvar = await salvarLevantamento({
         id: levantamentoId,
         obraId: obraSelecionadaId,
@@ -800,18 +801,17 @@ export function VisualizadorLevantamento({
         configLegenda: JSON.parse(JSON.stringify(configLegenda)),
       });
 
-      if ("erro" in resSalvar) {
-        setCriandoLoteTarefas(false);
-        setMensagemLote({
-          tipo: "erro",
-          texto: `Erro ao salvar anotações do levantamento: ${resSalvar.erro}`,
-        });
-        return;
-      }
+        if ("erro" in resSalvar) {
+          setMensagemLote({
+            tipo: "erro",
+            texto: `Erro ao salvar anotações do levantamento: ${resSalvar.erro}`,
+          });
+          return;
+        }
 
-      idLevantamentoAtual = resSalvar.id;
-      setLevantamentoId(resSalvar.id);
-    }
+        idLevantamentoAtual = resSalvar.id;
+        setLevantamentoId(resSalvar.id);
+      }
 
     const mapaCircuitos = new Map<string, ItemLevantamento[]>();
     const outrosItens: ItemLevantamento[] = [];
@@ -942,34 +942,42 @@ export function VisualizadorLevantamento({
       });
     }
 
-    const res = await salvarRascunhoLote({
-      obra_id: obraSelecionadaId,
-      planta_id: plantaSelecionadaId,
-      pagina,
-      localizacoes,
-    });
+      const res = await salvarRascunhoLote({
+        obra_id: obraSelecionadaId,
+        planta_id: plantaSelecionadaId,
+        pagina,
+        localizacoes,
+      });
 
-    setCriandoLoteTarefas(false);
-    if ("erro" in res) {
-      setMensagemLote({ tipo: "erro", texto: res.erro });
-      return;
+      if ("erro" in res) {
+        setMensagemLote({ tipo: "erro", texto: res.erro });
+        return;
+      }
+
+      let tituloComum = itensAlvo[0]?.nome ? `Executar ${itensAlvo[0].nome}` : "Tarefas em Lote";
+      if (itensAlvo.every((i) => i.tipo === "tubulacao_cabo")) {
+        const circuito = itensAlvo[0]?.metadadosCabo?.circuito;
+        tituloComum = `Passagem de Cabo - ${circuito ? `Circuito ${circuito}` : "Elétrica"}`;
+      }
+
+      const params = new URLSearchParams({
+        lote: res.id,
+        titulo: tituloComum,
+      });
+      if (idLevantamentoAtual) {
+        params.set("levantamento", idLevantamentoAtual);
+      }
+
+      router.push(`/tarefas/nova-em-lote?${params.toString()}`);
+    } catch (erro) {
+      console.error("[levantamento] falha ao preparar tarefas em lote:", erro);
+      setMensagemLote({
+        tipo: "erro",
+        texto: "Nao foi possivel preparar as tarefas em lote. Tente novamente.",
+      });
+    } finally {
+      setCriandoLoteTarefas(false);
     }
-
-    let tituloComum = itensAlvo[0]?.nome ? `Executar ${itensAlvo[0].nome}` : "Tarefas em Lote";
-    if (itensAlvo.every((i) => i.tipo === "tubulacao_cabo")) {
-      const circuito = itensAlvo[0]?.metadadosCabo?.circuito;
-      tituloComum = `Passagem de Cabo - ${circuito ? `Circuito ${circuito}` : "Elétrica"}`;
-    }
-
-    const params = new URLSearchParams({
-      lote: res.id,
-      titulo: tituloComum,
-    });
-    if (idLevantamentoAtual) {
-      params.set("levantamento", idLevantamentoAtual);
-    }
-
-    router.push(`/tarefas/nova-em-lote?${params.toString()}`);
   }
 
   async function criarTarefaAPartirDeItem(item: ItemLevantamento) {

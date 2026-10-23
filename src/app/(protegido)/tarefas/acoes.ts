@@ -20,6 +20,24 @@ import type {
 
 type Resultado = { erro?: string };
 
+async function comTimeout<T>(promessa: Promise<T>, milissegundos: number): Promise<T> {
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promessa,
+      new Promise<never>((_, rejeitar) => {
+        temporizador = setTimeout(
+          () => rejeitar(new Error("Tempo limite da notificacao excedido.")),
+          milissegundos,
+        );
+      }),
+    ]);
+  } finally {
+    if (temporizador) clearTimeout(temporizador);
+  }
+}
+
 const esquemaMedicao = z.object({
   catalogo_id: z.string().uuid("Selecione um item do catalogo valido."),
   quantidade: z.coerce.number().min(0, "A quantidade nao pode ser negativa."),
@@ -724,13 +742,20 @@ export async function criarTarefasEmLote(
 
   // Notifica cada responsavel apenas uma vez, usando a primeira tarefa do lote.
   for (const [responsavelId, tarefaId] of primeiros) {
-    await enviarNotificacao(tarefaId, responsavelId, {
-      titulo: dados.titulo,
-      descricao: dados.descricao,
-      obra_id: dados.obra_id,
-      prazo: dados.prazo,
-      prioridade: dados.prioridade as PrioridadeTarefa,
-    });
+    try {
+      await comTimeout(
+        enviarNotificacao(tarefaId, responsavelId, {
+          titulo: dados.titulo,
+          descricao: dados.descricao,
+          obra_id: dados.obra_id,
+          prazo: dados.prazo,
+          prioridade: dados.prioridade as PrioridadeTarefa,
+        }),
+        5_000,
+      );
+    } catch (erro) {
+      console.error("[tarefas] falha ao notificar responsavel:", erro);
+    }
   }
 
   const obraId = dados.obra_id;
