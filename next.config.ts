@@ -5,6 +5,13 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   : undefined;
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // Levantamentos grandes armazenam a geometria completa em JSONB.
+      // Mantemos margem abaixo do limite de payload da funcao da Vercel.
+      bodySizeLimit: "4mb",
+    },
+  },
   images: {
     remotePatterns: supabaseHost
       ? [
