@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      rdos: {
+        Row: { id: string; obra_id: string; data: string; conteudo: Json; criado_por: string | null; criado_em: string; atualizado_em: string; excluido_em: string | null; excluido_por: string | null }
+        Insert: { id?: string; obra_id: string; data: string; conteudo?: Json; criado_por?: string | null; criado_em?: string; atualizado_em?: string; excluido_em?: string | null; excluido_por?: string | null }
+        Update: { id?: string; obra_id?: string; data?: string; conteudo?: Json; criado_por?: string | null; criado_em?: string; atualizado_em?: string; excluido_em?: string | null; excluido_por?: string | null }
+        Relationships: [{ foreignKeyName: "rdos_obra_id_fkey"; columns: ["obra_id"]; isOneToOne: false; referencedRelation: "obras"; referencedColumns: ["id"] }]
+      }
+      rdo_historico: {
+        Row: { id: string; rdo_id: string | null; obra_id: string; operacao: string; antes: Json | null; depois: Json | null; autor_id: string | null; criado_em: string }
+        Insert: { id?: string; rdo_id?: string | null; obra_id: string; operacao: string; antes?: Json | null; depois?: Json | null; autor_id?: string | null; criado_em?: string }
+        Update: { id?: string; rdo_id?: string | null; obra_id?: string; operacao?: string; antes?: Json | null; depois?: Json | null; autor_id?: string | null; criado_em?: string }
+        Relationships: [
+          { foreignKeyName: "rdo_historico_rdo_id_fkey"; columns: ["rdo_id"]; isOneToOne: false; referencedRelation: "rdos"; referencedColumns: ["id"] },
+          { foreignKeyName: "rdo_historico_obra_id_fkey"; columns: ["obra_id"]; isOneToOne: false; referencedRelation: "obras"; referencedColumns: ["id"] },
+        ]
+      }
       compras: {
         Row: { id: string; obra_id: string; fornecedor: string | null; documento: string | null; data_compra: string; observacao: string | null; criado_por: string | null; criado_em: string; atualizado_em: string }
         Insert: { id?: string; obra_id: string; fornecedor?: string | null; documento?: string | null; data_compra?: string; observacao?: string | null; criado_por?: string | null; criado_em?: string; atualizado_em?: string }
@@ -2101,6 +2116,8 @@ export type OrcamentoRow = Tabelas<"orcamentos">;
 export type OrcamentoItemRow = Tabelas<"orcamento_itens">;
 export type OrcamentoVersaoRow = Tabelas<"orcamento_versoes">;
 export type OrcamentoAuditoriaRow = Tabelas<"orcamento_auditoria">;
+export type RdoRow = Tabelas<"rdos">;
+export type RdoHistoricoRow = Tabelas<"rdo_historico">;
 export type ComposicaoRow = Tabelas<"composicoes">;
 export type ComposicaoComponenteRow = Tabelas<"composicao_componentes">;
 export type QuadroTemplateRow = Tabelas<"quadro_templates">;
