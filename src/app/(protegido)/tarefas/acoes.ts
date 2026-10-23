@@ -700,6 +700,7 @@ export async function criarTarefasEmLote(
             : typeof quantHerdada === "number" && quantHerdada > 0
               ? quantHerdada
               : m.quantidade || 1,
+        segmentos_circuito: segmentosParaMedicao(loc?.localizacao_detalhe),
         criado_por: user.id,
       }));
     });

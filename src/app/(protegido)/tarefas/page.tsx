@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hojeChave, chaveDia, paraData } from "@/lib/datas";
@@ -249,7 +250,7 @@ async function buscarOpcoes() {
     supabase.from("obras").select("id, nome").order("nome"),
     supabase.from("perfis").select("id, nome").eq("ativo", true).order("nome"),
     supabase.from("executores").select("id, nome").order("nome"),
-    supabase.from("plantas").select("id, nome").order("nome"),
+    supabase.from("plantas").select("id, nome, obra_id").order("nome"),
     supabase.from("tags_tarefa").select("id, nome").order("nome"),
     supabase.from("catalogo_precos").select("id, nome, unidade, medicoes!inner(id, titulo, obra_id)").order("nome"),
     supabase.from("medicoes").select("id, titulo, obra_id, obras(nome)").order("titulo"),
@@ -271,7 +272,7 @@ async function buscarOpcoes() {
     responsaveis: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
     supervisores: (perfis ?? []) as Pick<PerfilRow, "id" | "nome">[],
     executores: (executores ?? []) as Pick<ExecutorRow, "id" | "nome">[],
-    plantas: (plantas ?? []) as Pick<PlantaRow, "id" | "nome">[],
+    plantas: (plantas ?? []) as Pick<PlantaRow, "id" | "nome" | "obra_id">[],
     tags: (tags ?? []) as { id: string; nome: string }[],
     catalogoPrecos: (catalogo ?? []) as {
       id: string;
@@ -337,7 +338,7 @@ export default async function TarefasPage({
   const statusValido: StatusTarefa[] = ["pendente", "em_execucao", "concluido"];
   const prioridadeValida: PrioridadeTarefa[] = ["baixa", "media", "alta", "urgente"];
 
-  const filtros = {
+  const filtrosBase = {
     busca: params.busca,
     obra: params.obra,
     responsavel: params.responsavel,
@@ -364,9 +365,27 @@ export default async function TarefasPage({
       : undefined,
   };
 
-  const [tarefas, opcoes, dadosPlanta] = await Promise.all([
+  const opcoes = await buscarOpcoes();
+  const plantaSelecionada = params.planta
+    ? opcoes.plantas.find((planta) => planta.id === params.planta)
+    : undefined;
+  const plantaCompativel = Boolean(
+    plantaSelecionada && (!params.obra || plantaSelecionada.obra_id === params.obra),
+  );
+  const filtros = {
+    ...filtrosBase,
+    planta: plantaCompativel ? params.planta : undefined,
+  };
+  if (params.planta && !plantaCompativel) {
+    const parametrosNormalizados = new URLSearchParams();
+    for (const [chave, valor] of Object.entries(params)) {
+      if (chave !== "planta" && valor) parametrosNormalizados.set(chave, valor);
+    }
+    const queryNormalizada = parametrosNormalizados.toString();
+    redirect(queryNormalizada ? `/tarefas?${queryNormalizada}` : "/tarefas");
+  }
+  const [tarefas, dadosPlanta] = await Promise.all([
     buscarTarefas(filtros),
-    buscarOpcoes(),
     filtros.planta ? buscarPlantaCompleta(filtros.planta) : Promise.resolve(null),
   ]);
   const { obras, responsaveis, supervisores, executores, plantas, tags, catalogoPrecos, medicoes, podeExcluir } = opcoes;
