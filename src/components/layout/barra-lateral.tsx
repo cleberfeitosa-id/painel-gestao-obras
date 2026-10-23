@@ -16,6 +16,7 @@ import {
   CopyCheck,
   Calculator,
   ShoppingCart,
+  ClipboardList,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -76,6 +77,7 @@ export function BarraLateral({ papel }: BarraLateralProps) {
     { href: "/tarefas", rotulo: "Tarefas", icone: CheckSquare },
     { href: "/calendario", rotulo: "Calendário", icone: Calendar },
     { href: "/relatorios", rotulo: "Relatórios", icone: FileText },
+    { href: "/rdo", rotulo: "RDO", icone: ClipboardList },
   ];
 
   function estaAtivo(href: string) {
