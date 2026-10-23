@@ -1247,7 +1247,7 @@ export function VisualizadorPlanta({
                      {circuitosDisponiveis.map((circuito) => {
                        const marcado = circuitosSelecionados.includes(circuito);
                        return (
-                         <label key={circuito} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-superficie-50">
+                          <label key={circuito} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-superficie-700 hover:bg-superficie-50">
                            <input
                              type="checkbox"
                              checked={marcado}

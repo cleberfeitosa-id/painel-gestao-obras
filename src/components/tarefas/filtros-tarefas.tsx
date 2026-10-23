@@ -12,7 +12,7 @@ interface FiltrosTarefasProps {
   responsaveis: Pick<PerfilRow, "id" | "nome">[];
   supervisores: Pick<PerfilRow, "id" | "nome">[];
   executores: Pick<ExecutorRow, "id" | "nome">[];
-  plantas: { id: string; nome: string }[];
+  plantas: { id: string; nome: string; obra_id: string }[];
   tags: { id: string; nome: string }[];
   medicoes?: {
     id: string;
@@ -62,6 +62,9 @@ export function FiltrosTarefas({
   const medicoesFiltradas = obraIdSelecionada
     ? medicoes.filter((m) => m.obra_id === obraIdSelecionada)
     : medicoes;
+  const plantasFiltradas = obraIdSelecionada
+    ? plantas.filter((planta) => planta.obra_id === obraIdSelecionada)
+    : plantas;
 
   const aplicar = useCallback(
     (mudancas: Record<string, string>) => {
@@ -124,7 +127,14 @@ export function FiltrosTarefas({
             rotulo="Obra"
             name="obra"
             value={searchParams.get("obra") ?? ""}
-            onChange={(e) => aplicar({ obra: e.target.value })}
+             onChange={(e) => {
+               const novaObra = e.target.value;
+               const plantaAtual = searchParams.get("planta") ?? "";
+               const plantaCompativel = !novaObra || plantas.some(
+                 (planta) => planta.id === plantaAtual && planta.obra_id === novaObra,
+               );
+               aplicar({ obra: novaObra, planta: plantaCompativel ? plantaAtual : "" });
+             }}
           >
             <option value="">Todas as obras</option>
             {obras.map((obra) => (
@@ -140,7 +150,7 @@ export function FiltrosTarefas({
             onChange={(e) => aplicar({ planta: e.target.value })}
           >
             <option value="">Todas as plantas</option>
-            {plantas.map((planta) => (
+             {plantasFiltradas.map((planta) => (
               <option key={planta.id} value={planta.id}>
                 {planta.nome}
               </option>

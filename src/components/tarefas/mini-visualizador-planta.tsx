@@ -312,6 +312,7 @@ export function MiniVisualizadorPlanta({
   const [dicaTarefa, setDicaTarefa] = useState<string | null>(null);
   const [tarefaDestaque, setTarefaDestaque] = useState<string | null>(null);
   const [circuitosSelecionados, setCircuitosSelecionados] = useState<string[]>([]);
+  const [filtroCircuitosAberto, setFiltroCircuitosAberto] = useState(false);
   const [tarefaSelecionada, setTarefaSelecionada] = useState<TarefaPlanta | null>(null);
   const [menuSobreposicao, setMenuSobreposicao] = useState<{
     posicao: { x: number; y: number };
@@ -324,6 +325,7 @@ export function MiniVisualizadorPlanta({
   const [edicaoRegiao, setEdicaoRegiao] = useState<RegiaoPdf | null>(null);
   const [salvandoLocalizacao, setSalvandoLocalizacao] = useState(false);
   const [erroSalvarLocalizacao, setErroSalvarLocalizacao] = useState<string | null>(null);
+  const filtroCircuitosRef = useRef<HTMLDivElement>(null);
 
   const panRef = useRef<{ x: number; y: number; sl: number; st: number; moveu: boolean } | null>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
@@ -356,6 +358,17 @@ export function MiniVisualizadorPlanta({
     }),
     [tarefas, circuitosSelecionados],
   );
+
+  useEffect(() => {
+    if (!filtroCircuitosAberto) return;
+    function fecharAoClicarFora(evento: MouseEvent) {
+      if (!filtroCircuitosRef.current?.contains(evento.target as Node)) {
+        setFiltroCircuitosAberto(false);
+      }
+    }
+    document.addEventListener("mousedown", fecharAoClicarFora);
+    return () => document.removeEventListener("mousedown", fecharAoClicarFora);
+  }, [filtroCircuitosAberto]);
 
   const pontoFocoTarefaAtual = useMemo<PontoPdf | null>(() => {
     if (modoEdicao) {
@@ -941,11 +954,11 @@ export function MiniVisualizadorPlanta({
 
            <div className="flex flex-wrap items-center gap-1 shrink-0">
              {circuitosDisponiveis.length > 0 && (
-               <details className="relative">
-                 <summary className="inline-flex h-7 cursor-pointer list-none items-center gap-1 rounded-md border border-borda bg-white px-2 text-[11px] font-medium text-superficie-700 shadow-2xs hover:bg-superficie-100">
-                   Circuitos ({circuitosSelecionados.length === 0 ? "todos" : `${circuitosSelecionados.length}/${circuitosDisponiveis.length}`})
-                 </summary>
-                 <div className="absolute right-0 z-50 mt-1 max-h-56 min-w-56 overflow-y-auto rounded-lg border border-borda bg-white p-2 shadow-lg">
+                <div ref={filtroCircuitosRef} className="relative">
+                  <button type="button" aria-expanded={filtroCircuitosAberto} onClick={() => setFiltroCircuitosAberto((aberto) => !aberto)} className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-borda bg-white px-2 text-[11px] font-medium text-superficie-700 shadow-2xs hover:bg-superficie-100">
+                    Circuitos ({circuitosSelecionados.length === 0 ? "todos" : `${circuitosSelecionados.length}/${circuitosDisponiveis.length}`})
+                  </button>
+                  {filtroCircuitosAberto && <div className="absolute right-0 z-50 mt-1 max-h-56 min-w-56 overflow-y-auto rounded-lg border border-borda bg-white p-2 shadow-lg text-left">
                    <div className="mb-1 flex items-center justify-between gap-2 border-b border-superficie-100 pb-1">
                      <span className="text-[10px] font-semibold uppercase tracking-wide text-superficie-500">Exibir circuitos</span>
                      <button
@@ -969,8 +982,8 @@ export function MiniVisualizadorPlanta({
                        <span className="truncate">{circuito}</span>
                      </label>
                    ))}
-                 </div>
-               </details>
+                  </div>}
+                </div>
              )}
 
              <button
