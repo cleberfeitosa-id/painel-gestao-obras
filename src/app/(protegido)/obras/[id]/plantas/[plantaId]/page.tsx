@@ -68,9 +68,8 @@ export default async function DetalhePlantaPage({
       .order("tag"),
     supabase
       .from("levantamentos")
-      .select("id, itens")
-      .eq("obra_id", id)
-      .eq("planta_id", plantaId),
+      .select("id, itens, planta_id")
+      .eq("obra_id", id),
   ]);
 
   async function buscarTodasTarefasPlanta(pid: string) {
@@ -165,11 +164,15 @@ export default async function DetalhePlantaPage({
     );
   }
 
-  const idsLevantamentosPlanta = new Set((levantamentos ?? []).map((levantamento) => levantamento.id));
+  const idsLevantamentosPlanta = new Set(
+    (levantamentos ?? [])
+      .filter((levantamento) => levantamento.planta_id === plantaId)
+      .map((levantamento) => levantamento.id),
+  );
   const quadrosFiltro: QuadroFiltro[] = (quadros ?? [])
     .filter((quadro) =>
       (quadro.planta_id === plantaId &&
-        (quadro.levantamento_id == null || idsLevantamentosPlanta.has(quadro.levantamento_id))) ||
+        (quadro.levantamento_id == null || (levantamentos ?? []).some((levantamento) => levantamento.id === quadro.levantamento_id))) ||
       (quadro.planta_id == null && quadro.levantamento_id != null && idsLevantamentosPlanta.has(quadro.levantamento_id)),
     )
     .map((quadro) => {

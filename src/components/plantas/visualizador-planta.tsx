@@ -533,7 +533,10 @@ export function VisualizadorPlanta({
         if (circ) {
           const id = `tarefa:${normalizarCircuito(circ)}`;
           const atual = circuitos.get(id) ?? { id, tag: circ, segmentoIds: [], levantamentoIds: [] };
-          for (const segmento of t.localizacao_detalhe?.segmentos ?? []) {
+          const segmentos = Array.isArray(t.localizacao_detalhe?.segmentos)
+            ? t.localizacao_detalhe.segmentos
+            : [];
+          for (const segmento of segmentos) {
             if (segmento.segmentoId) atual.segmentoIds.push(segmento.segmentoId);
           }
           if (t.levantamento_id) atual.levantamentoIds.push(t.levantamento_id);
@@ -581,7 +584,11 @@ export function VisualizadorPlanta({
           : quadros.find((quadro) => quadro.id === quadroSelecionadoId)?.circuitos ?? [];
         const candidatos = circuitoSelecionado ? [circuitoSelecionado] : circuitosDoQuadro;
         const circuitoTarefa = t.localizacao_detalhe?.circuito?.trim() ?? "";
-        const segmentosTarefa = new Set((t.localizacao_detalhe?.segmentos ?? []).map((segmento) => segmento.segmentoId).filter((id): id is string => Boolean(id)));
+        const segmentosTarefa = new Set(
+          (Array.isArray(t.localizacao_detalhe?.segmentos) ? t.localizacao_detalhe.segmentos : [])
+            .map((segmento) => segmento.segmentoId)
+            .filter((id): id is string => Boolean(id)),
+        );
         const pertence = candidatos.some((circuito) =>
           circuito.segmentoIds.some((segmentoId) => segmentosTarefa.has(segmentoId)) ||
           (circuito.segmentoIds.length === 0 && normalizarCircuito(circuitoTarefa) === normalizarCircuito(circuito.tag) &&
@@ -659,15 +666,23 @@ export function VisualizadorPlanta({
   }
 
   async function persistirPosicaoQuadro(id: string, ponto: PontoPdf) {
-    const resultado = await posicionarQuadroEletrico({
-      quadroId: id,
-      obraId,
-      plantaId: planta.id,
-      pagina: paginaAtual,
-      pontoX: ponto.x,
-      pontoY: ponto.y,
-    });
-    if (resultado.erro) setErroPosicionamento(resultado.erro);
+    try {
+      const resultado = await posicionarQuadroEletrico({
+        quadroId: id,
+        obraId,
+        plantaId: planta.id,
+        pagina: paginaAtual,
+        pontoX: ponto.x,
+        pontoY: ponto.y,
+      });
+      if (resultado.erro) {
+        setErroPosicionamento(resultado.erro);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setErroPosicionamento("Não foi possível salvar a posição do quadro.");
+    }
   }
 
   function posicionarQuadroNoPonto(ponto: PontoPdf) {
@@ -1351,28 +1366,29 @@ export function VisualizadorPlanta({
                   ))}
                 </select>
               </div>
-              {quadrosPosicionamento.length > 0 && podeEditar && (
-                <>
-                  <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
-                  <div className="flex items-center gap-1.5 rounded-lg border border-borda bg-superficie-50 px-2 py-1">
-                    <PanelTop className="h-3.5 w-3.5 text-azul-600" />
-                    <label className="sr-only" htmlFor="quadro-posicionamento-toolbar">Quadro para posicionar</label>
-                    <select
-                      id="quadro-posicionamento-toolbar"
-                      value={quadroPosicionamentoId}
-                      onChange={(e) => setQuadroPosicionamentoId(e.target.value)}
-                      className="max-w-40 rounded border border-borda bg-white px-1.5 py-1 text-xs text-superficie-800"
-                    >
-                      <option value="">Selecionar quadro</option>
-                      {quadrosPosicionamento.map((quadro) => (
-                        <option key={quadro.id} value={quadro.id}>
-                          {quadro.tag}{quadro.nome ? ` · ${quadro.nome}` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
+            </>
+          )}
+
+          {quadrosPosicionamento.length > 0 && podeEditar && (
+            <>
+              <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
+              <div className="flex items-center gap-1.5 rounded-lg border border-borda bg-superficie-50 px-2 py-1">
+                <PanelTop className="h-3.5 w-3.5 text-azul-600" />
+                <label className="sr-only" htmlFor="quadro-posicionamento-toolbar">Quadro para posicionar</label>
+                <select
+                  id="quadro-posicionamento-toolbar"
+                  value={quadroPosicionamentoId}
+                  onChange={(e) => setQuadroPosicionamentoId(e.target.value)}
+                  className="max-w-40 rounded border border-borda bg-white px-1.5 py-1 text-xs text-superficie-800"
+                >
+                  <option value="">Selecionar quadro</option>
+                  {quadrosPosicionamento.map((quadro) => (
+                    <option key={quadro.id} value={quadro.id}>
+                      {quadro.tag}{quadro.nome ? ` · ${quadro.nome}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </>
           )}
 
