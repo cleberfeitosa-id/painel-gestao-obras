@@ -1776,6 +1776,7 @@ export function VisualizadorPlanta({
                     })}
 
                   {quadrosPosicionamento.map((quadro) => {
+                    if (quadro.planta_id !== planta.id) return null;
                     const posicao = posicoesQuadros.get(quadro.id);
                     if (!posicao || posicao.pagina !== paginaAtual || posicao.x == null || posicao.y == null) return null;
                     const pos = pdfParaPercentual(
