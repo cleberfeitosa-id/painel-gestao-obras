@@ -213,7 +213,7 @@ export default async function DetalhePlantaPage({
       };
    });
 
-  const quadrosPosicionamento: QuadroPosicionamento[] = quadrosFiltro.map((quadro) => ({
+  const quadrosPosicionamento: QuadroPosicionamento[] = (quadros ?? []).map((quadro) => ({
     id: quadro.id,
     tag: quadro.tag,
     nome: quadro.nome,

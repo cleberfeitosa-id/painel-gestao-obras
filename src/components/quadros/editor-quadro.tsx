@@ -753,7 +753,7 @@ export function EditorQuadro({
     itemY: number,
   ) {
     if (!podeEditar || e.button !== 0) return;
-    if (modoSelecao) {
+    if (modoSelecao && (tipo !== "elemento" || !selecaoElementos.has(id))) {
       iniciarSelecao(e);
       return;
     }
