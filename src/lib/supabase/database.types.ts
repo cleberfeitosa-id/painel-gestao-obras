@@ -1636,10 +1636,13 @@ export type Database = {
           margem_lateral_mm: number
           margem_topo_mm: number
           material_caixa: string | null
-          nome: string | null
-          obra_id: string
-          planta_id: string | null
-          profundidade_mm: number
+           nome: string | null
+           obra_id: string
+           pagina: number | null
+           planta_id: string | null
+           ponto_x: number | null
+           ponto_y: number | null
+           profundidade_mm: number
           tag: string
           template_id: string | null
           tensao_nominal: string | null
@@ -1663,10 +1666,13 @@ export type Database = {
           margem_lateral_mm?: number
           margem_topo_mm?: number
           material_caixa?: string | null
-          nome?: string | null
-          obra_id: string
-          planta_id?: string | null
-          profundidade_mm?: number
+           nome?: string | null
+           obra_id: string
+           pagina?: number | null
+           planta_id?: string | null
+           ponto_x?: number | null
+           ponto_y?: number | null
+           profundidade_mm?: number
           tag: string
           template_id?: string | null
           tensao_nominal?: string | null
@@ -1690,10 +1696,13 @@ export type Database = {
           margem_lateral_mm?: number
           margem_topo_mm?: number
           material_caixa?: string | null
-          nome?: string | null
-          obra_id?: string
-          planta_id?: string | null
-          profundidade_mm?: number
+           nome?: string | null
+           obra_id?: string
+           pagina?: number | null
+           planta_id?: string | null
+           ponto_x?: number | null
+           ponto_y?: number | null
+           profundidade_mm?: number
           tag?: string
           template_id?: string | null
           tensao_nominal?: string | null
