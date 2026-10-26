@@ -1624,10 +1624,10 @@ export async function exportarPlantaIluminadaPdf(
     const targetPageRef = mapaTarefasParaPagina.get(coord.tarefaId);
     if (!targetPageRef) continue;
 
-    const xMin = (coord.pctMinX / 100) * a0Width;
-    const xMax = (coord.pctMaxX / 100) * a0Width;
-    const yMin = ((100 - coord.pctMaxY) / 100) * a0Height;
-    const yMax = ((100 - coord.pctMinY) / 100) * a0Height;
+    const xMin = enquadramento.x + (coord.pctMinX / 100) * enquadramento.largura;
+    const xMax = enquadramento.x + (coord.pctMaxX / 100) * enquadramento.largura;
+    const yMin = enquadramento.y + ((100 - coord.pctMaxY) / 100) * enquadramento.altura;
+    const yMax = enquadramento.y + ((100 - coord.pctMinY) / 100) * enquadramento.altura;
 
     const linkAnnot = pdfDoc.context.obj({
       Type: "Annot",
@@ -2378,6 +2378,7 @@ export async function exportarRelatorioRdoCompletoPdf(
   const mapaPranchasRefs: { plantaKey: string; pageRef: ReturnType<typeof pdfDoc.context.register> }[] = [];
   const coordsPlantasLinks: { plantaKey: string; tarefaId: string; pctMinX: number; pctMinY: number; pctMaxX: number; pctMaxY: number }[] = [];
   const mapaBaseCanvases = new Map<string, { canvas: HTMLCanvasElement; dimensoesPdf: { largura: number; altura: number } }>();
+  const mapaEnquadramentos = new Map<string, EnquadramentoPdf>();
 
   const plantasComUrl = plantas.filter((p) => p.urlPdf);
   for (let pIdx = 0; pIdx < plantasComUrl.length; pIdx++) {
@@ -2521,13 +2522,20 @@ export async function exportarRelatorioRdoCompletoPdf(
     const aspect = compCanvas.width / compCanvas.height;
     const pW = aspect >= 1 ? dims.largura : dims.altura;
     const pH = aspect >= 1 ? dims.altura : dims.largura;
+    const enquadramento = calcularEnquadramentoPdf(dimensoesPdf, pW, pH);
+    mapaEnquadramentos.set(plantaKey, enquadramento);
 
     const sheetPage = pdfDoc.addPage([pW, pH]);
     const sheetDataUrl = compCanvas.toDataURL("image/jpeg", 0.94);
     const sheetBytes = await fetch(sheetDataUrl).then((r) => r.arrayBuffer());
     const sheetImg = await pdfDoc.embedJpg(sheetBytes);
 
-    sheetPage.drawImage(sheetImg, { x: 0, y: 0, width: pW, height: pH });
+    sheetPage.drawImage(sheetImg, {
+      x: enquadramento.x,
+      y: enquadramento.y,
+      width: enquadramento.largura,
+      height: enquadramento.altura,
+    });
     mapaPranchasRefs.push({ plantaKey, pageRef: sheetPage.ref });
   }
 
@@ -2707,8 +2715,6 @@ export async function exportarRelatorioRdoCompletoPdf(
   }
 
   notificar("Injetando hiperlinks nas pranchas...", 92);
-  const dimsFolha = DIMENSOES_FOLHA_PT[opcoes.tamanhoFolha];
-
   for (const coord of coordsPlantasLinks) {
     const targetPageRef = mapaTarefasParaPagina.get(coord.tarefaId);
     if (!targetPageRef) continue;
@@ -2716,13 +2722,13 @@ export async function exportarRelatorioRdoCompletoPdf(
     const pranchaTarget = mapaPranchasRefs.find((pr) => pr.plantaKey === coord.plantaKey);
     if (!pranchaTarget) continue;
 
-    const pWidth = dimsFolha.largura;
-    const pHeight = dimsFolha.altura;
+    const enquadramento = mapaEnquadramentos.get(coord.plantaKey);
+    if (!enquadramento) continue;
 
-    const xMin = (coord.pctMinX / 100) * pWidth;
-    const xMax = (coord.pctMaxX / 100) * pWidth;
-    const yMin = ((100 - coord.pctMaxY) / 100) * pHeight;
-    const yMax = ((100 - coord.pctMinY) / 100) * pHeight;
+    const xMin = enquadramento.x + (coord.pctMinX / 100) * enquadramento.largura;
+    const xMax = enquadramento.x + (coord.pctMaxX / 100) * enquadramento.largura;
+    const yMin = enquadramento.y + ((100 - coord.pctMaxY) / 100) * enquadramento.altura;
+    const yMax = enquadramento.y + ((100 - coord.pctMinY) / 100) * enquadramento.altura;
 
     const linkAnnot = pdfDoc.context.obj({
       Type: "Annot",
