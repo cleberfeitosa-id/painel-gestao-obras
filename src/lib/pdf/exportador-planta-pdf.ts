@@ -185,13 +185,12 @@ function caminhoSvgPdf(
   largura: number,
   altura: number,
   deslocamentoX = 0,
-  deslocamentoY = 0,
   fechado = false,
 ) {
   const caminho = pontos.map((ponto, indice) => {
     const percentual = pdfParaPercentual(ponto, dimensoes.largura, dimensoes.altura);
     const x = deslocamentoX + (percentual.esquerda / 100) * largura;
-    const y = deslocamentoY + (percentual.topo / 100) * altura;
+    const y = (percentual.topo / 100) * altura;
     return `${indice === 0 ? "M" : "L"} ${x} ${y}`;
   }).join(" ");
   return fechado ? `${caminho} Z` : caminho;
@@ -212,7 +211,7 @@ function desenharTracadosVetoriais(
     const pontosBase = polilinhaComFaixas(item.pontos, faixas, item.id);
     const meta = item.metadadosCabo;
     if (!meta) {
-      page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura, deslocamentoX, deslocamentoY), {
+      page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura, deslocamentoX), {
         y: deslocamentoY + altura,
         borderColor: hexParaRgb(item.cor),
         borderWidth: 2.5,
@@ -220,7 +219,7 @@ function desenharTracadosVetoriais(
       });
       continue;
     }
-    page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura, deslocamentoX, deslocamentoY), {
+    page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura, deslocamentoX), {
       y: deslocamentoY + altura,
       borderColor: hexParaRgb(meta.cor || item.cor),
       borderWidth: 18,
@@ -233,7 +232,7 @@ function desenharTracadosVetoriais(
       const deslocamento = (indice - (condutores.length - 1) / 2) * gap;
       const pontos = deslocarPolilinha(pontosBase, deslocamento);
       const cor = condutor.corCabo || item.cor;
-      page.drawSvgPath(caminhoSvgPdf(pontos, dimensoes, largura, altura, deslocamentoX, deslocamentoY), {
+      page.drawSvgPath(caminhoSvgPdf(pontos, dimensoes, largura, altura, deslocamentoX), {
         y: deslocamentoY + altura,
         borderColor: hexParaRgb(cor),
         borderWidth: 2.5,
@@ -243,7 +242,7 @@ function desenharTracadosVetoriais(
     });
   }
   for (const item of itens.filter((valor) => valor.tipo === "area" && valor.pontos.length >= 3)) {
-    page.drawSvgPath(caminhoSvgPdf(item.pontos, dimensoes, largura, altura, deslocamentoX, deslocamentoY, true), {
+    page.drawSvgPath(caminhoSvgPdf(item.pontos, dimensoes, largura, altura, deslocamentoX, true), {
       color: hexParaRgb(item.cor),
       opacity: 0.22,
       borderColor: hexParaRgb(item.cor),
