@@ -32,6 +32,9 @@ const esquemaSalvarQuadro = z.object({
   id: z.string().uuid().optional(),
   obraId: z.string().uuid(),
   plantaId: z.string().uuid().nullable().optional(),
+  pagina: z.number().int().positive().nullable().optional(),
+  pontoX: z.number().finite().nullable().optional(),
+  pontoY: z.number().finite().nullable().optional(),
   tag: z.string().trim().min(1, "Informe a tag do quadro (ex: QDC-01).").max(50),
   nome: z.string().trim().max(150).nullable().optional(),
   tipoQuadro: z.string().default("QDC"),
@@ -74,6 +77,24 @@ export async function salvarQuadroEletrico(
 
   const dados = parsed.data;
   const supabase = await createClient();
+
+  const temLocalizacao = dados.pagina != null || dados.pontoX != null || dados.pontoY != null;
+  if (temLocalizacao && (dados.plantaId == null || dados.pagina == null || dados.pontoX == null || dados.pontoY == null)) {
+    return { erro: "A localização do quadro precisa de planta, página e coordenadas completas." };
+  }
+  if (dados.plantaId) {
+    const { data: planta, error: erroPlanta } = await supabase
+      .from("plantas")
+      .select("id, obra_id, total_paginas")
+      .eq("id", dados.plantaId)
+      .single();
+    if (erroPlanta || !planta || planta.obra_id !== dados.obraId) {
+      return { erro: "A planta informada não pertence a esta obra." };
+    }
+    if (dados.pagina != null && dados.pagina > planta.total_paginas) {
+      return { erro: "A página informada não existe nesta planta." };
+    }
+  }
 
   const layout = dados.layout as { elementos?: unknown[] };
   const destinos = (layout.elementos ?? []).reduce<string[]>((ids, elemento: unknown) => {
@@ -126,6 +147,9 @@ export async function salvarQuadroEletrico(
   const payload = {
     obra_id: dados.obraId,
     planta_id: dados.plantaId ?? null,
+    pagina: dados.pagina ?? null,
+    ponto_x: dados.pontoX ?? null,
+    ponto_y: dados.pontoY ?? null,
     tag: dados.tag,
     nome: dados.nome ?? null,
     tipo_quadro: dados.tipoQuadro,
@@ -172,6 +196,44 @@ export async function salvarQuadroEletrico(
   revalidatePath(`/obras/${dados.obraId}/quadros`);
   revalidatePath(`/obras/${dados.obraId}`);
   return { id: data.id };
+}
+
+const esquemaPosicionarQuadro = z.object({
+  quadroId: z.string().uuid(),
+  obraId: z.string().uuid(),
+  plantaId: z.string().uuid(),
+  pagina: z.number().int().positive(),
+  pontoX: z.number().finite(),
+  pontoY: z.number().finite(),
+});
+
+export async function posicionarQuadroEletrico(
+  dadosBrutos: z.infer<typeof esquemaPosicionarQuadro>,
+): Promise<{ ok?: boolean; erro?: string }> {
+  const auth = await verificarGestor();
+  if (auth?.erro) return { erro: auth.erro };
+  const parsed = esquemaPosicionarQuadro.safeParse(dadosBrutos);
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+
+  const dados = parsed.data;
+  const supabase = await createClient();
+  const [{ data: quadro }, { data: planta }] = await Promise.all([
+    supabase.from("quadros_eletricos").select("id, obra_id").eq("id", dados.quadroId).single(),
+    supabase.from("plantas").select("id, obra_id, total_paginas").eq("id", dados.plantaId).single(),
+  ]);
+  if (!quadro || quadro.obra_id !== dados.obraId) return { erro: "O quadro informado não pertence a esta obra." };
+  if (!planta || planta.obra_id !== dados.obraId) return { erro: "A planta informada não pertence a esta obra." };
+  if (dados.pagina > planta.total_paginas) return { erro: "A página informada não existe nesta planta." };
+
+  const { error } = await supabase
+    .from("quadros_eletricos")
+    .update({ planta_id: dados.plantaId, pagina: dados.pagina, ponto_x: dados.pontoX, ponto_y: dados.pontoY })
+    .eq("id", dados.quadroId)
+    .eq("obra_id", dados.obraId);
+  if (error) return { erro: error.message };
+  revalidatePath(`/obras/${dados.obraId}/plantas/${dados.plantaId}`);
+  revalidatePath(`/obras/${dados.obraId}/quadros/${dados.quadroId}`);
+  return { ok: true };
 }
 
 export async function excluirQuadroEletrico(
