@@ -79,7 +79,11 @@ export default async function DetalheQuadroPage({
       quadro={{
         id: quadro.id,
         tag: quadro.tag,
-        nome: quadro.nome,
+         nome: quadro.nome,
+         planta_id: quadro.planta_id,
+         pagina: quadro.pagina,
+         ponto_x: quadro.ponto_x,
+         ponto_y: quadro.ponto_y,
         tipo_quadro: quadro.tipo_quadro,
         largura_mm: Number(quadro.largura_mm),
         altura_mm: Number(quadro.altura_mm),

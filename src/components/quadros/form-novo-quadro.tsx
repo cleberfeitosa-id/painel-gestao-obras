@@ -92,8 +92,11 @@ export function FormNovoQuadro({
       }
 
       const res = await salvarQuadroEletrico({
-        obraId,
-        plantaId: plantaId || null,
+         obraId,
+         plantaId: plantaId || null,
+         pagina: null,
+         pontoX: null,
+         pontoY: null,
         tag: tag.trim(),
         nome: nome.trim() || null,
         tipoQuadro,

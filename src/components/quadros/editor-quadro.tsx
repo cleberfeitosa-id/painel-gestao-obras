@@ -65,6 +65,10 @@ interface EditorQuadroProps {
     id: string;
     tag: string;
     nome: string | null;
+    planta_id: string | null;
+    pagina: number | null;
+    ponto_x: number | null;
+    ponto_y: number | null;
     tipo_quadro: string;
     largura_mm: number;
     altura_mm: number;
@@ -765,7 +769,7 @@ export function EditorQuadro({
       if (modificador) {
         if (jaSelecionado) novaSelecao.delete(id);
         else novaSelecao.add(id);
-      } else {
+      } else if (!jaSelecionado || novaSelecao.size <= 1) {
         novaSelecao.clear();
         novaSelecao.add(id);
       }
@@ -980,9 +984,13 @@ export function EditorQuadro({
         alturaUtilMm: dimensoes.alturaUtilMm,
         margemLateralMm: dimensoes.margemLateralMm,
         margemTopoMm: dimensoes.margemTopoMm,
-        layout,
-        circuitosVinculados: circuitos,
-      });
+         layout,
+         circuitosVinculados: circuitos,
+         plantaId: quadro.planta_id,
+         pagina: quadro.pagina,
+         pontoX: quadro.ponto_x,
+         pontoY: quadro.ponto_y,
+       });
 
       if (res.erro) {
         setErroMsg(res.erro);
@@ -1987,18 +1995,6 @@ export function EditorQuadro({
                           </text>
                         )}
 
-                        {el.circuitoAssociadoNome && (
-                          <rect
-                            x={el.x + 2}
-                            y={el.y + 20}
-                            width={el.larguraMm - 4}
-                            height={10}
-                            rx={1}
-                            fill="#e0f2fe"
-                            stroke="#38bdf8"
-                            strokeWidth={0.5}
-                          />
-                        )}
                         {el.quadroDestinoTag && (
                           <text
                             x={el.x + el.larguraMm / 2}
