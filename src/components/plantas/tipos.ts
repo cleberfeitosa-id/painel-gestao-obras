@@ -47,6 +47,15 @@ export type DetalheLocalizacaoLevantamento = {
   nivelDestinoId?: string;
 };
 
+export function normalizarCircuito(valor: string): string {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
+}
+
 export function extrairSegmentosCircuito(
   detalhe?: DetalheLocalizacaoLevantamento | null,
 ): { segmentoId?: string; pontos: { x: number; y: number }[]; comprimento?: number; distanciaCabo?: number }[] {
@@ -73,11 +82,32 @@ export type TarefaPlanta = {
   ponto_y: number | null;
   regiao: RegiaoPdf | null;
   localizacao_detalhe?: DetalheLocalizacaoLevantamento | null;
+  levantamento_id?: string | null;
   planta_id?: string | null;
   responsavel: { nome: string } | null;
   executor: { id: string; nome: string } | null;
   tags_tarefa: { id: string; nome: string } | null;
 };
+
+export type CircuitoQuadroFiltro = {
+  id: string;
+  tag: string;
+  segmentoIds: string[];
+  levantamentoIds: string[];
+};
+
+export type QuadroFiltro = {
+  id: string;
+  tag: string;
+  nome: string | null;
+  planta_id: string | null;
+  pagina: number | null;
+  ponto_x: number | null;
+  ponto_y: number | null;
+  circuitos: CircuitoQuadroFiltro[];
+};
+
+export type QuadroPosicionamento = Pick<QuadroFiltro, "id" | "tag" | "nome" | "planta_id" | "pagina" | "ponto_x" | "ponto_y">;
 
 export type ExecutorFiltro = Pick<ExecutorRow, "id" | "nome">;
 
@@ -101,6 +131,8 @@ export type PropsAreaPlanta = {
   calibracoes: PlantaCalibracaoRow[];
   tarefas: TarefaPlanta[];
   tarefasObra: TarefaObraAssociacao[];
+  quadros: QuadroFiltro[];
+  quadrosPosicionamento: QuadroPosicionamento[];
   executores: ExecutorFiltro[];
   tags: { id: string; nome: string }[];
   podeEditar: boolean;

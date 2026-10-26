@@ -12,6 +12,7 @@ import {
   Layers,
   Link2,
   MapPin,
+  PanelTop,
   Maximize,
   MousePointer2,
   RotateCcw,
@@ -75,22 +76,25 @@ import {
   associarLocalizacao,
   salvarRascunhoLote,
 } from "@/app/(protegido)/tarefas/acoes";
+import { posicionarQuadroEletrico } from "@/app/(protegido)/obras/[id]/quadros/acoes";
 import type {
   PlantaCalibracaoRow,
   PontoPdf,
   PrioridadeTarefa,
   RegiaoPdf,
 } from "@/lib/supabase/database.types";
-import type {
-  PropsAreaPlanta,
-  TarefaPlanta,
+import {
+  normalizarCircuito,
+  extrairSegmentosCircuito as extrairSegmentosCircuitoCompartilhado,
+  type PropsAreaPlanta,
+  type TarefaPlanta,
 } from "./tipos";
-import { extrairSegmentosCircuito as extrairSegmentosCircuitoCompartilhado } from "./tipos";
 import type { SituacaoTarefa } from "@/lib/domain/rotulos";
 
-type Ferramenta = "navegar" | "medir" | "pino" | "regiao" | "calibrar" | "associar";
+type Ferramenta = "navegar" | "medir" | "pino" | "regiao" | "calibrar" | "associar" | "posicionar-quadro";
 
 type DimensoesPagina = { largura: number; altura: number };
+type PosicaoQuadro = { pagina: number | null; x: number | null; y: number | null };
 
 type ConfirmacaoLocalizacao =
   | { tipo: "ponto"; ponto: PontoPdf }
@@ -120,6 +124,7 @@ const FERRAMENTAS: Array<{
   { valor: "regiao", rotulo: "Regiao", icone: Square },
   { valor: "calibrar", rotulo: "Calibrar", icone: Scale },
   { valor: "associar", rotulo: "Associar", icone: Link2 },
+  { valor: "posicionar-quadro", rotulo: "Posicionar quadro", icone: PanelTop },
 ];
 
 const DICA_FERRAMENTA: Record<Ferramenta, string> = {
@@ -132,6 +137,7 @@ const DICA_FERRAMENTA: Record<Ferramenta, string> = {
   calibrar: "Clique em dois pontos de distancia conhecida para calibrar a escala.",
   associar:
     "Selecione uma tarefa e clique (pino) ou arraste (regiao) na planta para associa-la a uma localizacao.",
+  "posicionar-quadro": "Selecione um quadro e clique na planta; depois arraste o marcador para ajustar a posicao.",
 };
 
 const cursorPorFerramenta: Record<Ferramenta, string> = {
@@ -141,6 +147,7 @@ const cursorPorFerramenta: Record<Ferramenta, string> = {
   regiao: "crosshair",
   calibrar: "crosshair",
   associar: "crosshair",
+  "posicionar-quadro": "crosshair",
 };
 
 function obterLinhasCondutoresCircuito(detalhe?: Record<string, unknown> | null): {
@@ -399,6 +406,8 @@ export function VisualizadorPlanta({
   calibracoes,
   tarefas,
   tarefasObra,
+  quadros,
+  quadrosPosicionamento,
   executores,
   tags,
   podeEditar,
@@ -448,7 +457,13 @@ export function VisualizadorPlanta({
   const [filtroPrioridade, setFiltroPrioridade] = useState<"todas" | PrioridadeTarefa>("todas");
   const [filtroExecutor, setFiltroExecutor] = useState<"todos" | "sem" | string>("todos");
   const [filtroTag, setFiltroTag] = useState<"todas" | "sem" | string>("todas");
-  const [circuitosSelecionados, setCircuitosSelecionados] = useState<string[]>([]);
+  const [quadroSelecionadoId, setQuadroSelecionadoId] = useState("todos");
+  const [quadroPosicionamentoId, setQuadroPosicionamentoId] = useState("");
+  const [posicoesQuadros, setPosicoesQuadros] = useState<Map<string, PosicaoQuadro>>(() =>
+    new Map(quadrosPosicionamento.map((quadro) => [quadro.id, { pagina: quadro.pagina, x: quadro.ponto_x, y: quadro.ponto_y }])),
+  );
+  const [erroPosicionamento, setErroPosicionamento] = useState<string | null>(null);
+  const [circuitoSelecionadoId, setCircuitoSelecionadoId] = useState("todos");
 
   const [calibracoesPorPagina, setCalibracoesPorPagina] = useState<
     Map<number, PlantaCalibracaoRow>
@@ -460,6 +475,7 @@ export function VisualizadorPlanta({
   const panRef = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
   const regiaoRef = useRef<PontoPdf | null>(null);
   const pinoDragRef = useRef<{ ancora: PontoPdf } | null>(null);
+  const quadroDragRef = useRef<{ id: string; pointerId: number } | null>(null);
   const cantoDragRef = useRef<{ canto: Canto } | null>(null);
   const regiaoCorpoDragRef = useRef<{ ancora: PontoPdf; regiaoInicial: RegiaoPdf } | null>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
@@ -501,7 +517,10 @@ export function VisualizadorPlanta({
   );
 
   const circuitosDisponiveis = useMemo(() => {
-    const setCircs = new Set<string>();
+    if (quadroSelecionadoId !== "todos") {
+      return quadros.find((quadro) => quadro.id === quadroSelecionadoId)?.circuitos ?? [];
+    }
+    const circuitos = new Map<string, { id: string; tag: string; segmentoIds: string[]; levantamentoIds: string[] }>();
     for (const t of tarefasPagina) {
       if (t.localizacao_tipo === "circuito") {
         const circ =
@@ -511,13 +530,26 @@ export function VisualizadorPlanta({
             .replace(/^Circuito /, "")
             .trim() ||
           t.titulo;
-        if (circ) setCircs.add(circ);
+        if (circ) {
+          const id = `tarefa:${normalizarCircuito(circ)}`;
+          const atual = circuitos.get(id) ?? { id, tag: circ, segmentoIds: [], levantamentoIds: [] };
+          for (const segmento of t.localizacao_detalhe?.segmentos ?? []) {
+            if (segmento.segmentoId) atual.segmentoIds.push(segmento.segmentoId);
+          }
+          if (t.levantamento_id) atual.levantamentoIds.push(t.levantamento_id);
+          circuitos.set(id, atual);
+        }
       }
     }
-    return Array.from(setCircs).sort((a, b) =>
-      a.localeCompare(b, undefined, { numeric: true }),
-    );
-  }, [tarefasPagina]);
+    for (const quadro of quadros) {
+      for (const circuito of quadro.circuitos) circuitos.set(circuito.id, circuito);
+    }
+    return [...circuitos.values()].sort((a, b) => a.tag.localeCompare(b.tag, undefined, { numeric: true }));
+  }, [quadros, quadroSelecionadoId, tarefasPagina]);
+
+  const circuitoSelecionado = circuitoSelecionadoId === "todos"
+    ? null
+    : circuitosDisponiveis.find((circuito) => circuito.id === circuitoSelecionadoId) ?? null;
 
   const nomesTarefasDisponiveis = useMemo(() => {
     const nomes = new Set<string>();
@@ -543,17 +575,19 @@ export function VisualizadorPlanta({
       if (filtroExecutor !== "todos" && filtroExecutor !== "sem" && t.executor?.id !== filtroExecutor) return false;
       if (filtroTag === "sem" && t.tags_tarefa != null) return false;
       if (filtroTag !== "todas" && filtroTag !== "sem" && t.tags_tarefa?.id !== filtroTag) return false;
-      if (t.localizacao_tipo === "circuito") {
-        if (circuitosSelecionados.length > 0) {
-          const circ =
-            t.localizacao_detalhe?.circuito?.trim() ||
-            t.titulo
-              .replace(/^Passagem de Cabo - Circuito /, "")
-              .replace(/^Circuito /, "")
-              .trim() ||
-            t.titulo;
-          if (!circuitosSelecionados.includes(circ)) return false;
-        }
+      if (t.localizacao_tipo === "circuito" && (quadroSelecionadoId !== "todos" || circuitoSelecionado)) {
+        const circuitosDoQuadro = quadroSelecionadoId === "todos"
+          ? circuitosDisponiveis
+          : quadros.find((quadro) => quadro.id === quadroSelecionadoId)?.circuitos ?? [];
+        const candidatos = circuitoSelecionado ? [circuitoSelecionado] : circuitosDoQuadro;
+        const circuitoTarefa = t.localizacao_detalhe?.circuito?.trim() ?? "";
+        const segmentosTarefa = new Set((t.localizacao_detalhe?.segmentos ?? []).map((segmento) => segmento.segmentoId).filter((id): id is string => Boolean(id)));
+        const pertence = candidatos.some((circuito) =>
+          circuito.segmentoIds.some((segmentoId) => segmentosTarefa.has(segmentoId)) ||
+          (circuito.segmentoIds.length === 0 && normalizarCircuito(circuitoTarefa) === normalizarCircuito(circuito.tag) &&
+            (t.levantamento_id == null || circuito.levantamentoIds.length === 0 || circuito.levantamentoIds.includes(t.levantamento_id))),
+        );
+        if (!pertence) return false;
       }
       return true;
     });
@@ -564,8 +598,25 @@ export function VisualizadorPlanta({
     filtroPrioridade,
     filtroExecutor,
     filtroTag,
-    circuitosSelecionados,
+    quadroSelecionadoId,
+    circuitoSelecionado,
+    circuitosDisponiveis,
+    quadros,
   ]);
+
+  function segmentosVisiveis(tarefa: TarefaPlanta) {
+    const segmentos = extrairSegmentosCircuitoCompartilhado(tarefa.localizacao_detalhe);
+    if (tarefa.localizacao_tipo !== "circuito" || quadroSelecionadoId === "todos" && circuitoSelecionadoId === "todos") {
+      return segmentos;
+    }
+    const candidatos = circuitoSelecionado
+      ? [circuitoSelecionado]
+      : quadros.find((quadro) => quadro.id === quadroSelecionadoId)?.circuitos ?? [];
+    const idsPermitidos = new Set(candidatos.flatMap((circuito) => circuito.segmentoIds));
+    if (idsPermitidos.size === 0) return segmentos;
+    const filtrados = segmentos.filter((segmento) => segmento.segmentoId != null && idsPermitidos.has(segmento.segmentoId));
+    return filtrados.length > 0 ? filtrados : segmentos.filter((segmento) => segmento.segmentoId == null);
+  }
 
   const aplicarAjusteLargura = useCallback(() => {
     if (!ajusteLargura || !dimensoes) return;
@@ -587,7 +638,7 @@ export function VisualizadorPlanta({
   function trocarPagina(novaPagina: number) {
     setPaginaAtual(novaPagina);
     setNomesTarefasSelecionados([]);
-    setCircuitosSelecionados([]);
+    setCircuitoSelecionadoId("todos");
     setPontosMedicao([]);
     setPontosCalibracao([]);
     setRegiaoAtual(null);
@@ -605,6 +656,32 @@ export function VisualizadorPlanta({
     const rect = overlayRef.current?.getBoundingClientRect();
     if (!rect || !dimensoes) return null;
     return telaParaPdf(e.clientX, e.clientY, rect, dimensoes.largura, dimensoes.altura);
+  }
+
+  async function persistirPosicaoQuadro(id: string, ponto: PontoPdf) {
+    const resultado = await posicionarQuadroEletrico({
+      quadroId: id,
+      obraId,
+      plantaId: planta.id,
+      pagina: paginaAtual,
+      pontoX: ponto.x,
+      pontoY: ponto.y,
+    });
+    if (resultado.erro) setErroPosicionamento(resultado.erro);
+  }
+
+  function posicionarQuadroNoPonto(ponto: PontoPdf) {
+    if (!quadroPosicionamentoId) {
+      setErroPosicionamento("Selecione qual quadro deseja posicionar.");
+      return;
+    }
+    setErroPosicionamento(null);
+    setPosicoesQuadros((atual) => new Map(atual).set(quadroPosicionamentoId, {
+      pagina: paginaAtual,
+      x: ponto.x,
+      y: ponto.y,
+    }));
+    void persistirPosicaoQuadro(quadroPosicionamentoId, ponto);
   }
 
   function distanciaEntrePontos(
@@ -758,6 +835,9 @@ export function VisualizadorPlanta({
       const ponto = pontoDoEvento(e);
       if (ponto) setConfirmacao({ tipo: "ponto", ponto });
       pinoDragRef.current = null;
+    } else if (ferramenta === "posicionar-quadro") {
+      const ponto = pontoDoEvento(e);
+      if (ponto) posicionarQuadroNoPonto(ponto);
     }
     cantoDragRef.current = null;
     regiaoCorpoDragRef.current = null;
@@ -799,7 +879,7 @@ export function VisualizadorPlanta({
         return pontoEmRegiao(pontoPdf, t.regiao);
       }
       if (t.localizacao_tipo === "circuito") {
-      const segmentos = extrairSegmentosCircuitoCompartilhado(t.localizacao_detalhe);
+        const segmentos = segmentosVisiveis(t);
         for (const seg of segmentos) {
           if (distanciaPontoPolilinha(pontoPdf, seg.pontos) <= 15) return true;
         }
@@ -1238,32 +1318,61 @@ export function VisualizadorPlanta({
               <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
               <div className="flex items-center gap-1.5 rounded-lg border border-borda bg-superficie-50 px-2 py-1">
                 <Zap className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                 <details className="relative">
-                   <summary className="cursor-pointer list-none text-xs font-medium text-superficie-800" aria-label="Selecionar circuitos visíveis">
-                     Circuitos ({circuitosSelecionados.length === 0 ? "todos" : `${circuitosSelecionados.length}/${circuitosDisponiveis.length}`})
-                   </summary>
-                   <fieldset className="absolute right-0 top-full z-50 mt-2 w-56 space-y-1 rounded-lg border border-borda bg-white p-2 shadow-lg">
-                     <legend className="sr-only">Circuitos visíveis</legend>
-                     {circuitosDisponiveis.map((circuito) => {
-                       const marcado = circuitosSelecionados.includes(circuito);
-                       return (
-                          <label key={circuito} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-superficie-700 hover:bg-superficie-50">
-                           <input
-                             type="checkbox"
-                             checked={marcado}
-                             onChange={() => setCircuitosSelecionados((atuais) => marcado ? atuais.filter((item) => item !== circuito) : [...atuais, circuito])}
-                             className="h-3.5 w-3.5 accent-azul-600"
-                           />
-                           <span>Circuito {circuito}</span>
-                         </label>
-                       );
-                     })}
-                     <button type="button" className="w-full rounded px-2 py-1 text-left text-xs font-medium text-azul-700 hover:bg-azul-50" onClick={() => setCircuitosSelecionados([])}>
-                       Mostrar todos
-                     </button>
-                   </fieldset>
-                 </details>
+                {quadros.length > 0 && (
+                  <>
+                    <label className="sr-only" htmlFor="filtro-quadro-toolbar">Quadro</label>
+                    <select
+                      id="filtro-quadro-toolbar"
+                      value={quadroSelecionadoId}
+                      onChange={(e) => {
+                        setQuadroSelecionadoId(e.target.value);
+                        setCircuitoSelecionadoId("todos");
+                      }}
+                      className="max-w-32 rounded border border-borda bg-white px-1.5 py-1 text-xs text-superficie-800"
+                    >
+                      <option value="todos">Todos os quadros</option>
+                      {quadros.map((quadro) => (
+                        <option key={quadro.id} value={quadro.id}>{quadro.tag}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+                <label className="sr-only" htmlFor="filtro-circuito-toolbar">Circuito</label>
+                <select
+                  id="filtro-circuito-toolbar"
+                  value={circuitoSelecionadoId}
+                  onChange={(e) => setCircuitoSelecionadoId(e.target.value)}
+                  disabled={circuitosDisponiveis.length === 0}
+                  className="max-w-32 rounded border border-borda bg-white px-1.5 py-1 text-xs text-superficie-800 disabled:opacity-50"
+                >
+                  <option value="todos">Todos os circuitos</option>
+                  {circuitosDisponiveis.map((circuito) => (
+                    <option key={circuito.id} value={circuito.id}>{circuito.tag}</option>
+                  ))}
+                </select>
               </div>
+              {quadrosPosicionamento.length > 0 && podeEditar && (
+                <>
+                  <div className="mx-1 hidden h-6 w-px bg-borda sm:block" />
+                  <div className="flex items-center gap-1.5 rounded-lg border border-borda bg-superficie-50 px-2 py-1">
+                    <PanelTop className="h-3.5 w-3.5 text-azul-600" />
+                    <label className="sr-only" htmlFor="quadro-posicionamento-toolbar">Quadro para posicionar</label>
+                    <select
+                      id="quadro-posicionamento-toolbar"
+                      value={quadroPosicionamentoId}
+                      onChange={(e) => setQuadroPosicionamentoId(e.target.value)}
+                      className="max-w-40 rounded border border-borda bg-white px-1.5 py-1 text-xs text-superficie-800"
+                    >
+                      <option value="">Selecionar quadro</option>
+                      {quadrosPosicionamento.map((quadro) => (
+                        <option key={quadro.id} value={quadro.id}>
+                          {quadro.tag}{quadro.nome ? ` · ${quadro.nome}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -1375,6 +1484,10 @@ export function VisualizadorPlanta({
         </div>
 
         <p className="text-[11px] text-superficie-400">{DICA_FERRAMENTA[ferramenta]}</p>
+
+        {erroPosicionamento && ferramenta === "posicionar-quadro" && (
+          <p role="alert" className="text-sm text-perigo">{erroPosicionamento}</p>
+        )}
 
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-borda bg-fundo-card px-2.5 py-1.5 text-[11px]" role="group" aria-label="Legenda de cores">
           {OPCOES_SITUACAO_TAREFA.map((opcao) => (
@@ -1646,6 +1759,54 @@ export function VisualizadorPlanta({
                       );
                     })}
 
+                  {quadrosPosicionamento.map((quadro) => {
+                    const posicao = posicoesQuadros.get(quadro.id);
+                    if (!posicao || posicao.pagina !== paginaAtual || posicao.x == null || posicao.y == null) return null;
+                    const pos = pdfParaPercentual(
+                      { x: posicao.x, y: posicao.y },
+                      dimensoes.largura,
+                      dimensoes.altura,
+                    );
+                    const arrastavel = podeEditar && ferramenta === "posicionar-quadro" && quadroPosicionamentoId === quadro.id;
+                    return (
+                      <div
+                        key={`quadro-${quadro.id}`}
+                        className={cn(
+                          "absolute z-25 -translate-x-1/2 -translate-y-1/2 rounded-md border-2 border-white bg-azul-700 px-1.5 py-1 text-[10px] font-bold text-white shadow",
+                          arrastavel ? "cursor-grab pointer-events-auto" : "pointer-events-none",
+                        )}
+                        style={{ left: `${pos.esquerda}%`, top: `${pos.topo}%` }}
+                        onPointerDown={(e) => {
+                          if (!arrastavel) return;
+                          e.stopPropagation();
+                          quadroDragRef.current = { id: quadro.id, pointerId: e.pointerId };
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                        }}
+                        onPointerMove={(e) => {
+                          if (quadroDragRef.current?.id !== quadro.id) return;
+                          e.stopPropagation();
+                          const ponto = pontoDoEvento(e);
+                          if (!ponto) return;
+                          setPosicoesQuadros((atual) => new Map(atual).set(quadro.id, { pagina: paginaAtual, x: ponto.x, y: ponto.y }));
+                        }}
+                        onPointerUp={(e) => {
+                          if (quadroDragRef.current?.id !== quadro.id) return;
+                          e.stopPropagation();
+                          const ponto = pontoDoEvento(e);
+                          quadroDragRef.current = null;
+                          e.currentTarget.releasePointerCapture(e.pointerId);
+                          if (ponto) void persistirPosicaoQuadro(quadro.id, ponto);
+                        }}
+                        onPointerCancel={(e) => {
+                          e.stopPropagation();
+                          quadroDragRef.current = null;
+                        }}
+                      >
+                        <PanelTop className="mr-0.5 inline h-3 w-3" />{quadro.tag}
+                      </div>
+                    );
+                  })}
+
                   {tarefasFiltradas
                     .filter(
                       (t) => t.localizacao_tipo === "regiao" && t.regiao,
@@ -1787,9 +1948,7 @@ export function VisualizadorPlanta({
                   {tarefasFiltradas
                     .filter((t) => t.localizacao_tipo === "circuito")
                     .map((tarefa) => {
-                      const segmentos = extrairSegmentosCircuitoCompartilhado(
-                        tarefa.localizacao_detalhe,
-                      );
+                      const segmentos = segmentosVisiveis(tarefa);
                       if (segmentos.length === 0) return null;
 
                       const linhas = obterLinhasCondutoresCircuito(
@@ -2362,10 +2521,19 @@ export function VisualizadorPlanta({
           aoMudarPrioridade={setFiltroPrioridade}
           filtroExecutor={filtroExecutor}
           aoMudarExecutor={setFiltroExecutor}
-          filtroTag={filtroTag}
-          aoMudarTag={setFiltroTag}
-          tags={tags}
-          tarefaDestaque={tarefaDestaque}
+           filtroTag={filtroTag}
+           aoMudarTag={setFiltroTag}
+           tags={tags}
+           quadros={quadros}
+           quadroSelecionadoId={quadroSelecionadoId}
+           circuitoSelecionadoId={circuitoSelecionadoId}
+           circuitosDisponiveis={circuitosDisponiveis}
+           aoMudarQuadro={(valor) => {
+             setQuadroSelecionadoId(valor);
+             setCircuitoSelecionadoId("todos");
+           }}
+           aoMudarCircuito={setCircuitoSelecionadoId}
+           tarefaDestaque={tarefaDestaque}
           aoDestaque={setTarefaDestaque}
           aoEditarNoMapa={
             podeEditar

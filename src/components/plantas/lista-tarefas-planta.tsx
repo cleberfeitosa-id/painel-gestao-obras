@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import type {
   PrioridadeTarefa,
 } from "@/lib/supabase/database.types";
-import type { ExecutorFiltro, TarefaPlanta } from "./tipos";
+import type { CircuitoQuadroFiltro, ExecutorFiltro, QuadroFiltro, TarefaPlanta } from "./tipos";
 import type { SituacaoTarefa } from "@/lib/domain/rotulos";
 
 interface ListaTarefasPlantaProps {
@@ -42,6 +42,12 @@ interface ListaTarefasPlantaProps {
   filtroTag: "todas" | "sem" | string;
   aoMudarTag: (valor: "todas" | "sem" | string) => void;
   tags: { id: string; nome: string }[];
+  quadros: QuadroFiltro[];
+  quadroSelecionadoId: string;
+  circuitoSelecionadoId: string;
+  circuitosDisponiveis: CircuitoQuadroFiltro[];
+  aoMudarQuadro: (valor: string) => void;
+  aoMudarCircuito: (valor: string) => void;
   tarefaDestaque: string | null;
   aoDestaque: (id: string | null) => void;
   aoEditarNoMapa?: (id: string) => void;
@@ -64,6 +70,12 @@ export function ListaTarefasPlanta({
   filtroTag,
   aoMudarTag,
   tags,
+  quadros,
+  quadroSelecionadoId,
+  circuitoSelecionadoId,
+  circuitosDisponiveis,
+  aoMudarQuadro,
+  aoMudarCircuito,
   tarefaDestaque,
   aoDestaque,
   aoEditarNoMapa,
@@ -73,7 +85,9 @@ export function ListaTarefasPlanta({
     nomesTarefasSelecionados.length > 0 ||
     filtroPrioridade !== "todas" ||
     filtroExecutor !== "todos" ||
-    filtroTag !== "todas";
+    filtroTag !== "todas" ||
+    quadroSelecionadoId !== "todos" ||
+    circuitoSelecionadoId !== "todos";
 
   return (
     <Cartao className="h-fit">
@@ -81,6 +95,34 @@ export function ListaTarefasPlanta({
         <CartaoTitulo>Tarefas na pagina {paginaAtual}</CartaoTitulo>
       </CartaoCabecalho>
       <CartaoConteudo className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <Selecao
+            rotulo="Quadro"
+            value={quadroSelecionadoId}
+            onChange={(e) => aoMudarQuadro(e.target.value)}
+          >
+            <option value="todos">Todos os quadros</option>
+            {quadros.map((quadro) => (
+              <option key={quadro.id} value={quadro.id}>
+                {quadro.tag}{quadro.nome ? ` · ${quadro.nome}` : ""}
+              </option>
+            ))}
+          </Selecao>
+          <Selecao
+            rotulo="Circuito"
+            value={circuitoSelecionadoId}
+            onChange={(e) => aoMudarCircuito(e.target.value)}
+            disabled={circuitosDisponiveis.length === 0}
+          >
+            <option value="todos">Todos os circuitos</option>
+            {circuitosDisponiveis.map((circuito) => (
+              <option key={circuito.id} value={circuito.id}>
+                {circuito.tag}
+              </option>
+            ))}
+          </Selecao>
+        </div>
+
         <div className="grid grid-cols-2 gap-2">
           <Selecao
             rotulo="Situacao"

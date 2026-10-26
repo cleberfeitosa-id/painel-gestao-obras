@@ -13,7 +13,10 @@ import type {
   ExecutorFiltro,
   TarefaObraAssociacao,
   TarefaPlanta,
+  QuadroFiltro,
+  QuadroPosicionamento,
 } from "@/components/plantas/tipos";
+import { normalizarCircuito } from "@/components/plantas/tipos";
 import type {
   PlantaCalibracaoRow,
   RegiaoPdf,
@@ -36,6 +39,8 @@ export default async function DetalhePlantaPage({
     { data: perfil },
     { data: executores },
     { data: tags },
+    { data: quadros },
+    { data: levantamentos },
   ] = await Promise.all([
     supabase
       .from("plantas")
@@ -56,6 +61,16 @@ export default async function DetalhePlantaPage({
       .eq("ativo", true)
       .order("nome"),
     supabase.from("tags_tarefa").select("id, nome").order("nome"),
+    supabase
+      .from("quadros_eletricos")
+       .select("id, tag, nome, planta_id, pagina, ponto_x, ponto_y, levantamento_id, circuitos_vinculados")
+      .eq("obra_id", id)
+      .order("tag"),
+    supabase
+      .from("levantamentos")
+      .select("id, itens")
+      .eq("obra_id", id)
+      .eq("planta_id", plantaId),
   ]);
 
   async function buscarTodasTarefasPlanta(pid: string) {
@@ -63,7 +78,7 @@ export default async function DetalhePlantaPage({
       supabase
         .from("tarefas")
         .select(
-          "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, localizacao_detalhe, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
+          "id, titulo, status, prioridade, aprovacao, prazo, pagina, localizacao_tipo, ponto_x, ponto_y, regiao, localizacao_detalhe, levantamento_id, responsavel:perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(id, nome), tags_tarefa(id, nome)",
         )
         .eq("planta_id", pid)
         .order("criado_em", { ascending: true }),
@@ -114,6 +129,7 @@ export default async function DetalhePlantaPage({
     regiao: tarefa.regiao as RegiaoPdf | null,
     localizacao_detalhe: tarefa
       .localizacao_detalhe as unknown as DetalheLocalizacaoLevantamento | null,
+    levantamento_id: tarefa.levantamento_id,
     responsavel: tarefa.responsavel,
     executor: tarefa.executor,
     tags_tarefa: tarefa.tags_tarefa,
@@ -132,6 +148,80 @@ export default async function DetalhePlantaPage({
       regiao: tarefa.regiao as RegiaoPdf | null,
     }),
   );
+
+  function ehObjeto(valor: unknown): valor is Record<string, unknown> {
+    return typeof valor === "object" && valor !== null && !Array.isArray(valor);
+  }
+
+  function objetosJson(valor: unknown): Array<Record<string, unknown>> {
+    return Array.isArray(valor) ? valor.filter(ehObjeto) : [];
+  }
+
+  const itensPorLevantamento = new Map<string, Array<Record<string, unknown>>>();
+  for (const levantamento of levantamentos ?? []) {
+    itensPorLevantamento.set(
+      levantamento.id,
+      objetosJson(levantamento.itens),
+    );
+  }
+
+  const idsLevantamentosPlanta = new Set((levantamentos ?? []).map((levantamento) => levantamento.id));
+  const quadrosFiltro: QuadroFiltro[] = (quadros ?? [])
+    .filter((quadro) =>
+      (quadro.planta_id === plantaId &&
+        (quadro.levantamento_id == null || idsLevantamentosPlanta.has(quadro.levantamento_id))) ||
+      (quadro.planta_id == null && quadro.levantamento_id != null && idsLevantamentosPlanta.has(quadro.levantamento_id)),
+    )
+    .map((quadro) => {
+    const vinculados = objetosJson(quadro.circuitos_vinculados);
+    const circuitos = vinculados.flatMap((vinculado) => {
+      const tag = typeof vinculado.tag === "string" ? vinculado.tag.trim() : "";
+      if (!tag) return [];
+      const levantamentoIds = typeof vinculado.origemId === "string" && vinculado.origem === "levantamento"
+        ? [vinculado.origemId]
+        : quadro.levantamento_id ? [quadro.levantamento_id] : [];
+      const segmentoIds = new Set<string>();
+      for (const levantamentoId of levantamentoIds) {
+        for (const item of itensPorLevantamento.get(levantamentoId) ?? []) {
+          const meta = ehObjeto(item.metadadosCabo) ? item.metadadosCabo : undefined;
+          const itemCircuito = typeof meta?.circuito === "string" ? meta.circuito : typeof item.circuito === "string" ? item.circuito : "";
+          if (normalizarCircuito(itemCircuito) === normalizarCircuito(tag) && typeof item.id === "string") segmentoIds.add(item.id);
+        }
+      }
+      for (const tarefa of tarefasPlanta) {
+        const detalhe = ehObjeto(tarefa.localizacao_detalhe) ? tarefa.localizacao_detalhe : null;
+        const segmentos = Array.isArray(detalhe?.segmentos)
+          ? detalhe.segmentos.filter(ehObjeto)
+          : [];
+        if (detalhe?.circuito && normalizarCircuito(detalhe.circuito) === normalizarCircuito(tag) &&
+          (levantamentoIds.length === 0 || levantamentoIds.includes(tarefa.levantamento_id ?? ""))) {
+          for (const segmento of segmentos) if (typeof segmento.segmentoId === "string") segmentoIds.add(segmento.segmentoId);
+        }
+      }
+      return [{ id: `${quadro.id}:${normalizarCircuito(tag)}`, tag, segmentoIds: [...segmentoIds], levantamentoIds }];
+     });
+
+     return {
+       id: quadro.id,
+       tag: quadro.tag,
+       nome: quadro.nome,
+       planta_id: quadro.planta_id,
+       pagina: quadro.pagina,
+       ponto_x: quadro.ponto_x,
+       ponto_y: quadro.ponto_y,
+       circuitos,
+      };
+   });
+
+  const quadrosPosicionamento: QuadroPosicionamento[] = quadrosFiltro.map((quadro) => ({
+    id: quadro.id,
+    tag: quadro.tag,
+    nome: quadro.nome,
+    planta_id: quadro.planta_id,
+    pagina: quadro.pagina,
+    ponto_x: quadro.ponto_x,
+    ponto_y: quadro.ponto_y,
+  }));
 
   return (
     <div className="space-y-6">
@@ -190,6 +280,8 @@ export default async function DetalhePlantaPage({
         calibracoes={(calibracoes ?? []) as PlantaCalibracaoRow[]}
         tarefas={tarefasPlanta}
         tarefasObra={tarefasObraLista}
+        quadros={quadrosFiltro}
+        quadrosPosicionamento={quadrosPosicionamento}
         executores={(executores ?? []) as ExecutorFiltro[]}
         tags={(tags ?? []) as { id: string; nome: string }[]}
         podeEditar={podeEditar}
