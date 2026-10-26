@@ -93,6 +93,35 @@ interface DimensoesPaginaPdf {
   rotacao: number;
 }
 
+interface EnquadramentoPdf {
+  escala: number;
+  x: number;
+  y: number;
+  largura: number;
+  altura: number;
+}
+
+function calcularEnquadramentoPdf(
+  dimensoes: Pick<DimensoesPaginaPdf, "largura" | "altura">,
+  larguraDestino: number,
+  alturaDestino: number,
+): EnquadramentoPdf {
+  const escala = Math.min(
+    larguraDestino / dimensoes.largura,
+    alturaDestino / dimensoes.altura,
+  );
+  const largura = dimensoes.largura * escala;
+  const altura = dimensoes.altura * escala;
+
+  return {
+    escala,
+    x: (larguraDestino - largura) / 2,
+    y: (alturaDestino - altura) / 2,
+    largura,
+    altura,
+  };
+}
+
 function obterDimensoesPaginaPdf(page: PDFPage): DimensoesPaginaPdf {
   const rotacao = ((page.getRotation().angle % 360) + 360) % 360;
   const larguraOriginal = page.getWidth();
@@ -115,12 +144,22 @@ function desenharPaginaVetorial(
   larguraDestino: number,
   alturaDestino: number,
 ) {
-  const escalaX = larguraDestino / dimensoes.largura;
-  const escalaY = alturaDestino / dimensoes.altura;
+  const enquadramento = calcularEnquadramentoPdf(
+    dimensoes,
+    larguraDestino,
+    alturaDestino,
+  );
 
   page.pushOperators(
     pushGraphicsState(),
-    concatTransformationMatrix(escalaX, 0, 0, escalaY, 0, 0),
+    concatTransformationMatrix(
+      enquadramento.escala,
+      0,
+      0,
+      enquadramento.escala,
+      enquadramento.x,
+      enquadramento.y,
+    ),
   );
 
   let x = 0;
@@ -145,12 +184,14 @@ function caminhoSvgPdf(
   dimensoes: DimensoesPaginaPdf,
   largura: number,
   altura: number,
+  deslocamentoX = 0,
+  deslocamentoY = 0,
   fechado = false,
 ) {
   const caminho = pontos.map((ponto, indice) => {
     const percentual = pdfParaPercentual(ponto, dimensoes.largura, dimensoes.altura);
-    const x = (percentual.esquerda / 100) * largura;
-    const y = (percentual.topo / 100) * altura;
+    const x = deslocamentoX + (percentual.esquerda / 100) * largura;
+    const y = deslocamentoY + (percentual.topo / 100) * altura;
     return `${indice === 0 ? "M" : "L"} ${x} ${y}`;
   }).join(" ");
   return fechado ? `${caminho} Z` : caminho;
@@ -162,6 +203,8 @@ function desenharTracadosVetoriais(
   dimensoes: DimensoesPaginaPdf,
   largura: number,
   altura: number,
+  deslocamentoX = 0,
+  deslocamentoY = 0,
 ) {
   const lineares = itens.filter((item) => (item.tipo === "distancia" || item.tipo === "tubulacao_cabo") && item.pontos.length >= 2);
   const faixas = faixasDeSegmentos(lineares, 18);
@@ -169,16 +212,16 @@ function desenharTracadosVetoriais(
     const pontosBase = polilinhaComFaixas(item.pontos, faixas, item.id);
     const meta = item.metadadosCabo;
     if (!meta) {
-      page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura), {
-        y: altura,
+      page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura, deslocamentoX, deslocamentoY), {
+        y: deslocamentoY + altura,
         borderColor: hexParaRgb(item.cor),
         borderWidth: 2.5,
         borderLineCap: LineCapStyle.Round,
       });
       continue;
     }
-    page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura), {
-      y: altura,
+    page.drawSvgPath(caminhoSvgPdf(pontosBase, dimensoes, largura, altura, deslocamentoX, deslocamentoY), {
+      y: deslocamentoY + altura,
       borderColor: hexParaRgb(meta.cor || item.cor),
       borderWidth: 18,
       borderOpacity: 0.3,
@@ -190,8 +233,8 @@ function desenharTracadosVetoriais(
       const deslocamento = (indice - (condutores.length - 1) / 2) * gap;
       const pontos = deslocarPolilinha(pontosBase, deslocamento);
       const cor = condutor.corCabo || item.cor;
-      page.drawSvgPath(caminhoSvgPdf(pontos, dimensoes, largura, altura), {
-        y: altura,
+      page.drawSvgPath(caminhoSvgPdf(pontos, dimensoes, largura, altura, deslocamentoX, deslocamentoY), {
+        y: deslocamentoY + altura,
         borderColor: hexParaRgb(cor),
         borderWidth: 2.5,
         borderDashArray: condutor.funcao === "neutro" ? [7, 4] : condutor.funcao === "terra" ? [3, 3] : condutor.funcao === "retorno" ? [5, 3] : undefined,
@@ -200,7 +243,7 @@ function desenharTracadosVetoriais(
     });
   }
   for (const item of itens.filter((valor) => valor.tipo === "area" && valor.pontos.length >= 3)) {
-    page.drawSvgPath(caminhoSvgPdf(item.pontos, dimensoes, largura, altura, true), {
+    page.drawSvgPath(caminhoSvgPdf(item.pontos, dimensoes, largura, altura, deslocamentoX, deslocamentoY, true), {
       color: hexParaRgb(item.cor),
       opacity: 0.22,
       borderColor: hexParaRgb(item.cor),
@@ -1408,6 +1451,11 @@ export async function exportarPlantaIluminadaPdf(
   const aspectFonte = dimensoesFonte.largura / dimensoesFonte.altura;
   const a0Width = aspectFonte >= 1 ? dims.largura : dims.altura;
   const a0Height = aspectFonte >= 1 ? dims.altura : dims.largura;
+  const enquadramento = calcularEnquadramentoPdf(
+    dimensoesFonte,
+    a0Width,
+    a0Height,
+  );
 
   const a0Page = pdfDoc.addPage([a0Width, a0Height]);
   const embeddedSourcePage = await pdfDoc.embedPage(sourcePage);
@@ -1418,7 +1466,12 @@ export async function exportarPlantaIluminadaPdf(
   const compositeBytes = await fetch(compositeDataUrl).then((r) => r.arrayBuffer());
   const a0Image = await pdfDoc.embedPng(compositeBytes);
 
-  a0Page.drawImage(a0Image, { x: 0, y: 0, width: a0Width, height: a0Height });
+  a0Page.drawImage(a0Image, {
+    x: enquadramento.x,
+    y: enquadramento.y,
+    width: enquadramento.largura,
+    height: enquadramento.altura,
+  });
 
   const mapaTarefasParaPagina = new Map<string, ReturnType<typeof pdfDoc.context.register>>();
 
@@ -2025,18 +2078,36 @@ export async function exportarLevantamentoIluminadoPdf(
   const aspectFonte = dimensoesFonte.largura / dimensoesFonte.altura;
   const a0Width = aspectFonte >= 1 ? dims.largura : dims.altura;
   const a0Height = aspectFonte >= 1 ? dims.altura : dims.largura;
+  const enquadramento = calcularEnquadramentoPdf(
+    dimensoesFonte,
+    a0Width,
+    a0Height,
+  );
 
   const a0Page = pdfDoc.addPage([a0Width, a0Height]);
   const embeddedSourcePage = await pdfDoc.embedPage(sourcePage);
 
   desenharPaginaVetorial(a0Page, embeddedSourcePage, dimensoesFonte, a0Width, a0Height);
-  desenharTracadosVetoriais(a0Page, itens, dimensoesFonte, a0Width, a0Height);
+  desenharTracadosVetoriais(
+    a0Page,
+    itens,
+    dimensoesFonte,
+    enquadramento.largura,
+    enquadramento.altura,
+    enquadramento.x,
+    enquadramento.y,
+  );
 
   const compositeDataUrl = compositeCanvas.toDataURL("image/png");
   const compositeBytes = await fetch(compositeDataUrl).then((r) => r.arrayBuffer());
   const a0Image = await pdfDoc.embedPng(compositeBytes);
 
-  a0Page.drawImage(a0Image, { x: 0, y: 0, width: a0Width, height: a0Height });
+  a0Page.drawImage(a0Image, {
+    x: enquadramento.x,
+    y: enquadramento.y,
+    width: enquadramento.largura,
+    height: enquadramento.altura,
+  });
 
   if (opcoes.incluirDetalhamentoTarefas && tarefasVinculadas.length > 0) {
     const itensPreparados: ItemPreparadoTarefa[] = await Promise.all(
