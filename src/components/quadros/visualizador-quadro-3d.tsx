@@ -123,7 +123,7 @@ export function VisualizadorQuadro3D({
     const height = container.clientHeight || 600;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#090d16");
+     scene.background = new THREE.Color("#cbd5e1");
     sceneRef.current = scene;
 
     const aspect = width / height;
@@ -178,7 +178,7 @@ export function VisualizadorQuadro3D({
         Math.max(larguraMm, alturaMm) * 2,
         20,
         0x0284c7,
-        0x1e293b,
+         0x64748b,
       );
       grid.position.y = -alturaMm / 2 - 20;
       scene.add(grid);
@@ -746,8 +746,8 @@ export function VisualizadorQuadro3D({
     link.click();
   }
 
-  return (
-    <div className="relative w-full h-full min-h-[500px] flex-1 bg-[#090d16] flex flex-col select-none overflow-hidden">
+   return (
+    <div className="relative w-full h-full min-h-[500px] flex-1 bg-slate-300 flex flex-col select-none overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-900/90 border-b border-slate-800 text-white z-20">
         <div className="flex items-center gap-1.5 overflow-x-auto">
           <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg border border-slate-700">

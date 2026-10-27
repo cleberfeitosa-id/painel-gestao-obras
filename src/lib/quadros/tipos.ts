@@ -593,6 +593,7 @@ export interface BarramentoEspinhaPeixe {
   larguraDerivacaoMm?: number;
   espessuraDerivacaoMm?: number;
   comprimentoDerivacaoMm?: number;
+  correnteDerivacaoA?: number;
   faseInicialDerivacao?: FaseBarramento;
   coresFases?: Partial<Record<FaseBarramento, string>>;
   derivacoes: DerivacaoBarramento[];

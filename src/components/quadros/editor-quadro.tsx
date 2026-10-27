@@ -723,7 +723,7 @@ export function EditorQuadro({
         comprimentoDerivacaoMm: comprimentoDeriv,
         corPersonalizada: bar.coresFases?.[fase],
         lado: "ambos",
-        correnteNominalA: Math.round(bar.correnteSuportadaA * 0.4),
+        correnteNominalA: bar.correnteDerivacaoA ?? Math.round(bar.correnteSuportadaA * 0.4),
       });
       yAtual += espacamento;
       idx++;
@@ -749,6 +749,7 @@ export function EditorQuadro({
             larguraDerivacaoMm: atualizado.larguraDerivacaoMm ?? derivacao.larguraDerivacaoMm,
             comprimentoDerivacaoMm: atualizado.comprimentoDerivacaoMm ?? derivacao.comprimentoDerivacaoMm,
             espessuraDerivacaoMm: atualizado.espessuraDerivacaoMm ?? derivacao.espessuraDerivacaoMm,
+            correnteNominalA: atualizado.correnteDerivacaoA ?? derivacao.correnteNominalA,
             corPersonalizada: cores[derivacao.fase] ?? undefined,
           })),
         };
@@ -3041,11 +3042,22 @@ export function EditorQuadro({
                          className="text-sky-800"
                        />
                      ) : (
-                       <label className="block text-[10px] text-sky-800">Comprimento da derivação (mm)
-                         <input type="number" min={0.1} step={1} value={barramentoSelecionado.comprimentoDerivacaoMm ?? 35} onChange={(e) => { const valor = Number(e.target.value) || 1; atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valor }); }} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
-                       </label>
-                     )}
-                    <div className="grid grid-cols-3 gap-2">
+                        <label className="block text-[10px] text-sky-800">Comprimento da derivação (mm)
+                          <input type="number" min={0.1} step={1} value={barramentoSelecionado.comprimentoDerivacaoMm ?? 35} onChange={(e) => { const valor = Number(e.target.value) || 1; atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valor }); }} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
+                        </label>
+                      )}
+                     <label className="text-[10px] text-sky-800">Corrente nominal das derivações (A)
+                       <input
+                         type="number"
+                         min={1}
+                         step={1}
+                         value={barramentoSelecionado.correnteDerivacaoA ?? barramentoSelecionado.derivacoes[0]?.correnteNominalA ?? Math.round(barramentoSelecionado.correnteSuportadaA * 0.4)}
+                         onChange={(e) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { correnteDerivacaoA: Number(e.target.value) || 1 })}
+                         disabled={!podeEditar}
+                         className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs"
+                       />
+                     </label>
+                     <div className="grid grid-cols-3 gap-2">
                       {(["R", "S", "T"] as const).map((fase) => (
                         <label key={fase} className="text-[10px] font-semibold text-sky-800">Cor fase {fase}
                           <input type="color" value={barramentoSelecionado.coresFases?.[fase] ?? (fase === "R" ? "#ef4444" : fase === "S" ? "#eab308" : "#3b82f6")} onChange={(e) => atualizarCorFase(barramentoSelecionado.id, fase, e.target.value)} disabled={!podeEditar} className="mt-0.5 h-8 w-full cursor-pointer rounded border border-sky-300 p-0.5" />
