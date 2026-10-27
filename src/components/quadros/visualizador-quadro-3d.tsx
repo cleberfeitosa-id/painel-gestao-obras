@@ -537,11 +537,12 @@ export function VisualizadorQuadro3D({
         });
 
         const compLado = der.comprimentoDerivacaoMm || der.larguraDerivacaoMm || 35;
+        const larguraDerivacao = der.larguraDerivacaoMm || 12;
         const espessuraDerivacao = der.espessuraDerivacaoMm || 10;
         const geoDeriv = new THREE.BoxGeometry(
           bar.larguraTroncoMm + compLado * 2,
+          larguraDerivacao,
           espessuraDerivacao,
-          espessura,
         );
         const meshDeriv = new THREE.Mesh(geoDeriv, matFase);
         meshDeriv.position.set(posCentro.x, yDeriv3D, posCentro.z + espessura);

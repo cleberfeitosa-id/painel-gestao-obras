@@ -701,7 +701,8 @@ export function EditorQuadro({
     if (!bar) return;
 
     const espacamento = bar.espacamentoDerivacoesMm || 45;
-    const larguraDeriv = bar.comprimentoDerivacaoMm || 35;
+    const larguraDeriv = bar.larguraDerivacaoMm || 12;
+    const comprimentoDeriv = bar.comprimentoDerivacaoMm || 35;
     const fasesBase: FaseBarramento[] = bar.tipo === "trifasico" ? ["R", "S", "T"] : bar.tipo === "tetrapolar" ? ["R", "S", "T", "N"] : bar.tipo === "bifasico" ? ["R", "S"] : ["R"];
     const faseInicial = bar.faseInicialDerivacao && fasesBase.includes(bar.faseInicialDerivacao) ? bar.faseInicialDerivacao : fasesBase[0];
     const indiceInicial = fasesBase.indexOf(faseInicial);
@@ -719,7 +720,7 @@ export function EditorQuadro({
         fase,
         larguraDerivacaoMm: larguraDeriv,
         espessuraDerivacaoMm: bar.espessuraDerivacaoMm || 10,
-        comprimentoDerivacaoMm: larguraDeriv,
+        comprimentoDerivacaoMm: comprimentoDeriv,
         corPersonalizada: bar.coresFases?.[fase],
         lado: "ambos",
         correnteNominalA: Math.round(bar.correnteSuportadaA * 0.4),
@@ -746,7 +747,7 @@ export function EditorQuadro({
           derivacoes: atualizado.derivacoes.map((derivacao) => ({
             ...derivacao,
             larguraDerivacaoMm: atualizado.larguraDerivacaoMm ?? derivacao.larguraDerivacaoMm,
-            comprimentoDerivacaoMm: atualizado.comprimentoDerivacaoMm ?? derivacao.comprimentoDerivacaoMm ?? derivacao.larguraDerivacaoMm,
+            comprimentoDerivacaoMm: atualizado.comprimentoDerivacaoMm ?? derivacao.comprimentoDerivacaoMm,
             espessuraDerivacaoMm: atualizado.espessuraDerivacaoMm ?? derivacao.espessuraDerivacaoMm,
             corPersonalizada: cores[derivacao.fase] ?? undefined,
           })),
@@ -1896,7 +1897,7 @@ export function EditorQuadro({
 
                           const corFase = der.corPersonalizada || corFasePadrao;
                           const compDeriv = der.comprimentoDerivacaoMm || der.larguraDerivacaoMm || 35;
-                          const espessuraDeriv = der.espessuraDerivacaoMm || 10;
+                           const larguraDeriv = der.larguraDerivacaoMm || 12;
 
                           return (
                             <g key={der.id}>
@@ -1904,7 +1905,7 @@ export function EditorQuadro({
                                 x={bar.x - compDeriv}
                                 y={bar.y + der.yOffsetMm}
                                 width={Math.max(bar.larguraTroncoMm, larguraTotalBarras) + compDeriv * 2}
-                                height={espessuraDeriv}
+                                 height={larguraDeriv}
                                 rx={2}
                                 fill={corFase}
                                 stroke="#451a03"
@@ -1912,7 +1913,7 @@ export function EditorQuadro({
                               />
                               <text
                                 x={bar.x + larguraTotalBarras / 2}
-                                y={bar.y + der.yOffsetMm + espessuraDeriv - 2}
+                                 y={bar.y + der.yOffsetMm + larguraDeriv - 2}
                                 fontSize="8"
                                 fill="#ffffff"
                                 fontWeight="bold"
@@ -2939,7 +2940,7 @@ export function EditorQuadro({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                   <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className="block text-[10px] text-sky-800 mb-0.5">
                           Espaçamento Vertical (mm)
@@ -3001,6 +3002,22 @@ export function EditorQuadro({
                       </label>
                        {barramentoSelecionado.unidadeMedida === "pol" ? (
                          <CampoFracaoPolegada
+                           key={`${barramentoSelecionado.id}-deriv-largura`}
+                           rotulo="Largura da derivação"
+                           valorMm={barramentoSelecionado.larguraDerivacaoMm ?? 12}
+                           aoAlterar={(valorMm) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { larguraDerivacaoMm: valorMm })}
+                           desabilitado={!podeEditar}
+                           className="text-sky-800"
+                         />
+                       ) : (
+                         <label className="text-[10px] text-sky-800">Largura (mm)
+                           <input type="number" min={0.1} step={0.5} value={barramentoSelecionado.larguraDerivacaoMm ?? 12} onChange={(e) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { larguraDerivacaoMm: Number(e.target.value) || 1 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
+                         </label>
+                       )}
+                     </div>
+                     <div>
+                       {barramentoSelecionado.unidadeMedida === "pol" ? (
+                         <CampoFracaoPolegada
                            key={`${barramentoSelecionado.id}-deriv-espessura`}
                            rotulo="Espessura da derivação"
                            valorMm={barramentoSelecionado.espessuraDerivacaoMm ?? 10}
@@ -3013,19 +3030,19 @@ export function EditorQuadro({
                            <input type="number" min={0.1} step={0.5} value={barramentoSelecionado.espessuraDerivacaoMm ?? 10} onChange={(e) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { espessuraDerivacaoMm: Number(e.target.value) || 1 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
                          </label>
                        )}
-                    </div>
+                     </div>
                      {barramentoSelecionado.unidadeMedida === "pol" ? (
                        <CampoFracaoPolegada
                          key={`${barramentoSelecionado.id}-deriv-comprimento`}
                          rotulo="Comprimento da derivação"
                          valorMm={barramentoSelecionado.comprimentoDerivacaoMm ?? 35}
-                         aoAlterar={(valorMm) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valorMm, larguraDerivacaoMm: valorMm })}
+                          aoAlterar={(valorMm) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valorMm })}
                          desabilitado={!podeEditar}
                          className="text-sky-800"
                        />
                      ) : (
                        <label className="block text-[10px] text-sky-800">Comprimento da derivação (mm)
-                         <input type="number" min={0.1} step={1} value={barramentoSelecionado.comprimentoDerivacaoMm ?? 35} onChange={(e) => { const valor = Number(e.target.value) || 1; atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valor, larguraDerivacaoMm: valor }); }} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
+                         <input type="number" min={0.1} step={1} value={barramentoSelecionado.comprimentoDerivacaoMm ?? 35} onChange={(e) => { const valor = Number(e.target.value) || 1; atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valor }); }} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
                        </label>
                      )}
                     <div className="grid grid-cols-3 gap-2">
@@ -3035,7 +3052,7 @@ export function EditorQuadro({
                         </label>
                       ))}
                     </div>
-                    <p className="text-[10px] text-sky-700">Comprimento: {barramentoSelecionado.comprimentoDerivacaoMm ?? 35} mm = {mmParaPolegadaTexto(barramentoSelecionado.comprimentoDerivacaoMm ?? 35)} · Espessura: {barramentoSelecionado.espessuraDerivacaoMm ?? 10} mm = {mmParaPolegadaTexto(barramentoSelecionado.espessuraDerivacaoMm ?? 10)}</p>
+                     <p className="text-[10px] text-sky-700">Comprimento: {barramentoSelecionado.comprimentoDerivacaoMm ?? 35} mm = {mmParaPolegadaTexto(barramentoSelecionado.comprimentoDerivacaoMm ?? 35)} · Largura: {barramentoSelecionado.larguraDerivacaoMm ?? 12} mm = {mmParaPolegadaTexto(barramentoSelecionado.larguraDerivacaoMm ?? 12)} · Espessura: {barramentoSelecionado.espessuraDerivacaoMm ?? 10} mm = {mmParaPolegadaTexto(barramentoSelecionado.espessuraDerivacaoMm ?? 10)}</p>
                     <button type="button" onClick={() => regenerarDerivacoesBarramento(barramentoSelecionado.id)} disabled={!podeEditar} className="w-full rounded bg-sky-600 px-2 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">Aplicar configuração à sequência R/S/T</button>
                   </div>
                 </div>
