@@ -42,6 +42,7 @@ import {
   type ProtecaoAcrilicaQuadro,
   type SuporteBarraRoscadaQuadro,
   mmParaPolegadaTexto,
+  POLEGADAS_PADRAO,
   polegadaParaMm,
 } from "@/lib/quadros/tipos";
 import {
@@ -89,6 +90,83 @@ interface EditorQuadroProps {
   circuitosDisponiveis: CircuitoVinculado[];
   quadrosDisponiveis: Array<{ id: string; tag: string; nome: string | null; tipo_quadro: string }>;
   podeEditar: boolean;
+}
+
+interface CampoFracaoPolegadaProps {
+  rotulo: string;
+  valorMm: number;
+  aoAlterar: (valorMm: number) => void;
+  desabilitado: boolean;
+  className?: string;
+}
+
+function partesDaFracao(mm: number): { numerador: number; denominador: number } {
+  const padrao = POLEGADAS_PADRAO.reduce((anterior, atual) =>
+    Math.abs(atual.mm - mm) < Math.abs(anterior.mm - mm) ? atual : anterior,
+  );
+  const partes = padrao.fracao.replace('"', "").split("/");
+  if (partes.length === 2) {
+    return { numerador: Number(partes[0]), denominador: Number(partes[1]) };
+  }
+  return { numerador: Math.max(1, Math.round(mm / 25.4)), denominador: 1 };
+}
+
+function CampoFracaoPolegada({
+  rotulo,
+  valorMm,
+  aoAlterar,
+  desabilitado,
+  className = "text-amber-800",
+}: CampoFracaoPolegadaProps) {
+  const inicial = partesDaFracao(valorMm);
+  const [numerador, setNumerador] = useState(String(inicial.numerador));
+  const [denominador, setDenominador] = useState(String(inicial.denominador));
+  const numero = Number(numerador);
+  const divisor = Number(denominador);
+  const fracaoValida = Number.isInteger(numero) && numero > 0 && Number.isInteger(divisor) && divisor > 0;
+  const mmCalculado = fracaoValida ? polegadaParaMm(numero / divisor) : null;
+
+  function alterar(novoNumerador: string, novoDenominador: string) {
+    setNumerador(novoNumerador);
+    setDenominador(novoDenominador);
+    const n = Number(novoNumerador);
+    const d = Number(novoDenominador);
+    if (Number.isInteger(n) && n > 0 && Number.isInteger(d) && d > 0) {
+      aoAlterar(polegadaParaMm(n / d));
+    }
+  }
+
+  return (
+    <div>
+      <label className={`block text-[10px] mb-0.5 ${className}`}>{rotulo} (pol)</label>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
+        <input
+          type="number"
+          min={1}
+          step={1}
+          value={numerador}
+          onChange={(e) => alterar(e.target.value, denominador)}
+          disabled={desabilitado}
+          aria-label={`${rotulo} numerador`}
+          className="w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-center"
+        />
+        <span className={className}>/</span>
+        <input
+          type="number"
+          min={1}
+          step={1}
+          value={denominador}
+          onChange={(e) => alterar(numerador, e.target.value)}
+          disabled={desabilitado}
+          aria-label={`${rotulo} denominador`}
+          className="w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs text-center"
+        />
+      </div>
+      <span className={`text-[9px] font-mono ${className}`}>
+        {mmCalculado !== null ? `${mmCalculado} mm` : "Informe uma fração válida"}
+      </span>
+    </div>
+  );
 }
 
 export function EditorQuadro({
@@ -1385,16 +1463,17 @@ export function EditorQuadro({
             onMouseUp={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
             onMouseLeave={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
           >
-            <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } body * { visibility: hidden; } .quadros-editor .quadros-printable, .quadros-editor .quadros-printable * { visibility: visible; } .quadros-editor .quadros-printable { position: absolute; left: 0; top: 0; width: 273mm !important; height: 186mm !important; max-width: 273mm !important; max-height: 186mm !important; transform: none !important; overflow: hidden !important; box-shadow: none !important; border: 1px solid #334155; } .quadros-editor .quadros-print-controls { display: none !important; } }`}</style>
+             <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } html, body { width: 100%; height: 100%; } body * { visibility: hidden; } .quadros-editor .quadros-printable, .quadros-editor .quadros-printable * { visibility: visible; } .quadros-editor .quadros-printable { position: fixed; left: 50%; top: 50%; width: min(92vw, calc(92vh * var(--quadro-aspect-ratio))) !important; height: min(92vh, calc(92vw / var(--quadro-aspect-ratio))) !important; max-width: none !important; max-height: none !important; transform: translate(-50%, -50%) !important; overflow: visible !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; box-sizing: border-box !important; } .quadros-editor .quadros-print-controls { display: none !important; } }`}</style>
             <div
-              className="quadros-printable transition-transform origin-center shadow-2xl rounded-xl bg-slate-300 border-4 border-slate-400 relative flex flex-col justify-start"
-              style={{
-                transform: `scale(${zoom})`,
-                width: `${dimensoes.larguraMm}px`,
-                height: `${dimensoes.alturaMm}px`,
-                boxSizing: "content-box",
-              }}
-            >
+               className="quadros-printable transition-transform origin-center shadow-2xl rounded-xl bg-slate-300 border-4 border-slate-400 relative flex flex-col justify-start"
+               style={{
+                 transform: `scale(${zoom})`,
+                 width: `${dimensoes.larguraMm}px`,
+                 height: `${dimensoes.alturaMm}px`,
+                 ["--quadro-aspect-ratio" as string]: dimensoes.larguraMm / dimensoes.alturaMm,
+                 boxSizing: "content-box",
+               }}
+              >
               <div className="absolute top-1.5 left-3 z-10 text-[10px] font-bold text-slate-700 tracking-wider uppercase flex items-center gap-2 pointer-events-none">
                 <span>{quadro.tipo_quadro} {tag}</span>
                 <span className="text-slate-500 font-normal">
@@ -1433,8 +1512,8 @@ export function EditorQuadro({
                 style={{
                   top: `${dimensoes.margemTopoMm}px`,
                   left: `${dimensoes.margemLateralMm}px`,
-                  width: `${dimensoes.larguraUtilMm}px`,
-                  height: `${dimensoes.alturaUtilMm}px`,
+                  width: `${Math.max(100, dimensoes.larguraMm - dimensoes.margemLateralMm - margemDireitaEfetiva)}px`,
+                  height: `${Math.max(100, dimensoes.alturaMm - dimensoes.margemTopoMm - margemBaseEfetiva)}px`,
                 }}
                 onClick={(e) => {
                   if (e.target === e.currentTarget || (e.target as HTMLElement).id === "chapa-background") {
@@ -2756,38 +2835,22 @@ export function EditorQuadro({
                     <span className="block font-bold text-amber-900 text-[11px] uppercase tracking-wider">
                       Barramento Principal (Tronco)
                     </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] text-amber-800 mb-0.5">
-                          Largura Barra ({barramentoSelecionado.unidadeMedida === "pol" ? "pol" : "mm"})
-                        </label>
-                        <input
-                          type="number"
-                          step={barramentoSelecionado.unidadeMedida === "pol" ? 0.05 : 1}
-                          value={
-                            barramentoSelecionado.unidadeMedida === "pol"
-                              ? Number(((barramentoSelecionado.larguraBarraIndividualMm || 12.7) / 25.4).toFixed(3))
-                              : barramentoSelecionado.larguraBarraIndividualMm || 12.7
-                          }
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            const valMm = barramentoSelecionado.unidadeMedida === "pol" ? polegadaParaMm(val) : val;
-                            setLayout((ant) => ({
-                              ...ant,
-                              barramentos: ant.barramentos.map((b) =>
-                                b.id === barramentoSelecionado.id
-                                  ? { ...b, larguraBarraIndividualMm: valMm }
-                                  : b,
-                              ),
-                            }));
-                          }}
-                          disabled={!podeEditar}
-                          className="w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs"
-                        />
-                        <span className="text-[9px] text-amber-700 font-mono">
-                          {mmParaPolegadaTexto(barramentoSelecionado.larguraBarraIndividualMm || 12.7)}
-                        </span>
-                      </div>
+                     <div className="grid grid-cols-2 gap-2">
+                       <div>
+                         {barramentoSelecionado.unidadeMedida === "pol" ? (
+                           <CampoFracaoPolegada
+                             key={`${barramentoSelecionado.id}-largura`}
+                             rotulo="Largura da barra"
+                             valorMm={barramentoSelecionado.larguraBarraIndividualMm || 12.7}
+                             aoAlterar={(valorMm) => setLayout((ant) => ({ ...ant, barramentos: ant.barramentos.map((b) => b.id === barramentoSelecionado.id ? { ...b, larguraBarraIndividualMm: valorMm } : b) }))}
+                             desabilitado={!podeEditar}
+                           />
+                         ) : (
+                           <label className="block text-[10px] text-amber-800">Largura da barra (mm)
+                             <input type="number" min={0.1} step={1} value={barramentoSelecionado.larguraBarraIndividualMm || 12.7} onChange={(e) => setLayout((ant) => ({ ...ant, barramentos: ant.barramentos.map((b) => b.id === barramentoSelecionado.id ? { ...b, larguraBarraIndividualMm: Number(e.target.value) || 0.1 } : b) }))} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs" />
+                           </label>
+                         )}
+                       </div>
 
                       <div>
                         <label className="block text-[10px] text-amber-800 mb-0.5">
@@ -2819,8 +2882,24 @@ export function EditorQuadro({
                         <span className="text-[9px] text-amber-700 font-mono">
                           {mmParaPolegadaTexto(barramentoSelecionado.espacamentoEntreBarrasMm || 12)}
                         </span>
-                      </div>
-                    </div>
+                       </div>
+                     </div>
+
+                     <div>
+                       {barramentoSelecionado.unidadeMedida === "pol" ? (
+                         <CampoFracaoPolegada
+                           key={`${barramentoSelecionado.id}-espessura`}
+                           rotulo="Espessura da barra"
+                           valorMm={barramentoSelecionado.espessuraBarraMm || 3.175}
+                           aoAlterar={(valorMm) => setLayout((ant) => ({ ...ant, barramentos: ant.barramentos.map((b) => b.id === barramentoSelecionado.id ? { ...b, espessuraBarraMm: valorMm } : b) }))}
+                           desabilitado={!podeEditar}
+                         />
+                       ) : (
+                         <label className="block text-[10px] text-amber-800">Espessura da barra (mm)
+                           <input type="number" min={0.1} step={0.5} value={barramentoSelecionado.espessuraBarraMm || 3.175} onChange={(e) => setLayout((ant) => ({ ...ant, barramentos: ant.barramentos.map((b) => b.id === barramentoSelecionado.id ? { ...b, espessuraBarraMm: Number(e.target.value) || 0.1 } : b) }))} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs" />
+                         </label>
+                       )}
+                     </div>
 
                     <div>
                       <label className="block text-[10px] text-amber-800 mb-0.5">
@@ -2920,13 +2999,35 @@ export function EditorQuadro({
                           <option value="R">R</option><option value="S">S</option><option value="T">T</option>{barramentoSelecionado.tipo === "tetrapolar" && <option value="N">N</option>}
                         </select>
                       </label>
-                      <label className="text-[10px] text-sky-800">Espessura ({barramentoSelecionado.unidadeMedida === "pol" ? "pol" : "mm"})
-                        <input type="number" min={0.1} step={barramentoSelecionado.unidadeMedida === "pol" ? 0.01 : 0.5} value={barramentoSelecionado.unidadeMedida === "pol" ? Number(((barramentoSelecionado.espessuraDerivacaoMm ?? 10) / 25.4).toFixed(3)) : barramentoSelecionado.espessuraDerivacaoMm ?? 10} onChange={(e) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { espessuraDerivacaoMm: barramentoSelecionado.unidadeMedida === "pol" ? polegadaParaMm(Number(e.target.value)) : Number(e.target.value) || 1 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
-                      </label>
+                       {barramentoSelecionado.unidadeMedida === "pol" ? (
+                         <CampoFracaoPolegada
+                           key={`${barramentoSelecionado.id}-deriv-espessura`}
+                           rotulo="Espessura da derivação"
+                           valorMm={barramentoSelecionado.espessuraDerivacaoMm ?? 10}
+                           aoAlterar={(valorMm) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { espessuraDerivacaoMm: valorMm })}
+                           desabilitado={!podeEditar}
+                           className="text-sky-800"
+                         />
+                       ) : (
+                         <label className="text-[10px] text-sky-800">Espessura (mm)
+                           <input type="number" min={0.1} step={0.5} value={barramentoSelecionado.espessuraDerivacaoMm ?? 10} onChange={(e) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { espessuraDerivacaoMm: Number(e.target.value) || 1 })} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
+                         </label>
+                       )}
                     </div>
-                    <label className="block text-[10px] text-sky-800">Comprimento da derivação ({barramentoSelecionado.unidadeMedida === "pol" ? "pol" : "mm"})
-                      <input type="number" min={0.1} step={barramentoSelecionado.unidadeMedida === "pol" ? 0.05 : 1} value={barramentoSelecionado.unidadeMedida === "pol" ? Number(((barramentoSelecionado.comprimentoDerivacaoMm ?? 35) / 25.4).toFixed(3)) : barramentoSelecionado.comprimentoDerivacaoMm ?? 35} onChange={(e) => { const valor = barramentoSelecionado.unidadeMedida === "pol" ? polegadaParaMm(Number(e.target.value)) : Number(e.target.value) || 1; atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valor, larguraDerivacaoMm: valor }); }} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
-                    </label>
+                     {barramentoSelecionado.unidadeMedida === "pol" ? (
+                       <CampoFracaoPolegada
+                         key={`${barramentoSelecionado.id}-deriv-comprimento`}
+                         rotulo="Comprimento da derivação"
+                         valorMm={barramentoSelecionado.comprimentoDerivacaoMm ?? 35}
+                         aoAlterar={(valorMm) => atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valorMm, larguraDerivacaoMm: valorMm })}
+                         desabilitado={!podeEditar}
+                         className="text-sky-800"
+                       />
+                     ) : (
+                       <label className="block text-[10px] text-sky-800">Comprimento da derivação (mm)
+                         <input type="number" min={0.1} step={1} value={barramentoSelecionado.comprimentoDerivacaoMm ?? 35} onChange={(e) => { const valor = Number(e.target.value) || 1; atualizarConfiguracaoDerivacoes(barramentoSelecionado.id, { comprimentoDerivacaoMm: valor, larguraDerivacaoMm: valor }); }} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-sky-300 px-2 py-1 text-xs" />
+                       </label>
+                     )}
                     <div className="grid grid-cols-3 gap-2">
                       {(["R", "S", "T"] as const).map((fase) => (
                         <label key={fase} className="text-[10px] font-semibold text-sky-800">Cor fase {fase}
