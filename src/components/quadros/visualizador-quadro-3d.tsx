@@ -13,6 +13,7 @@ import {
   type QuadroEletricoLayout,
   type DimensaoPadraoComponente,
   COMPONENTES_CATALOGO_PADRAO,
+  catalogoDoElemento,
 } from "@/lib/quadros/tipos";
 
 interface VisualizadorQuadro3DProps {
@@ -408,14 +409,14 @@ export function VisualizadorQuadro3D({
       const hMm = isHorizontal ? bar.larguraMm : bar.comprimentoMm;
       const pos = transformarCoords2DPara3D(bar.x, bar.y, wMm, hMm, bar.profundidadeMm / 2 + 5);
 
-      const matLatao = new THREE.MeshStandardMaterial({
-        color: 0xd97706,
+      const matBarraNT = new THREE.MeshStandardMaterial({
+        color: bar.material === "latao" ? 0xd97706 : 0xb87333,
         metalness: 0.85,
         roughness: 0.25,
       });
 
       const geoBarraNT = new THREE.BoxGeometry(wMm, hMm, bar.profundidadeMm);
-      const meshBarraNT = new THREE.Mesh(geoBarraNT, matLatao);
+      const meshBarraNT = new THREE.Mesh(geoBarraNT, matBarraNT);
       meshBarraNT.position.copy(pos);
       scene.add(meshBarraNT);
 
@@ -457,6 +458,9 @@ export function VisualizadorQuadro3D({
 
       bar.furos.forEach((furo) => {
         const diam = furo.diametroMm || bar.diametroFuroPadraoMm || 5;
+        const linhas = Math.max(1, bar.quantidadeLinhasFuros ?? 1);
+        const linha = Math.max(1, Math.min(linhas, furo.linha ?? 1));
+        const deslocamentoLinha = linhas === 1 ? 0 : ((linha - 1) / (linhas - 1) - 0.5) * (isHorizontal ? hMm * 0.45 : wMm * 0.45);
         const geoFuroCil = new THREE.CylinderGeometry(diam / 2, diam / 2, 2, 12);
         const meshFuroCil = new THREE.Mesh(geoFuroCil, matFuroScrew);
         meshFuroCil.rotation.x = Math.PI / 2;
@@ -464,12 +468,12 @@ export function VisualizadorQuadro3D({
         if (isHorizontal) {
           meshFuroCil.position.set(
             pos.x - wMm / 2 + furo.posicaoMm,
-            pos.y,
+             pos.y + deslocamentoLinha,
             pos.z + bar.profundidadeMm / 2 + 0.5,
           );
         } else {
           meshFuroCil.position.set(
-            pos.x,
+             pos.x + deslocamentoLinha,
             pos.y + hMm / 2 - furo.posicaoMm,
             pos.z + bar.profundidadeMm / 2 + 0.5,
           );
@@ -503,7 +507,7 @@ export function VisualizadorQuadro3D({
         const offsetBarraX = -larguraTotal / 2 + b * (larguraBarra + espacamento) + larguraBarra / 2;
         const geoBarra = new THREE.BoxGeometry(larguraBarra, bar.alturaMm, espessura);
         const matBarraIndividual = new THREE.MeshStandardMaterial({
-          color: 0xc2410c,
+          color: bar.material === "aluminio" ? 0x94a3b8 : 0xc2410c,
           metalness: 0.85,
           roughness: 0.2,
         });
@@ -555,7 +559,7 @@ export function VisualizadorQuadro3D({
     });
 
     layout.elementos.forEach((el) => {
-      const cat = catalogo[el.tipo] || COMPONENTES_CATALOGO_PADRAO[el.tipo];
+      const cat = catalogoDoElemento(catalogo, el.tipo, el.varianteId);
       const pos = transformarCoords2DPara3D(
         el.x,
         el.y,

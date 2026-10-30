@@ -23,14 +23,14 @@ export function ModalListaMateriais({
   const [copiado, setCopiado] = useState(false);
 
   function exportarCsv() {
-    const cabecalho = ["Item", "Especificacao", "Quantidade", "Unidade", "Norma", "Detalhes"];
+    const protegerFormula = (valor: string): string => /^[=+\-@\t\r]/.test(valor) ? `'${valor}` : valor;
+    const escapar = (valor: string | number): string => `"${protegerFormula(String(valor)).replace(/"/g, '""')}"`;
+    const cabecalho = ["Item", "Especificacao", "Quantidade", "Unidade", "Norma", "Detalhes", "Tipo", "Material", "Unidade dimensional", "Comprimento", "Largura", "Altura", "Profundidade", "Barras", "Derivacoes", "Furos", "Corrente (A)"];
     const linhas = materiais.map((m) => [
-      `"${m.item.replace(/"/g, '""')}"`,
-      `"${m.especificacao.replace(/"/g, '""')}"`,
-      m.quantidade,
-      `"${m.unidade}"`,
-      `"${m.norma}"`,
-      `"${m.detalhes.replace(/"/g, '""')}"`,
+      escapar(m.item), escapar(m.especificacao), escapar(m.quantidade), escapar(m.unidade), escapar(m.norma), escapar(m.detalhes),
+      escapar(m.tipo ?? ""), escapar(m.material ?? ""), escapar(m.unidadeDimensional ?? "mm"), escapar(m.comprimentoMm ?? ""),
+      escapar(m.larguraMm ?? ""), escapar(m.alturaMm ?? ""), escapar(m.profundidadeMm ?? ""), escapar(m.quantidadeBarras ?? ""),
+      escapar(m.quantidadeDerivacoes ?? ""), escapar(m.quantidadeFuros ?? ""), escapar(m.correnteNominalA ?? ""),
     ]);
 
     const csv = [cabecalho.join(";"), ...linhas.map((l) => l.join(";"))].join("\n");

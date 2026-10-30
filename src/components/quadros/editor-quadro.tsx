@@ -25,6 +25,8 @@ import {
 import { Botao } from "@/components/ui";
 import {
   COMPONENTES_CATALOGO_PADRAO,
+  catalogoDoElemento,
+  variantePorCorrente,
   MODULO_DIN_MM,
   type ElementoQuadro,
   type TrilhoDIN,
@@ -106,6 +108,14 @@ function partesDaFracao(mm: number): { numerador: number; denominador: number } 
   );
   const partes = padrao.fracao.replace('"', "").split("/");
   if (partes.length === 2) {
+    const [inteiro, fracao] = partes[0].split(".");
+    if (fracao) {
+      const denominadorFracao = Number(partes[1]);
+      return {
+        numerador: Number(inteiro) * denominadorFracao + Number(fracao),
+        denominador: denominadorFracao,
+      };
+    }
     return { numerador: Number(partes[0]), denominador: Number(partes[1]) };
   }
   return { numerador: Math.max(1, Math.round(mm / 25.4)), denominador: 1 };
@@ -263,11 +273,11 @@ export function EditorQuadro({
     larguraMm: dimensoes.larguraUtilMm,
     alturaMm: dimensoes.alturaUtilMm,
     profundidadeMm: dimensoes.profundidadeMm,
-  });
+  }, catalogo);
 
   const elementoSelecionado = layout.elementos.find((e) => e.id === elementoSelecionadoId);
   const podeVincularQuadro = elementoSelecionado
-    ? (catalogo[elementoSelecionado.tipo] || COMPONENTES_CATALOGO_PADRAO[elementoSelecionado.tipo])?.categoria === "disjuntor"
+    ? catalogoDoElemento(catalogo, elementoSelecionado.tipo, elementoSelecionado.varianteId)?.categoria === "disjuntor"
     : false;
   const trilhoSelecionado = layout.trilhos.find((t) => t.id === trilhoSelecionadoId);
   const barramentoSelecionado = layout.barramentos.find((b) => b.id === barramentoSelecionadoId);
@@ -344,7 +354,7 @@ export function EditorQuadro({
       if (!cat) return;
 
       const novoId = `${tipo}-${Date.now().toString(36)}`;
-      const contagemTipo = layout.elementos.filter((e) => e.tipo === tipo).length + 1;
+       const contagemTipo = layout.elementos.filter((e) => e.tipo === cat.tipo).length + 1;
 
       if (tipo === "trilho_din" || tipo === "trilho_din_vertical") {
         const isVertical = tipo === "trilho_din_vertical";
@@ -496,7 +506,8 @@ export function EditorQuadro({
 
       const novoElemento: ElementoQuadro = {
         id: novoId,
-        tipo,
+         tipo: cat.tipo,
+        varianteId: cat.varianteId,
         tag: `${cat.categoria.slice(0, 3).toUpperCase()}-${contagemTipo}`,
         descricao: `${cat.nome} ${cat.correntDefaultA ? `${cat.correntDefaultA}A` : ""}`.trim(),
         x: Math.min(dimensoes.larguraUtilMm - cat.larguraMm, Math.max(0, posX)),
@@ -530,7 +541,7 @@ export function EditorQuadro({
       setBarramentoNTSelecionadoId(null);
       setCanaletaSelecionadaId(null);
     },
-    [podeEditar, layout, dimensoes, catalogo],
+       [podeEditar, layout, dimensoes, catalogo],
   );
 
   function atualizarElemento(id: string, updates: Partial<ElementoQuadro>) {
@@ -618,6 +629,7 @@ export function EditorQuadro({
     const diamPadrao = bar.diametroFuroPadraoMm || 5;
     const comp = bar.comprimentoMm;
     const isTerra = bar.tipo === "terra";
+    const linhas = Math.max(1, bar.quantidadeLinhasFuros ?? 1);
 
     const novosFuros: FuroBarramento[] = [];
     let pos = 16;
@@ -627,6 +639,7 @@ export function EditorQuadro({
       novosFuros.push({
         id: `f-${Date.now().toString(36)}-${idx}`,
         posicaoMm: pos,
+        linha: ((idx - 1) % linhas) + 1,
         diametroMm: diamPadrao,
         secaoMaximaMm2: diamPadrao >= 8 ? 35 : diamPadrao >= 6 ? 25 : 16,
         rotulo: `${isTerra ? "PE" : "N"}-${idx}`,
@@ -651,10 +664,12 @@ export function EditorQuadro({
     const novaPos = ultFuro ? ultFuro.posicaoMm + bar.espacamentoFurosMm : 16;
     const isTerra = bar.tipo === "terra";
     const novoNum = bar.furos.length + 1;
+    const linhas = Math.max(1, bar.quantidadeLinhasFuros ?? 1);
 
     const novoFuro: FuroBarramento = {
       id: `f-${Date.now().toString(36)}-${novoNum}`,
       posicaoMm: Math.min(bar.comprimentoMm - 8, novaPos),
+      linha: ((novoNum - 1) % linhas) + 1,
       diametroMm: bar.diametroFuroPadraoMm || 5,
       secaoMaximaMm2: 16,
       rotulo: `${isTerra ? "PE" : "N"}-${novoNum}`,
@@ -1104,7 +1119,7 @@ export function EditorQuadro({
     alturaMm: dimensoes.alturaMm,
     profundidadeMm: dimensoes.profundidadeMm,
     grauProtecao: quadro.grau_protecao,
-  });
+  }, catalogo);
 
   const margemBaseEfetiva = dimensoes.margemBaseMm ?? dimensoes.margemTopoMm;
   const margemDireitaEfetiva = dimensoes.margemDireitaMm ?? dimensoes.margemLateralMm;
@@ -1114,7 +1129,7 @@ export function EditorQuadro({
   ) * 0.96;
 
   return (
-    <div className="quadros-editor flex flex-col h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] overflow-hidden bg-superficie-100">
+    <div className="quadros-editor -mx-4 -my-6 flex h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] flex-col overflow-hidden bg-superficie-100 sm:-mx-6 lg:-mx-8">
       <div className="flex flex-wrap items-center justify-between px-4 py-2.5 bg-white border-b border-borda shrink-0 gap-2">
         <div className="flex items-center gap-3 min-w-0">
           <Link
@@ -1464,13 +1479,14 @@ export function EditorQuadro({
           </div>
 
           <div
-            className="flex-1 bg-superficie-200/70 overflow-auto p-8 flex items-center justify-center select-none"
+             className="flex-1 bg-superficie-200/70 overflow-auto select-none"
             onMouseMove={(e) => { atualizarSelecao(e); aoMoverArrasto(e); }}
             onMouseUp={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
             onMouseLeave={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
-          >
+           >
+             <div className="flex min-h-full min-w-full items-start justify-start p-8">
              <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } html, body { width: 100%; height: 100%; } body * { visibility: hidden; } .quadros-editor .quadros-printable, .quadros-editor .quadros-printable * { visibility: visible; } .quadros-editor .quadros-printable { position: fixed; left: 50%; top: 50%; width: ${dimensoes.larguraMm}px !important; height: ${dimensoes.alturaMm}px !important; max-width: none !important; max-height: none !important; transform: translate(-50%, -50%) scale(${escalaImpressao}) !important; transform-origin: center center !important; overflow: visible !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; box-sizing: content-box !important; } .quadros-editor .quadros-print-controls { display: none !important; } }`}</style>
-            <div
+             <div
                className="quadros-printable transition-transform origin-center shadow-2xl rounded-xl bg-slate-300 border-4 border-slate-400 relative flex flex-col justify-start"
                style={{
                  transform: `scale(${zoom})`,
@@ -1749,8 +1765,11 @@ export function EditorQuadro({
                         )}
 
                         {bar.furos.map((furo) => {
-                          const furoX = isH ? bar.x + furo.posicaoMm : bar.x + w / 2;
-                          const furoY = isH ? bar.y + h / 2 : bar.y + furo.posicaoMm;
+                           const linhas = Math.max(1, bar.quantidadeLinhasFuros ?? 1);
+                           const linha = Math.max(1, Math.min(linhas, furo.linha ?? 1));
+                           const deslocamentoLinha = linhas === 1 ? 0 : ((linha - 1) / (linhas - 1) - 0.5) * (isH ? h * 0.45 : w * 0.45);
+                           const furoX = isH ? bar.x + furo.posicaoMm : bar.x + w / 2 + deslocamentoLinha;
+                           const furoY = isH ? bar.y + h / 2 + deslocamentoLinha : bar.y + furo.posicaoMm;
                           const raio = (furo.diametroMm || 5) / 2;
                           const temCircuito = Boolean(furo.circuitoConectadoNome);
 
@@ -1946,7 +1965,7 @@ export function EditorQuadro({
 
                   {layout.elementos.map((el) => {
                     const selecionado = selecaoElementos.has(el.id) || el.id === elementoSelecionadoId;
-                    const cat = catalogo[el.tipo] || COMPONENTES_CATALOGO_PADRAO[el.tipo];
+      const cat = catalogoDoElemento(catalogo, el.tipo, el.varianteId);
 
                     let corFundo = "#ffffff";
                     let corBorda = "#64748b";
@@ -2102,8 +2121,9 @@ export function EditorQuadro({
                     </g>
                   ))}
                   </svg>
-              </div>
-            </div>
+               </div>
+             </div>
+           </div>
           </div>
 
           <div className="w-72 sm:w-80 bg-white border-l border-borda flex flex-col shrink-0 overflow-y-auto p-4 space-y-4">
@@ -2309,11 +2329,35 @@ export function EditorQuadro({
                       <input
                         type="number"
                         value={elementoSelecionado.correnteNominal ?? ""}
-                        onChange={(e) =>
-                          atualizarElemento(elementoSelecionado.id, {
-                            correnteNominal: Number(e.target.value) || undefined,
-                          })
-                        }
+                          onChange={(e) => {
+                            const correnteNominal = Number(e.target.value) || undefined;
+                            const variante = correnteNominal
+                              ? variantePorCorrente(catalogo, elementoSelecionado.tipo, correnteNominal)
+                              : undefined;
+                            const catalogoBase = catalogoDoElemento(catalogo, elementoSelecionado.tipo);
+                            atualizarElemento(elementoSelecionado.id, {
+                              correnteNominal,
+                              ...(variante
+                                ? {
+                                    varianteId: variante.varianteId,
+                                    larguraMm: variante.larguraMm,
+                                    alturaMm: variante.alturaMm,
+                                    profundidadeMm: variante.profundidadeMm,
+                                    descricao: `${variante.nome} ${correnteNominal}A`,
+                                  }
+                                : {
+                                    varianteId: undefined,
+                                    ...(catalogoBase
+                                      ? {
+                                          larguraMm: catalogoBase.larguraMm,
+                                          alturaMm: catalogoBase.alturaMm,
+                                          profundidadeMm: catalogoBase.profundidadeMm,
+                                          descricao: `${catalogoBase.nome}${correnteNominal ? ` ${correnteNominal}A` : ""}`,
+                                        }
+                                      : {}),
+                                  }),
+                            });
+                          }}
                         disabled={!podeEditar}
                         className="w-full rounded-lg border border-borda px-2.5 py-1 text-xs text-superficie-900"
                       />
@@ -2564,6 +2608,24 @@ export function EditorQuadro({
                         className="w-full rounded-lg border border-borda px-2 py-1 text-xs"
                       />
                     </div>
+                    <div>
+                      <label className="block text-superficie-700 font-medium mb-1">Material</label>
+                      <select
+                        value={barramentoNTSelecionado.material}
+                        onChange={(e) => setLayout((ant) => ({ ...ant, barramentosNeutroTerra: (ant.barramentosNeutroTerra || []).map((b) => b.id === barramentoNTSelecionado.id ? { ...b, material: e.target.value as "latao" | "cobre_eletrolitico" } : b) }))}
+                        disabled={!podeEditar}
+                        className="w-full rounded-lg border border-borda bg-white px-2 py-1 text-xs"
+                      >
+                        <option value="cobre_eletrolitico">Cobre eletrolítico</option>
+                        <option value="latao">Latão</option>
+                      </select>
+                    </div>
+                    <label className="block text-superficie-700 font-medium mb-1">Largura (mm)
+                      <input type="number" min={0.1} step={0.5} value={barramentoNTSelecionado.larguraMm} onChange={(e) => { const val = Number(e.target.value) || 1; setLayout((ant) => ({ ...ant, barramentosNeutroTerra: (ant.barramentosNeutroTerra || []).map((b) => b.id === barramentoNTSelecionado.id ? { ...b, larguraMm: val } : b) })) }} disabled={!podeEditar} className="mt-1 w-full rounded border border-borda px-2 py-1 text-xs" />
+                    </label>
+                    <label className="block text-superficie-700 font-medium mb-1">Profundidade / espessura (mm)
+                      <input type="number" min={0.1} step={0.5} value={barramentoNTSelecionado.profundidadeMm} onChange={(e) => { const val = Number(e.target.value) || 1; setLayout((ant) => ({ ...ant, barramentosNeutroTerra: (ant.barramentosNeutroTerra || []).map((b) => b.id === barramentoNTSelecionado.id ? { ...b, profundidadeMm: val } : b) })) }} disabled={!podeEditar} className="mt-1 w-full rounded border border-borda px-2 py-1 text-xs" />
+                    </label>
                   </div>
 
                   <div className="rounded-xl bg-superficie-50 p-3 border border-borda space-y-2.5">
@@ -2591,7 +2653,40 @@ export function EditorQuadro({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                       <label className="block text-superficie-500 mb-0.5">Quantidade de furos
+                         <input type="number" min={0} step={1} value={barramentoNTSelecionado.furos.length} onChange={(e) => {
+                           const quantidade = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                           const bar = barramentoNTSelecionado;
+                           const espacamento = bar.espacamentoFurosMm || 14;
+                           const diametro = bar.diametroFuroPadraoMm || 5;
+                           const isTerra = bar.tipo === "terra";
+                           const furosExistentes = bar.furos;
+                           const linhas = Math.max(1, bar.quantidadeLinhasFuros ?? 1);
+                           const furos = Array.from({ length: quantidade }, (_, index) => {
+                             const existente = furosExistentes[index];
+                             return {
+                               id: existente?.id ?? `f-${Date.now().toString(36)}-${index}`,
+                               posicaoMm: existente?.posicaoMm ?? Math.min(Math.max(8, 16 + index * espacamento), Math.max(8, bar.comprimentoMm - 8)),
+                               linha: ((index) % linhas) + 1,
+                               diametroMm: existente?.diametroMm ?? diametro,
+                               secaoMaximaMm2: existente?.secaoMaximaMm2 ?? (diametro >= 8 ? 35 : diametro >= 6 ? 25 : 16),
+                               circuitoConectadoId: existente?.circuitoConectadoId,
+                               circuitoConectadoNome: existente?.circuitoConectadoNome,
+                               rotulo: existente?.rotulo ?? `${isTerra ? "PE" : "N"}-${index + 1}`,
+                             };
+                           });
+                           setLayout((ant) => ({ ...ant, barramentosNeutroTerra: (ant.barramentosNeutroTerra || []).map((b) => b.id === bar.id ? { ...b, furos } : b) }));
+                         }} disabled={!podeEditar} className="mt-1 w-full rounded border border-borda px-2 py-1 text-xs" />
+                       </label>
+                       <label className="block text-superficie-500 mb-0.5">Linhas de furos
+                         <input type="number" min={1} step={1} value={barramentoNTSelecionado.quantidadeLinhasFuros ?? 1} onChange={(e) => {
+                           const linhas = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                           setLayout((ant) => ({ ...ant, barramentosNeutroTerra: (ant.barramentosNeutroTerra || []).map((b) => b.id === barramentoNTSelecionado.id ? { ...b, quantidadeLinhasFuros: linhas, furos: b.furos.map((furo, index) => ({ ...furo, linha: (index % linhas) + 1 })) } : b) }));
+                         }} disabled={!podeEditar} className="mt-1 w-full rounded border border-borda px-2 py-1 text-xs" />
+                       </label>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
                       <div>
                         <label className="block text-superficie-500 mb-0.5">Ø Padrão (mm)</label>
                         <select
@@ -2837,10 +2932,16 @@ export function EditorQuadro({
                     </div>
                   </div>
 
-                  <div className="rounded-lg bg-amber-50/70 p-3 border border-amber-200 space-y-2.5">
-                    <span className="block font-bold text-amber-900 text-[11px] uppercase tracking-wider">
-                      Barramento Principal (Tronco)
-                    </span>
+                   <div className="rounded-lg bg-amber-50/70 p-3 border border-amber-200 space-y-2.5">
+                     <span className="block font-bold text-amber-900 text-[11px] uppercase tracking-wider">
+                       Barramento Principal (Tronco)
+                     </span>
+                     <label className="block text-[10px] text-amber-800">Material
+                       <select value={barramentoSelecionado.material} onChange={(e) => setLayout((ant) => ({ ...ant, barramentos: ant.barramentos.map((b) => b.id === barramentoSelecionado.id ? { ...b, material: e.target.value as "cobre_eletrolitico" | "aluminio" } : b) }))} disabled={!podeEditar} className="mt-0.5 w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs">
+                         <option value="cobre_eletrolitico">Cobre eletrolítico</option>
+                         <option value="aluminio">Alumínio</option>
+                       </select>
+                     </label>
                      <div className="grid grid-cols-2 gap-2">
                        <div>
                          {barramentoSelecionado.unidadeMedida === "pol" ? (
