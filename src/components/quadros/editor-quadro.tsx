@@ -1108,6 +1108,10 @@ export function EditorQuadro({
 
   const margemBaseEfetiva = dimensoes.margemBaseMm ?? dimensoes.margemTopoMm;
   const margemDireitaEfetiva = dimensoes.margemDireitaMm ?? dimensoes.margemLateralMm;
+  const escalaImpressao = Math.min(
+    ((297 - 24) * 96) / 25.4 / dimensoes.larguraMm,
+    ((210 - 24) * 96) / 25.4 / dimensoes.alturaMm,
+  ) * 0.96;
 
   return (
     <div className="quadros-editor flex flex-col h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] overflow-hidden bg-superficie-100">
@@ -1465,7 +1469,7 @@ export function EditorQuadro({
             onMouseUp={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
             onMouseLeave={() => { finalizarSelecao(); aoFinalizarArrasto(); }}
           >
-             <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } html, body { width: 100%; height: 100%; } body * { visibility: hidden; } .quadros-editor .quadros-printable, .quadros-editor .quadros-printable * { visibility: visible; } .quadros-editor .quadros-printable { position: fixed; left: 50%; top: 50%; width: min(92vw, calc(92vh * var(--quadro-aspect-ratio))) !important; height: min(92vh, calc(92vw / var(--quadro-aspect-ratio))) !important; max-width: none !important; max-height: none !important; transform: translate(-50%, -50%) !important; overflow: visible !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; box-sizing: border-box !important; } .quadros-editor .quadros-print-controls { display: none !important; } }`}</style>
+             <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } html, body { width: 100%; height: 100%; } body * { visibility: hidden; } .quadros-editor .quadros-printable, .quadros-editor .quadros-printable * { visibility: visible; } .quadros-editor .quadros-printable { position: fixed; left: 50%; top: 50%; width: ${dimensoes.larguraMm}px !important; height: ${dimensoes.alturaMm}px !important; max-width: none !important; max-height: none !important; transform: translate(-50%, -50%) scale(${escalaImpressao}) !important; transform-origin: center center !important; overflow: visible !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; box-sizing: content-box !important; } .quadros-editor .quadros-print-controls { display: none !important; } }`}</style>
             <div
                className="quadros-printable transition-transform origin-center shadow-2xl rounded-xl bg-slate-300 border-4 border-slate-400 relative flex flex-col justify-start"
                style={{

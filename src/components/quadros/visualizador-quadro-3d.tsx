@@ -391,8 +391,12 @@ export function VisualizadorQuadro3D({
     });
 
     layout.canaletas.forEach((c) => {
-      const pos = transformarCoords2DPara3D(c.x, c.y, c.larguraMm, c.alturaMm, c.profundidadeMm / 2);
-      const geoCan = new THREE.BoxGeometry(c.larguraMm, c.alturaMm, c.profundidadeMm);
+      const larguraCanaleta = Math.min(c.larguraMm, larguraUtilMm);
+      const alturaCanaleta = Math.min(c.alturaMm, alturaUtilMm);
+      const xCanaleta = Math.min(Math.max(0, c.x), larguraUtilMm - larguraCanaleta);
+      const yCanaleta = Math.min(Math.max(0, c.y), alturaUtilMm - alturaCanaleta);
+      const pos = transformarCoords2DPara3D(xCanaleta, yCanaleta, larguraCanaleta, alturaCanaleta, c.profundidadeMm / 2);
+      const geoCan = new THREE.BoxGeometry(larguraCanaleta, alturaCanaleta, c.profundidadeMm);
       const meshCan = new THREE.Mesh(geoCan, matCanaleta);
       meshCan.position.copy(pos);
       scene.add(meshCan);
