@@ -59,6 +59,7 @@ export interface ApresentacaoQuadro {
 
 export interface DimensaoPadraoComponente {
   tipo: TipoComponenteQuadro;
+  varianteId?: string;
   nome: string;
   categoria: "disjuntor" | "protecao" | "conexao" | "estrutura" | "barramento" | "outros";
   larguraMm: number;
@@ -70,6 +71,8 @@ export interface DimensaoPadraoComponente {
   descricaoPadrao: string;
   requerTrilhoDin: boolean;
   correntDefaultA?: number;
+  correnteMinA?: number;
+  correnteMaxA?: number;
   corPersonalizada?: string;
   tensaoV?: number;
   polos?: 1 | 2 | 3 | 4;
@@ -135,9 +138,12 @@ export const COMPONENTES_CATALOGO_PADRAO: Record<
     normaReferencia: "DIN 43880 / NBR NM 60898",
     descricaoPadrao: "Minidisjuntor termomagnético tripolar curva C",
     requerTrilhoDin: true,
-    correntDefaultA: 50,
+    correntDefaultA: 32,
+    correnteMinA: 10,
+    correnteMaxA: 32,
     polos: 3,
     curvaDisjuntor: "C",
+    varianteId: "mcb-3p-10-32",
   },
   disjuntor_tetrapolar: {
     tipo: "disjuntor_tetrapolar",
@@ -167,7 +173,10 @@ export const COMPONENTES_CATALOGO_PADRAO: Record<
     descricaoPadrao: "Disjuntor em caixa moldada tripolar para entrada/geral",
     requerTrilhoDin: false,
     correntDefaultA: 125,
+    correnteMinA: 100,
+    correnteMaxA: 125,
     polos: 3,
+    varianteId: "mccb-3p-100-125",
   },
   disjuntor_caixa_moldada_4p: {
     tipo: "disjuntor_caixa_moldada_4p",
@@ -182,6 +191,42 @@ export const COMPONENTES_CATALOGO_PADRAO: Record<
     requerTrilhoDin: false,
     correntDefaultA: 160,
     polos: 4,
+  },
+  disjuntor_tripolar_40_63a: {
+    tipo: "disjuntor_tripolar",
+    varianteId: "mcb-3p-40-63",
+    nome: "Minidisjuntor 3P — 40 a 63 A",
+    categoria: "disjuntor",
+    larguraMm: 52.5,
+    alturaMm: 90,
+    profundidadeMm: 70,
+    orientacao: "vertical",
+    modulosDin: 3,
+    normaReferencia: "DIN 43880 / NBR NM 60898",
+    descricaoPadrao: "Minidisjuntor termomagnético tripolar, envelope alto, curva C",
+    requerTrilhoDin: true,
+    correntDefaultA: 40,
+    correnteMinA: 40,
+    correnteMaxA: 63,
+    polos: 3,
+    curvaDisjuntor: "C",
+  },
+  disjuntor_caixa_moldada_3p_160_250a: {
+    tipo: "disjuntor_caixa_moldada_3p",
+    varianteId: "mccb-3p-160-250",
+    nome: "Disjuntor Caixa Moldada 3P — 160 a 250 A",
+    categoria: "disjuntor",
+    larguraMm: 140,
+    alturaMm: 255,
+    profundidadeMm: 110,
+    orientacao: "vertical",
+    normaReferencia: "NBR IEC 60947-2",
+    descricaoPadrao: "Disjuntor em caixa moldada tripolar, frame de maior porte",
+    requerTrilhoDin: false,
+    correntDefaultA: 160,
+    correnteMinA: 160,
+    correnteMaxA: 250,
+    polos: 3,
   },
   idr_bipolar: {
     tipo: "idr_bipolar",
@@ -523,9 +568,43 @@ export const COMPONENTES_CATALOGO_PADRAO: Record<
   },
 };
 
+export function catalogoDoElemento(
+  catalogo: Record<string, DimensaoPadraoComponente>,
+  tipo: TipoComponenteQuadro,
+  varianteId?: string,
+): DimensaoPadraoComponente | undefined {
+  if (varianteId) {
+    const variante = Object.values(catalogo).find(
+      (item) => item.tipo === tipo && item.varianteId === varianteId,
+    );
+    if (variante) return variante;
+  }
+
+  return catalogo[tipo] || COMPONENTES_CATALOGO_PADRAO[tipo];
+}
+
+export function variantePorCorrente(
+  catalogo: Record<string, DimensaoPadraoComponente>,
+  tipo: TipoComponenteQuadro,
+  correnteA: number,
+): DimensaoPadraoComponente | undefined {
+  return Object.values(catalogo)
+    .filter(
+      (item) =>
+        item.tipo === tipo &&
+        item.varianteId &&
+        item.correnteMinA !== undefined &&
+        item.correnteMaxA !== undefined &&
+        correnteA >= item.correnteMinA &&
+        correnteA <= item.correnteMaxA,
+    )
+    .sort((a, b) => (a.correnteMaxA ?? Infinity) - (b.correnteMaxA ?? Infinity))[0];
+}
+
 export interface ElementoQuadro {
   id: string;
   tipo: TipoComponenteQuadro;
+  varianteId?: string;
   tag: string;
   descricao: string;
   x: number;
@@ -602,6 +681,7 @@ export interface BarramentoEspinhaPeixe {
 export interface FuroBarramento {
   id: string;
   posicaoMm: number;
+  linha?: number;
   diametroMm: number;
   secaoMaximaMm2?: number;
   circuitoConectadoId?: string;
@@ -623,6 +703,8 @@ export interface BarramentoNeutroTerra {
   material: "latao" | "cobre_eletrolitico";
   diametroFuroPadraoMm: number;
   espacamentoFurosMm: number;
+  quantidadeLinhasFuros?: number;
+  furosPorLinha?: number;
   furos: FuroBarramento[];
 }
 
@@ -701,6 +783,17 @@ export interface ItemListaMateriais {
   unidade: string;
   norma: string;
   detalhes: string;
+  tipo?: string;
+  material?: string;
+  comprimentoMm?: number;
+  larguraMm?: number;
+  alturaMm?: number;
+  profundidadeMm?: number;
+  quantidadeBarras?: number;
+  quantidadeDerivacoes?: number;
+  quantidadeFuros?: number;
+  correnteNominalA?: number;
+  unidadeDimensional?: "mm" | "pol";
 }
 
 export const POLEGADAS_PADRAO: Array<{ fracao: string; pol: number; mm: number }> = [
@@ -735,4 +828,23 @@ export function mmParaPolegadaTexto(mm: number): string {
 
 export function polegadaParaMm(pol: number): number {
   return Number((pol * 25.4).toFixed(2));
+}
+
+export function polegadaFracionadaParaMm(texto: string): number | null {
+  const normalizado = texto.trim().replace(/"/g, "").replace(/,/g, ".");
+  if (!normalizado) return null;
+  const partesMistas = normalizado.match(/^(\d+(?:\.\d+)?)\s*([0-9]+)\s*\/\s*([0-9]+)$/);
+  if (partesMistas) {
+    const inteiro = Number(partesMistas[1]);
+    const numerador = Number(partesMistas[2]);
+    const denominador = Number(partesMistas[3]);
+    return denominador > 0 ? polegadaParaMm(inteiro + numerador / denominador) : null;
+  }
+  const partes = normalizado.match(/^([0-9]+)\s*\/\s*([0-9]+)$/);
+  if (partes) {
+    const denominador = Number(partes[2]);
+    return denominador > 0 ? polegadaParaMm(Number(partes[1]) / denominador) : null;
+  }
+  const decimal = Number(normalizado);
+  return Number.isFinite(decimal) ? polegadaParaMm(decimal) : null;
 }

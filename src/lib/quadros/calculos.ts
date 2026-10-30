@@ -1,5 +1,7 @@
 import {
   COMPONENTES_CATALOGO_PADRAO,
+  catalogoDoElemento,
+  mmParaPolegadaTexto,
   type ElementoQuadro,
   type ItemListaMateriais,
   type QuadroEletricoLayout,
@@ -15,6 +17,7 @@ export interface ResultadoValidacaoLayout {
 export function validarLayoutQuadro(
   layout: QuadroEletricoLayout,
   areaUtil: { larguraMm: number; alturaMm: number; profundidadeMm: number },
+  catalogo: Record<string, import("./tipos").DimensaoPadraoComponente> = COMPONENTES_CATALOGO_PADRAO,
 ): ResultadoValidacaoLayout {
   const erros: string[] = [];
   const avisos: string[] = [];
@@ -35,8 +38,8 @@ export function validarLayoutQuadro(
       );
     }
 
-    const catalogo = COMPONENTES_CATALOGO_PADRAO[el.tipo];
-    if (catalogo?.requerTrilhoDin && !el.trilhoId) {
+    const componente = catalogoDoElemento(catalogo, el.tipo, el.varianteId);
+    if (componente?.requerTrilhoDin && !el.trilhoId) {
       const trilhoAbaixo = trilhos.find(
         (t) =>
           el.x >= t.x - 5 &&
@@ -101,6 +104,7 @@ export function gerarListaMateriaisQuadro(
     profundidadeMm: number;
     grauProtecao?: string | null;
   },
+  catalogo: Record<string, import("./tipos").DimensaoPadraoComponente> = COMPONENTES_CATALOGO_PADRAO,
 ): ItemListaMateriais[] {
   const itens: ItemListaMateriais[] = [];
   const elementos = layout.elementos ?? [];
@@ -123,7 +127,7 @@ export function gerarListaMateriaisQuadro(
   >();
 
   for (const el of elementos) {
-    const chave = `${el.tipo}|${el.correnteNominal ?? ""}|${el.curvaDisjuntor ?? ""}|${el.polos ?? ""}|${el.larguraMm}`;
+    const chave = `${el.tipo}|${el.varianteId ?? ""}|${el.correnteNominal ?? ""}|${el.curvaDisjuntor ?? ""}|${el.polos ?? ""}|${el.larguraMm}|${el.alturaMm}|${el.profundidadeMm}`;
     const atual = agrupadoElementos.get(chave);
     if (atual) {
       atual.quantidade += 1;
@@ -133,7 +137,7 @@ export function gerarListaMateriaisQuadro(
   }
 
   for (const { elemento, quantidade } of agrupadoElementos.values()) {
-    const cat = COMPONENTES_CATALOGO_PADRAO[elemento.tipo];
+    const cat = catalogoDoElemento(catalogo, elemento.tipo, elemento.varianteId);
     const spec = [
       cat?.nome ?? elemento.descricao,
       elemento.correnteNominal ? `${elemento.correnteNominal}A` : null,
@@ -156,17 +160,20 @@ export function gerarListaMateriaisQuadro(
   }
 
   if (trilhos.length > 0) {
-    const totalComprimentoMm = trilhos.reduce(
-      (acc, t) => acc + t.larguraMm,
-      0,
-    );
+    const comprimentoDoTrilho = (trilho: (typeof trilhos)[number]) =>
+      trilho.orientacao === "vertical" || trilho.alturaMm > trilho.larguraMm
+        ? trilho.alturaMm
+        : trilho.larguraMm;
+    const totalComprimentoMm = trilhos.reduce((acc, t) => acc + comprimentoDoTrilho(t), 0);
     itens.push({
-      item: "Trilho DIN 35mm (TS35 / EN 60715)",
-      especificacao: `Trilhos perfurados metálicos (total: ${(totalComprimentoMm / 1000).toFixed(2)}m em ${layout.trilhos.length} barras)`,
+      item: "Trilho DIN perfil TS35 (EN 60715)",
+      especificacao: `Trilhos metálicos (total: ${(totalComprimentoMm / 1000).toFixed(2)}m em ${layout.trilhos.length} barras; perfil 35mm)`,
       quantidade: trilhos.length,
       unidade: "barras",
       norma: "EN 60715 / IEC 60715",
-      detalhes: `Comprimento individual: ${trilhos.map((t) => `${t.larguraMm}mm`).join(", ")}`,
+      detalhes: `Comprimento individual: ${trilhos.map((t) => `${comprimentoDoTrilho(t)}mm`).join(", ")}`,
+      tipo: "trilho_din",
+      comprimentoMm: totalComprimentoMm,
     });
   }
 
@@ -188,16 +195,52 @@ export function gerarListaMateriaisQuadro(
   for (const barramento of barramentos) {
     const numBarras = barramento.tipo === "trifasico" ? 3 : barramento.tipo === "tetrapolar" ? 4 : barramento.tipo === "bifasico" ? 2 : 1;
     const larguraBarra = barramento.larguraBarraIndividualMm || Math.round(barramento.larguraTroncoMm / (numBarras || 1));
-    const espacamento = barramento.espacamentoDerivacoesMm || 35;
     
+    const material = barramento.material === "aluminio" ? "alumínio" : "cobre eletrolítico";
+    const larguraDerivacaoPadrao = barramento.larguraDerivacaoMm || 12;
+    const espessuraDerivacaoPadrao = barramento.espessuraDerivacaoMm || 10;
+    const comprimentoDerivacaoPadrao = barramento.comprimentoDerivacaoMm || 35;
+    const derivacoesPorDimensao = new Map<string, { derivacao: (typeof barramento.derivacoes)[number]; quantidade: number }>();
+    for (const derivacao of barramento.derivacoes) {
+      const chave = `${derivacao.lado}|${derivacao.fase}|${derivacao.larguraDerivacaoMm || larguraDerivacaoPadrao}|${derivacao.espessuraDerivacaoMm || espessuraDerivacaoPadrao}|${derivacao.comprimentoDerivacaoMm || comprimentoDerivacaoPadrao}|${derivacao.correnteNominalA}`;
+      const atual = derivacoesPorDimensao.get(chave);
+      if (atual) atual.quantidade += 1;
+      else derivacoesPorDimensao.set(chave, { derivacao, quantidade: 1 });
+    }
+    const unidade = barramento.unidadeMedida ?? "mm";
+    const dimensao = (mm: number) => unidade === "pol" ? `${mm}mm (${mmParaPolegadaTexto(mm)})` : `${mm}mm`;
     itens.push({
       item: `Barramento Espinha de Peixe ${barramento.tipo === "trifasico" ? "Trifásico (3 Barras)" : barramento.tipo === "tetrapolar" ? "Tetrapolar (4 Barras)" : barramento.tipo === "bifasico" ? "Bifásico (2 Barras)" : "Monofásico"}`,
-      especificacao: `Barramento em cobre eletrolítico ${barramento.correnteSuportadaA}A (${numBarras}x ${larguraBarra}mm x ${barramento.alturaMm}mm), ${barramento.derivacoes.length} derivações a cada ${espacamento}mm`,
+      especificacao: `Barramento em ${material} ${barramento.correnteSuportadaA}A (${numBarras}x largura ${dimensao(larguraBarra)} x espessura ${dimensao(barramento.espessuraBarraMm || 0)} x comprimento ${dimensao(barramento.alturaMm)}), ${barramento.derivacoes.length} derivações`,
       quantidade: 1,
       unidade: "cj",
       norma: "NBR IEC 61439-1 / DIN 43670",
-      detalhes: `Barramento Tronco ${numBarras} barras verticais paralelas com derivações horizontais para disjuntores`,
+      detalhes: `Seção ${barramento.secaoTroncoMm2}mm²; espaçamento entre barras ${dimensao(barramento.espacamentoEntreBarrasMm || 0)}; derivações agrupadas abaixo`,
+      tipo: "barramento_espinha_peixe",
+      material,
+      comprimentoMm: barramento.alturaMm,
+      larguraMm: barramento.larguraTroncoMm,
+      profundidadeMm: barramento.espessuraBarraMm,
+      quantidadeBarras: numBarras,
+      quantidadeDerivacoes: barramento.derivacoes.length,
+      unidadeDimensional: unidade,
     });
+    for (const { derivacao, quantidade } of derivacoesPorDimensao.values()) {
+      itens.push({
+        item: "Derivação do barramento espinha de peixe",
+        especificacao: `${derivacao.fase} / ${derivacao.lado}: ${dimensao(derivacao.comprimentoDerivacaoMm || comprimentoDerivacaoPadrao)} comprimento x ${dimensao(derivacao.larguraDerivacaoMm || larguraDerivacaoPadrao)} largura x ${dimensao(derivacao.espessuraDerivacaoMm || espessuraDerivacaoPadrao)} espessura, ${derivacao.correnteNominalA}A`,
+        quantidade,
+        unidade: "un",
+        norma: "NBR IEC 61439-1 / DIN 43670",
+        detalhes: `Posições: ${barramento.derivacoes.filter((d) => d.fase === derivacao.fase && d.lado === derivacao.lado && (d.larguraDerivacaoMm || larguraDerivacaoPadrao) === (derivacao.larguraDerivacaoMm || larguraDerivacaoPadrao) && (d.espessuraDerivacaoMm || espessuraDerivacaoPadrao) === (derivacao.espessuraDerivacaoMm || espessuraDerivacaoPadrao) && (d.comprimentoDerivacaoMm || comprimentoDerivacaoPadrao) === (derivacao.comprimentoDerivacaoMm || comprimentoDerivacaoPadrao) && d.correnteNominalA === derivacao.correnteNominalA).map((d) => `${d.yOffsetMm}mm`).join(", ")}`,
+        tipo: "derivacao_barramento",
+        material,
+        comprimentoMm: derivacao.comprimentoDerivacaoMm || comprimentoDerivacaoPadrao,
+        larguraMm: derivacao.larguraDerivacaoMm || larguraDerivacaoPadrao,
+        profundidadeMm: derivacao.espessuraDerivacaoMm || espessuraDerivacaoPadrao,
+        correnteNominalA: derivacao.correnteNominalA,
+      });
+    }
   }
 
   for (const bar of layout.barramentosNeutroTerra ?? []) {
@@ -209,7 +252,14 @@ export function gerarListaMateriaisQuadro(
       quantidade: 1,
       unidade: "un",
       norma: bar.tipo === "terra" ? "NBR 5410 / IEC 60947-7-2" : "NBR 5410 / IEC 60947-7-1",
-      detalhes: `Tag ${bar.tag} (${circuitosConectados} circuitos conectados)`,
+      detalhes: `Tag ${bar.tag} (${circuitosConectados} circuitos conectados; ${bar.quantidadeLinhasFuros ?? 1} linha(s) de furos; furos por linha: ${bar.furos.filter((f) => (f.linha ?? 1) === 1).length})`,
+      tipo: `barramento_${bar.tipo}`,
+      material: bar.material === "latao" ? "latão" : "cobre eletrolítico",
+      comprimentoMm: bar.comprimentoMm,
+      larguraMm: bar.larguraMm,
+      profundidadeMm: bar.profundidadeMm,
+      quantidadeFuros: bar.furos.length,
+      unidadeDimensional: "mm",
     });
   }
 
