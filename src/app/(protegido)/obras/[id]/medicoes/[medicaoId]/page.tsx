@@ -22,6 +22,7 @@ import type {
 import type { ItemOrcamentoParaCatalogo } from "@/app/(protegido)/obras/[id]/medicoes/acoes";
 import { buscarResumoDaMedicao } from "@/lib/medicoes/resumo-da-medicao";
 import { classificarCategoria } from "@/lib/orcamento/classificar-categoria";
+import { buscarTodasLinhas } from "@/lib/supabase/paginacao";
 import { z } from "zod";
 
 const esquemaSegmentosCircuito = z.array(z.object({
@@ -198,7 +199,7 @@ async function buscarDados(
   if (filtros.de) consulta = consulta.gte("prazo", filtros.de);
   if (filtros.ate) consulta = consulta.lte("prazo", filtros.ate);
 
-  const [{ data: medicao }, { data: catalogo }, { data: tarefas }, { data: tarefasGlobais }, { data: plantas }, { data: pagamentos }] =
+  const [{ data: medicao }, { data: catalogo }, tarefasResult, tarefasGlobaisResult, { data: plantas }, { data: pagamentos }] =
     await Promise.all([
       supabase
         .from("medicoes")
@@ -211,15 +212,15 @@ async function buscarDados(
         .select("*")
         .eq("medicao_id", medicaoId)
         .order("nome"),
-      consulta.order("titulo"),
-      supabase
+      buscarTodasLinhas(consulta.order("titulo")),
+      buscarTodasLinhas(supabase
         .from("tarefas")
         .select(
           `id, titulo, status, aprovacao, prazo, planta_id, responsavel_id, localizacao_detalhe, plantas(nome), perfis!tarefas_responsavel_id_fkey(nome), executor:executores!tarefas_executor_id_fkey(nome),
            tarefa_medicoes(id, criado_em, catalogo_id, quantidade, segmentos_circuito, catalogo_precos!inner(id, nome, unidade, valor_unitario, medicao_id, orcamento_item_id))`,
         )
-        .eq("obra_id", obraId)
-        .order("titulo"),
+         .eq("obra_id", obraId)
+         .order("titulo")),
       supabase.from("plantas").select("id, nome").eq("obra_id", obraId).order("nome"),
       supabase
         .from("medicao_pagamentos")
@@ -228,6 +229,8 @@ async function buscarDados(
         .order("data_pagamento", { ascending: false }),
      ]);
 
+  const tarefas = tarefasResult.data;
+  const tarefasGlobais = tarefasGlobaisResult.data;
   const catalogoIdsDaMedicao = (catalogo ?? []).map((item) => item.id);
   const criarConsultaVinculosDiretos = () => supabase
     .from("tarefa_medicoes")
@@ -241,10 +244,10 @@ async function buscarDados(
   if (filtros.de) consultaVinculosDiretos = consultaVinculosDiretos.gte("tarefas.prazo", filtros.de);
   if (filtros.ate) consultaVinculosDiretos = consultaVinculosDiretos.lte("tarefas.prazo", filtros.ate);
   const { data: vinculosDiretos } = catalogoIdsDaMedicao.length > 0
-    ? await consultaVinculosDiretos
+    ? await buscarTodasLinhas(consultaVinculosDiretos)
     : { data: [] };
   const { data: vinculosDiretosGlobais } = catalogoIdsDaMedicao.length > 0
-    ? await criarConsultaVinculosDiretos()
+    ? await buscarTodasLinhas(criarConsultaVinculosDiretos())
     : { data: [] };
 
   const anexarVinculosDiretos = (

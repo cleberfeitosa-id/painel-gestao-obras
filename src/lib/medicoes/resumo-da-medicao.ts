@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { buscarTodasLinhas } from "@/lib/supabase/paginacao";
 
 export interface ResumoDaMedicao {
   executorMedido: number;
@@ -28,16 +29,17 @@ export async function buscarResumoDaMedicao(
     return { executorMedido: 0, executorExecutado: 0, executorPendente: 0, construtoraExecutado: 0, construtoraPendente: 0, pago };
   }
 
-  const [{ data: vinculos }, { data: tarefasDaObra }] = await Promise.all([
+  const [{ data: vinculos }, tarefasDaObraResult] = await Promise.all([
     supabase
       .from("catalogo_precos_orcamento_itens")
       .select("catalogo_id, orcamento_item_id")
       .in("catalogo_id", catalogoIds),
-    supabase
+    buscarTodasLinhas(supabase
       .from("tarefas")
       .select("id, status, aprovacao, obra_id, tarefa_medicoes(id, criado_em, catalogo_id, quantidade, catalogo_precos!inner(id, medicao_id))")
-      .eq("obra_id", obraId),
+      .eq("obra_id", obraId)),
   ]);
+  const tarefasDaObra = tarefasDaObraResult.data;
 
   const tarefasMedidas = (tarefasDaObra ?? []).flatMap((tarefa) =>
     (tarefa.tarefa_medicoes ?? [])
