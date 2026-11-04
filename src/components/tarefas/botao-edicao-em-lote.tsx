@@ -25,7 +25,7 @@ interface BotaoEdicaoEmLoteProps {
 type MedicaoItem = {
   catalogo_id: string;
   quantidade: number;
-  usar_distancia: boolean;
+  modo_quantidade: "manual" | "distancia_linear" | "soma_cabos";
 };
 
 export function BotaoEdicaoEmLote({
@@ -46,6 +46,9 @@ export function BotaoEdicaoEmLote({
   const podeUsarSomaCabos = tarefasSelecionadas.every((tarefa) =>
     ["circuito", "descida"].includes(tarefa.localizacao_tipo),
   );
+  const podeUsarDistanciaLinear = tarefasSelecionadas.every(
+    (tarefa) => tarefa.localizacao_tipo === "distancia",
+  );
 
   const catalogoDaObra = obrasMultiplas
     ? []
@@ -59,14 +62,18 @@ export function BotaoEdicaoEmLote({
   }, {});
 
   function adicionarMedicao() {
-    setMedicoesLista((atual) => [...atual, { catalogo_id: "", quantidade: 0, usar_distancia: false }]);
+    setMedicoesLista((atual) => [...atual, { catalogo_id: "", quantidade: 0, modo_quantidade: "manual" }]);
   }
 
   function removerMedicao(indice: number) {
     setMedicoesLista((atual) => atual.filter((_, i) => i !== indice));
   }
 
-  function atualizarMedicao(indice: number, campo: keyof MedicaoItem, valor: string | number | boolean) {
+  function atualizarMedicao<K extends keyof MedicaoItem>(
+    indice: number,
+    campo: K,
+    valor: MedicaoItem[K],
+  ) {
     setMedicoesLista((atual) =>
       atual.map((item, i) =>
         i === indice ? { ...item, [campo]: valor } : item,
@@ -74,10 +81,13 @@ export function BotaoEdicaoEmLote({
     );
   }
 
-  function alternarUsoDaDistancia(indice: number, usarDistancia: boolean) {
+  function alterarModoQuantidade(
+    indice: number,
+    modoQuantidade: MedicaoItem["modo_quantidade"],
+  ) {
     setMedicoesLista((atual) =>
       atual.map((item, i) =>
-        i === indice ? { ...item, usar_distancia: usarDistancia } : item,
+        i === indice ? { ...item, modo_quantidade: modoQuantidade } : item,
       ),
     );
   }
@@ -240,21 +250,25 @@ export function BotaoEdicaoEmLote({
                       type="number"
                       min={0}
                       step="any"
-                      disabled={medicao.usar_distancia}
+                      disabled={medicao.modo_quantidade !== "manual"}
                       value={medicao.quantidade || ""}
                       onChange={(e) => atualizarMedicao(indice, "quantidade", e.target.value === "" ? 0 : Number(e.target.value))}
                       className="w-28 bg-white"
                     />
-                    <label className="flex max-w-40 items-center gap-2 pb-1 text-xs text-superficie-600">
-                       <input
-                         type="checkbox"
-                         checked={medicao.usar_distancia}
-                         disabled={!podeUsarSomaCabos}
-                         onChange={(e) => alternarUsoDaDistancia(indice, e.target.checked)}
-                        className="h-4 w-4 rounded border-borda"
-                      />
-                       Usar soma dos cabos
-                    </label>
+                    <Selecao
+                      rotulo="Origem da quantidade"
+                      value={medicao.modo_quantidade}
+                      onChange={(e) => alterarModoQuantidade(indice, e.target.value as MedicaoItem["modo_quantidade"])}
+                      className="w-44 bg-white"
+                    >
+                      <option value="manual">Informar quantidade</option>
+                      <option value="distancia_linear" disabled={!podeUsarDistanciaLinear}>
+                        Usar distância linear
+                      </option>
+                      <option value="soma_cabos" disabled={!podeUsarSomaCabos}>
+                        Usar soma dos cabos
+                      </option>
+                    </Selecao>
                     <Botao
                       type="button"
                       variante="fantasma"
@@ -283,10 +297,7 @@ export function BotaoEdicaoEmLote({
                   value={JSON.stringify(
                     medicoesLista
                       .filter((m) => m.catalogo_id)
-                      .map((m) => ({
-                        ...m,
-                        usar_distancia: podeUsarSomaCabos && m.usar_distancia,
-                      })),
+                      .map((m) => m),
                   )}
                 />
               )}
