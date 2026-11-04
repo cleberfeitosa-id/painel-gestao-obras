@@ -132,6 +132,7 @@ async function enriquecerDetalheComCabos(
   tipoLocalizacao: string,
   detalhe: unknown,
   titulo?: string | null,
+  descricao?: string | null,
   pontoTarefa?: { x?: number | null; y?: number | null },
 ): Promise<unknown> {
   if (!(["circuito", "descida"].includes(tipoLocalizacao))) {
@@ -163,11 +164,17 @@ async function enriquecerDetalheComCabos(
     ? titulo.match(/(?:circuito|circ\.?)[\s:_-]*([a-z0-9][a-z0-9._/-]*)/i)?.[1]?.trim().toLocaleLowerCase() ?? null
     : null;
   const circuitoFiltro = circuito ?? circuitoDoTitulo;
-  const comprimento = typeof detalheObjeto.comprimento === "number"
+  const comprimentoDetalhe = typeof detalheObjeto.comprimento === "number"
     ? detalheObjeto.comprimento
     : typeof detalheObjeto.comprimento === "string" && Number.isFinite(Number(detalheObjeto.comprimento))
       ? Number(detalheObjeto.comprimento)
       : null;
+  const comprimentoDescricao = typeof descricao === "string"
+    ? descricao.match(/(?:trecho\s+vertical|comprimento|dist[aâ]ncia)\s*:\s*([\d.,]+)\s*m/i)?.[1]
+    : undefined;
+  const comprimento = comprimentoDetalhe ?? (
+    comprimentoDescricao ? Number(comprimentoDescricao.replace(",", ".")) : null
+  );
   const pontos = Array.isArray(detalheObjeto.pontos) ? detalheObjeto.pontos : [];
   const pontoInicial = pontos[0] ?? pontoTarefa;
 
@@ -632,6 +639,7 @@ export async function criarTarefa(
     resultado.data.localizacao_tipo,
     resultado.data.localizacao_detalhe,
     resultado.data.titulo,
+    resultado.data.descricao,
     { x: resultado.data.ponto_x, y: resultado.data.ponto_y },
   );
   const erroCabos = erroQuantidadeDeCabos(
@@ -868,6 +876,7 @@ export async function criarTarefasEmLote(
         localizacao.localizacao_tipo,
         localizacao.localizacao_detalhe,
         localizacao.titulo_sugerido ?? dados.titulo,
+        localizacao.descricao_especifica ?? dados.descricao,
         { x: localizacao.ponto_x, y: localizacao.ponto_y },
       ),
     ),
@@ -1213,7 +1222,7 @@ export async function atualizarTarefasEmLote(
   const supabaseAdmin = await createAdminClient();
   const { data: tarefasExistentes, error: erroTarefasExistentes } = await supabaseAdmin
     .from("tarefas")
-    .select("id, titulo, obra_id, localizacao_tipo, localizacao_detalhe, levantamento_id, planta_id, pagina, ponto_x, ponto_y")
+    .select("id, titulo, descricao, obra_id, localizacao_tipo, localizacao_detalhe, levantamento_id, planta_id, pagina, ponto_x, ponto_y")
     .in("id", idsPermitidos);
 
   if (erroTarefasExistentes || !tarefasExistentes || tarefasExistentes.length !== idsPermitidos.length) {
@@ -1241,6 +1250,7 @@ export async function atualizarTarefasEmLote(
         tarefa.localizacao_tipo,
         detalhe,
         tarefa.titulo,
+        tarefa.descricao,
         { x: tarefa.ponto_x, y: tarefa.ponto_y },
       );
       detalhesComCabosPorTarefa.set(tarefa.id, detalheComSegmento);
@@ -1250,7 +1260,7 @@ export async function atualizarTarefasEmLote(
           : null
         : quantidadeDeCabos(detalheComSegmento);
       if (comprimento === null || !Number.isFinite(comprimento) || comprimento <= 0) {
-        return { erro: `A tarefa "${tarefa.titulo}" não possui uma quantidade de cabos válida.` };
+        return { erro: `A tarefa "${tarefa.titulo}" (${tarefa.id.slice(0, 8)}) não possui uma quantidade de cabos válida.` };
       }
       tarefasDistancia.set(tarefa.id, comprimento);
     }
@@ -1409,6 +1419,7 @@ export async function atualizarTarefa(
     resultado.data.localizacao_tipo,
     resultado.data.localizacao_detalhe,
     resultado.data.titulo,
+    resultado.data.descricao,
     { x: resultado.data.ponto_x, y: resultado.data.ponto_y },
   );
   const erroCabos = erroQuantidadeDeCabos(
