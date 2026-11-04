@@ -163,11 +163,15 @@ async function enriquecerDetalheComCabos(
     ? titulo.match(/(?:circuito|circ\.?)[\s:_-]*([a-z0-9][a-z0-9._/-]*)/i)?.[1]?.trim().toLocaleLowerCase() ?? null
     : null;
   const circuitoFiltro = circuito ?? circuitoDoTitulo;
-  const comprimento = typeof detalheObjeto.comprimento === "number" ? detalheObjeto.comprimento : null;
+  const comprimento = typeof detalheObjeto.comprimento === "number"
+    ? detalheObjeto.comprimento
+    : typeof detalheObjeto.comprimento === "string" && Number.isFinite(Number(detalheObjeto.comprimento))
+      ? Number(detalheObjeto.comprimento)
+      : null;
   const pontos = Array.isArray(detalheObjeto.pontos) ? detalheObjeto.pontos : [];
   const pontoInicial = pontos[0] ?? pontoTarefa;
 
-  const candidatos = itens.filter((item) => {
+  const candidatosBase = itens.filter((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return false;
     const valor = item as Record<string, unknown>;
     const tipoItem = tipoLocalizacao === "descida" ? "descida_subida" : "tubulacao_cabo";
@@ -182,17 +186,38 @@ async function enriquecerDetalheComCabos(
       : null;
     if (circuitoFiltro !== null && circuitoItem !== circuitoFiltro) return false;
     if (circuitoFiltro === null && circuitoItem === null) return false;
-    if (comprimento !== null && (typeof valor.comprimentoReal !== "number" || Math.abs(valor.comprimentoReal - comprimento) > 0.01)) return false;
-    if (pontoInicial && typeof pontoInicial === "object") {
-      if (!Array.isArray(valor.pontos) || !valor.pontos[0] || typeof valor.pontos[0] !== "object") return false;
-      const pontoItem = valor.pontos[0] as { x?: unknown; y?: unknown };
-      const ponto = pontoInicial as { x?: unknown; y?: unknown };
-      if (typeof ponto.x !== "number" || typeof ponto.y !== "number") return false;
-      if (typeof pontoItem.x !== "number" || typeof pontoItem.y !== "number") return false;
-      if (Math.abs(ponto.x - pontoItem.x) > 0.01 || Math.abs(ponto.y - pontoItem.y) > 0.01) return false;
-    }
     return true;
   });
+
+  const candidatosComComprimento = comprimento === null
+    ? candidatosBase
+    : candidatosBase.filter((item) => {
+        const valor = item as Record<string, unknown>;
+        const comprimentoItem = typeof valor.comprimentoReal === "number"
+          ? valor.comprimentoReal
+          : typeof valor.comprimentoReal === "string" && Number.isFinite(Number(valor.comprimentoReal))
+            ? Number(valor.comprimentoReal)
+            : null;
+        return comprimentoItem !== null && Math.abs(comprimentoItem - comprimento) <= 0.01;
+      });
+  const candidatosComPonto = pontoInicial && typeof pontoInicial === "object"
+    ? candidatosComComprimento.filter((item) => {
+        const valor = item as Record<string, unknown>;
+        if (!Array.isArray(valor.pontos) || !valor.pontos[0] || typeof valor.pontos[0] !== "object") return false;
+        const pontoItem = valor.pontos[0] as { x?: unknown; y?: unknown };
+        const ponto = pontoInicial as { x?: unknown; y?: unknown };
+        if (typeof ponto.x !== "number" || typeof ponto.y !== "number") return false;
+        if (typeof pontoItem.x !== "number" || typeof pontoItem.y !== "number") return false;
+        return Math.abs(ponto.x - pontoItem.x) <= 0.01 && Math.abs(ponto.y - pontoItem.y) <= 0.01;
+      })
+    : [];
+  const candidatos = candidatosComPonto.length === 1
+    ? candidatosComPonto
+    : candidatosComComprimento.length === 1
+      ? candidatosComComprimento
+      : candidatosBase.length === 1
+        ? candidatosBase
+        : [];
 
   if (candidatos.length !== 1) {
     return adicionarSegmentoDeCabos(detalhe);
