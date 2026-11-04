@@ -249,7 +249,7 @@ export function BotaoEdicaoEmLote({
                         onChange={(e) => alternarUsoDaDistancia(indice, e.target.checked)}
                         className="h-4 w-4 rounded border-borda"
                       />
-                      Usar distância linear da tarefa
+                       Usar soma dos cabos
                     </label>
                     <Botao
                       type="button"

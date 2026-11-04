@@ -83,6 +83,81 @@ function segmentosParaMedicao(detalhe: unknown): Array<{
   }));
 }
 
+function quantidadeDeCabos(detalhe: unknown): number | null {
+  const segmentos = segmentosParaMedicao(detalhe);
+  const total = segmentos.reduce((soma, segmento) => soma + (segmento.distanciaCabo ?? 0), 0);
+  return total > 0 ? total : null;
+}
+
+function quantidadeDeCondutores(detalhe: Record<string, unknown>): number {
+  const fases = Array.isArray(detalhe.fases) ? detalhe.fases : [];
+  const condutores = Array.isArray(detalhe.condutores) ? detalhe.condutores : [];
+  const totalFases = fases.reduce((soma, fase) => {
+    if (!fase || typeof fase !== "object") return soma;
+    const quantidade = (fase as { quantidade?: unknown }).quantidade;
+    return soma + (typeof quantidade === "number" && quantidade > 0 ? quantidade : 0);
+  }, 0);
+  const totalNaoFases = condutores.reduce((soma, condutor) => {
+    if (!condutor || typeof condutor !== "object") return soma;
+    const valor = condutor as { tipo?: unknown; quantidade?: unknown };
+    if (totalFases > 0 && valor.tipo === "fase") return soma;
+    return soma + (typeof valor.quantidade === "number" && valor.quantidade > 0 ? valor.quantidade : 0);
+  }, 0);
+  return totalFases + totalNaoFases;
+}
+
+function adicionarSegmentoDeCabos(detalhe: unknown): unknown {
+  if (!detalhe || typeof detalhe !== "object" || Array.isArray(detalhe)) return detalhe;
+  const valor = detalhe as Record<string, unknown>;
+  if (typeof valor.circuito !== "string" || Array.isArray(valor.segmentos)) return detalhe;
+  const comprimento = typeof valor.comprimento === "number" ? valor.comprimento : null;
+  const condutores = quantidadeDeCondutores(valor);
+  if (comprimento === null || condutores <= 0) return detalhe;
+  return {
+    ...valor,
+    segmentos: [{
+      segmentoId: typeof valor.elemento === "string" ? valor.elemento : "descida",
+      comprimento,
+      distanciaCabo: comprimento * condutores,
+    }],
+  };
+}
+
+function quantidadeMedicao(
+  medicao: { quantidade: number; usar_distancia: boolean },
+  detalhe: unknown,
+  quantidadeHerdada?: unknown,
+): number {
+  if (medicao.usar_distancia) {
+    const distanciaCabos = quantidadeDeCabos(detalhe);
+    if (distanciaCabos === null) throw new Error("A localização não possui uma quantidade de cabos válida.");
+    return distanciaCabos;
+  }
+  return medicao.quantidade > 0
+    ? medicao.quantidade
+    : typeof quantidadeHerdada === "number" && quantidadeHerdada > 0
+      ? quantidadeHerdada
+      : medicao.quantidade || 1;
+}
+
+function erroQuantidadeDeCabos(
+  medicoes: Array<{ usar_distancia: boolean }>,
+  detalhes: unknown[],
+  tipos?: string[],
+): string | null {
+  if (!medicoes.some((medicao) => medicao.usar_distancia)) return null;
+  for (const [indice, detalhe] of detalhes.entries()) {
+    const tipo = tipos?.[indice];
+    if (tipo && !["circuito", "descida"].includes(tipo)) {
+      return "A soma dos cabos só pode ser usada em tarefas de circuito ou descida.";
+    }
+    if (quantidadeDeCabos(adicionarSegmentoDeCabos(detalhe)) === null) {
+      return "A localização selecionada não possui uma quantidade de cabos válida.";
+    }
+  }
+  return null;
+}
+
 const esquemaLocalizacao = z
   .object({
     localizacao_tipo: z.enum(["nenhuma", "ponto", "regiao", "distancia", "circuito", "area", "descida"]),
@@ -430,6 +505,13 @@ export async function criarTarefa(
   );
   if (erroExecutor) return { erro: erroExecutor };
 
+  const erroCabos = erroQuantidadeDeCabos(
+    resultado.data.medicoes ?? [],
+    [resultado.data.localizacao_detalhe],
+    [resultado.data.localizacao_tipo],
+  );
+  if (erroCabos) return { erro: erroCabos };
+
   const { data, error } = await supabase
     .from("tarefas")
     .insert({ ...normalizar(resultado.data), criado_por: user.id })
@@ -445,8 +527,8 @@ export async function criarTarefa(
     const medicoesInsert = resultado.data.medicoes.map((m) => ({
       tarefa_id: data.id,
       catalogo_id: m.catalogo_id,
-      quantidade: m.quantidade,
-      segmentos_circuito: segmentosParaMedicao(resultado.data.localizacao_detalhe),
+      quantidade: quantidadeMedicao(m, resultado.data.localizacao_detalhe),
+      segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(resultado.data.localizacao_detalhe)),
       criado_por: user.id,
     }));
 
@@ -643,6 +725,13 @@ export async function criarTarefasEmLote(
   if (erroExecutor) return { erro: erroExecutor };
 
   const dados = resultado.data;
+  const erroCabos = erroQuantidadeDeCabos(
+    resultado.data.medicoes ?? [],
+    dados.localizacoes.map((localizacao) => localizacao.localizacao_detalhe),
+    dados.localizacoes.map((localizacao) => localizacao.localizacao_tipo),
+  );
+  if (erroCabos) return { erro: erroCabos };
+
   const linhas = dados.localizacoes.map((localizacao) => {
     let descFinal = dados.descricao || null;
     const descEsp = localizacao.descricao_especifica;
@@ -712,13 +801,12 @@ export async function criarTarefasEmLote(
       return resultado.data.medicoes!.map((m) => ({
         tarefa_id: tarefa.id,
         catalogo_id: m.catalogo_id,
-        quantidade:
-          m.quantidade && m.quantidade > 0
-            ? m.quantidade
-            : typeof quantHerdada === "number" && quantHerdada > 0
-              ? quantHerdada
-              : m.quantidade || 1,
-        segmentos_circuito: segmentosParaMedicao(loc?.localizacao_detalhe),
+        quantidade: quantidadeMedicao(
+          m,
+          adicionarSegmentoDeCabos(loc?.localizacao_detalhe),
+          quantHerdada,
+        ),
+        segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(loc?.localizacao_detalhe)),
         criado_por: user.id,
       }));
     });
@@ -1001,18 +1089,19 @@ export async function atualizarTarefasEmLote(
     }
 
     for (const tarefa of tarefasComLocalizacao ?? []) {
-      if (tarefa.localizacao_tipo !== "distancia") {
-        return { erro: "A opção de distância só pode ser usada em tarefas de distância linear." };
+      if (!["distancia", "circuito", "descida"].includes(tarefa.localizacao_tipo)) {
+        return { erro: "A opção de metros de cabo só pode ser usada em distâncias, circuitos ou descidas." };
       }
 
       const detalhe = tarefa.localizacao_detalhe;
-      const comprimento =
-        detalhe && typeof detalhe === "object" && !Array.isArray(detalhe) &&
-        typeof detalhe.comprimento === "number"
+      const detalheComSegmento = adicionarSegmentoDeCabos(detalhe);
+      const comprimento = tarefa.localizacao_tipo === "distancia"
+        ? detalhe && typeof detalhe === "object" && !Array.isArray(detalhe) && typeof detalhe.comprimento === "number"
           ? detalhe.comprimento
-          : null;
+          : null
+        : quantidadeDeCabos(detalheComSegmento);
       if (comprimento === null || !Number.isFinite(comprimento) || comprimento <= 0) {
-        return { erro: "Uma das tarefas selecionadas não possui uma distância linear válida." };
+        return { erro: "Uma das tarefas selecionadas não possui uma quantidade de cabos válida." };
       }
       tarefasDistancia.set(tarefa.id, comprimento);
     }
@@ -1035,6 +1124,11 @@ export async function atualizarTarefasEmLote(
     if (catalogoDeOutraObra || obrasDasTarefas.size !== 1) {
       return { erro: "Os itens de medição precisam pertencer à mesma obra das tarefas selecionadas." };
     }
+    const erroCabos = erroQuantidadeDeCabos(
+      medicoes,
+      tarefasExistentes.map((tarefa) => tarefa.localizacao_detalhe),
+    );
+    if (erroCabos) return { erro: erroCabos };
   }
   if (Object.keys(updates).length > 0) {
     const { error } = await supabaseAdmin
@@ -1064,8 +1158,10 @@ export async function atualizarTarefasEmLote(
         return medicoes.map((m) => ({
           tarefa_id: tarefaId,
           catalogo_id: m.catalogo_id,
-          quantidade: m.usar_distancia ? tarefasDistancia.get(tarefaId)! : m.quantidade,
-          segmentos_circuito: segmentosParaMedicao(localizacao?.localizacao_detalhe),
+          quantidade: m.usar_distancia
+            ? tarefasDistancia.get(tarefaId)!
+            : m.quantidade,
+          segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(localizacao?.localizacao_detalhe)),
           criado_por: user.id,
         }));
       });
@@ -1102,12 +1198,14 @@ export async function atualizarTarefa(
   }
 
   const medicoesRaw = formData.get("medicoes");
-  let medicoes: { catalogo_id: string; quantidade: number }[] = [];
+  let medicoes: { catalogo_id: string; quantidade: number; usar_distancia: boolean }[] = [];
   if (medicoesRaw) {
     try {
-      medicoes = JSON.parse(String(medicoesRaw));
+      const resultadoMedicoes = z.array(esquemaMedicao).safeParse(JSON.parse(String(medicoesRaw)));
+      if (!resultadoMedicoes.success) return { erro: "As medições informadas são inválidas." };
+      medicoes = resultadoMedicoes.data;
     } catch {
-      medicoes = [];
+      return { erro: "As medições informadas são inválidas." };
     }
   }
 
@@ -1151,6 +1249,13 @@ export async function atualizarTarefa(
   );
   if (erroExecutor) return { erro: erroExecutor };
 
+  const erroCabos = erroQuantidadeDeCabos(
+    resultado.data.medicoes ?? [],
+    [resultado.data.localizacao_detalhe],
+    [resultado.data.localizacao_tipo],
+  );
+  if (erroCabos) return { erro: erroCabos };
+
   const dadosNormalizados = normalizar(resultado.data);
   const dadosAtualizacao: Atualizacao<"tarefas"> = { ...dadosNormalizados };
   if (resultado.data.status !== "concluido" && tarefa.aprovacao !== "pendente") {
@@ -1183,8 +1288,8 @@ export async function atualizarTarefa(
     const medicoesInsert = resultado.data.medicoes.map((m) => ({
       tarefa_id: id,
       catalogo_id: m.catalogo_id,
-      quantidade: m.quantidade,
-      segmentos_circuito: segmentosParaMedicao(resultado.data.localizacao_detalhe),
+      quantidade: quantidadeMedicao(m, resultado.data.localizacao_detalhe),
+      segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(resultado.data.localizacao_detalhe)),
       criado_por: user.id,
     }));
 
