@@ -127,11 +127,13 @@ function adicionarSegmentoDeCabos(detalhe: unknown): unknown {
 async function enriquecerDetalheComCabos(
   supabase: Awaited<ReturnType<typeof createClient>>,
   levantamentoId: string | null | undefined,
+  plantaId: string | null | undefined,
+  pagina: number | null | undefined,
   tipoLocalizacao: string,
   detalhe: unknown,
   pontoTarefa?: { x?: number | null; y?: number | null },
 ): Promise<unknown> {
-  if (!levantamentoId || !["circuito", "descida"].includes(tipoLocalizacao)) {
+  if (!(["circuito", "descida"].includes(tipoLocalizacao))) {
     return adicionarSegmentoDeCabos(detalhe);
   }
 
@@ -141,18 +143,26 @@ async function enriquecerDetalheComCabos(
       : {};
   if (quantidadeDeCabos(detalhe) !== null) return detalhe;
 
-  const { data: levantamento } = await supabase
-    .from("levantamentos")
-    .select("itens")
-    .eq("id", levantamentoId)
-    .maybeSingle();
-  const itens = Array.isArray(levantamento?.itens) ? levantamento.itens : [];
-  const circuito = typeof detalheObjeto.circuito === "string" ? detalheObjeto.circuito : null;
+  let consulta = supabase.from("levantamentos").select("itens");
+  if (levantamentoId) {
+    consulta = consulta.eq("id", levantamentoId);
+  } else if (plantaId && pagina) {
+    consulta = consulta.eq("planta_id", plantaId).eq("pagina", pagina);
+  } else {
+    return adicionarSegmentoDeCabos(detalhe);
+  }
+  const { data: levantamentos } = await consulta;
+  const itens = (levantamentos ?? []).flatMap((levantamento) =>
+    Array.isArray(levantamento.itens) ? levantamento.itens : [],
+  );
+  const circuito = typeof detalheObjeto.circuito === "string"
+    ? detalheObjeto.circuito.trim().toLocaleLowerCase()
+    : null;
   const comprimento = typeof detalheObjeto.comprimento === "number" ? detalheObjeto.comprimento : null;
   const pontos = Array.isArray(detalheObjeto.pontos) ? detalheObjeto.pontos : [];
   const pontoInicial = pontos[0] ?? pontoTarefa;
 
-  const itemEncontrado = itens.find((item) => {
+  const candidatos = itens.filter((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return false;
     const valor = item as Record<string, unknown>;
     const tipoItem = tipoLocalizacao === "descida" ? "descida_subida" : "tubulacao_cabo";
@@ -161,22 +171,27 @@ async function enriquecerDetalheComCabos(
     const metaObjeto = meta && typeof meta === "object" && !Array.isArray(meta)
       ? (meta as Record<string, unknown>)
       : null;
-    const circuitoItem = metaObjeto?.circuito ?? valor.circuito;
-    if (circuito && circuitoItem !== circuito) return false;
-    if (comprimento !== null && typeof valor.comprimentoReal === "number" && Math.abs(valor.comprimentoReal - comprimento) > 0.01) return false;
-    if (pontoInicial && typeof pontoInicial === "object" && Array.isArray(valor.pontos) && valor.pontos[0] && typeof valor.pontos[0] === "object") {
+    const circuitoItemBruto = metaObjeto?.circuito ?? valor.circuito;
+    const circuitoItem = typeof circuitoItemBruto === "string"
+      ? circuitoItemBruto.trim().toLocaleLowerCase()
+      : null;
+    if (circuito === null || circuitoItem !== circuito) return false;
+    if (comprimento !== null && (typeof valor.comprimentoReal !== "number" || Math.abs(valor.comprimentoReal - comprimento) > 0.01)) return false;
+    if (pontoInicial && typeof pontoInicial === "object") {
+      if (!Array.isArray(valor.pontos) || !valor.pontos[0] || typeof valor.pontos[0] !== "object") return false;
       const pontoItem = valor.pontos[0] as { x?: unknown; y?: unknown };
-      if (typeof pontoInicial !== "object" || pontoInicial === null) return false;
       const ponto = pontoInicial as { x?: unknown; y?: unknown };
-      if (typeof ponto.x === "number" && typeof pontoItem.x === "number" && Math.abs(ponto.x - pontoItem.x) > 0.01) return false;
-      if (typeof ponto.y === "number" && typeof pontoItem.y === "number" && Math.abs(ponto.y - pontoItem.y) > 0.01) return false;
+      if (typeof ponto.x !== "number" || typeof ponto.y !== "number") return false;
+      if (typeof pontoItem.x !== "number" || typeof pontoItem.y !== "number") return false;
+      if (Math.abs(ponto.x - pontoItem.x) > 0.01 || Math.abs(ponto.y - pontoItem.y) > 0.01) return false;
     }
     return true;
   });
 
-  if (!itemEncontrado || typeof itemEncontrado !== "object" || Array.isArray(itemEncontrado)) {
+  if (candidatos.length !== 1) {
     return adicionarSegmentoDeCabos(detalhe);
   }
+  const itemEncontrado = candidatos[0];
   const item = itemEncontrado as Record<string, unknown>;
   const meta = item.metadadosCabo;
   const metaObjeto = meta && typeof meta === "object" && !Array.isArray(meta)
@@ -581,6 +596,8 @@ export async function criarTarefa(
   const detalheComCabos = await enriquecerDetalheComCabos(
     supabase,
     resultado.data.levantamento_id,
+    resultado.data.planta_id,
+    resultado.data.pagina,
     resultado.data.localizacao_tipo,
     resultado.data.localizacao_detalhe,
     { x: resultado.data.ponto_x, y: resultado.data.ponto_y },
@@ -814,6 +831,8 @@ export async function criarTarefasEmLote(
       enriquecerDetalheComCabos(
         supabase,
         localizacao.levantamento_id,
+        localizacao.planta_id,
+        localizacao.pagina,
         localizacao.localizacao_tipo,
         localizacao.localizacao_detalhe,
         { x: localizacao.ponto_x, y: localizacao.ponto_y },
@@ -1161,7 +1180,7 @@ export async function atualizarTarefasEmLote(
   const supabaseAdmin = await createAdminClient();
   const { data: tarefasExistentes, error: erroTarefasExistentes } = await supabaseAdmin
     .from("tarefas")
-    .select("id, obra_id, localizacao_tipo, localizacao_detalhe, levantamento_id, ponto_x, ponto_y")
+    .select("id, obra_id, localizacao_tipo, localizacao_detalhe, levantamento_id, planta_id, pagina, ponto_x, ponto_y")
     .in("id", idsPermitidos);
 
   if (erroTarefasExistentes || !tarefasExistentes || tarefasExistentes.length !== idsPermitidos.length) {
@@ -1184,6 +1203,8 @@ export async function atualizarTarefasEmLote(
       const detalheComSegmento = await enriquecerDetalheComCabos(
         supabaseAdmin,
         tarefa.levantamento_id,
+        tarefa.planta_id,
+        tarefa.pagina,
         tarefa.localizacao_tipo,
         detalhe,
         { x: tarefa.ponto_x, y: tarefa.ponto_y },
@@ -1349,6 +1370,8 @@ export async function atualizarTarefa(
   const detalheComCabos = await enriquecerDetalheComCabos(
     supabase,
     resultado.data.levantamento_id,
+    resultado.data.planta_id,
+    resultado.data.pagina,
     resultado.data.localizacao_tipo,
     resultado.data.localizacao_detalhe,
     { x: resultado.data.ponto_x, y: resultado.data.ponto_y },
