@@ -96,13 +96,23 @@ function quantidadeDeCondutores(detalhe: Record<string, unknown>): number {
   const totalFases = fases.reduce((soma, fase) => {
     if (!fase || typeof fase !== "object") return soma;
     const quantidade = (fase as { quantidade?: unknown }).quantidade;
-    return soma + (typeof quantidade === "number" && quantidade > 0 ? quantidade : 0);
+    const numero = typeof quantidade === "number"
+      ? quantidade
+      : typeof quantidade === "string" && Number.isFinite(Number(quantidade))
+        ? Number(quantidade)
+        : 0;
+    return soma + (numero > 0 ? numero : 0);
   }, 0);
   const totalNaoFases = condutores.reduce((soma, condutor) => {
     if (!condutor || typeof condutor !== "object") return soma;
     const valor = condutor as { tipo?: unknown; quantidade?: unknown };
     if (totalFases > 0 && valor.tipo === "fase") return soma;
-    return soma + (typeof valor.quantidade === "number" && valor.quantidade > 0 ? valor.quantidade : 0);
+    const numero = typeof valor.quantidade === "number"
+      ? valor.quantidade
+      : typeof valor.quantidade === "string" && Number.isFinite(Number(valor.quantidade))
+        ? Number(valor.quantidade)
+        : 0;
+    return soma + (numero > 0 ? numero : 0);
   }, 0);
   return totalFases + totalNaoFases;
 }
@@ -110,10 +120,34 @@ function quantidadeDeCondutores(detalhe: Record<string, unknown>): number {
 function adicionarSegmentoDeCabos(detalhe: unknown): unknown {
   if (!detalhe || typeof detalhe !== "object" || Array.isArray(detalhe)) return detalhe;
   const valor = detalhe as Record<string, unknown>;
-  if (typeof valor.circuito !== "string" || Array.isArray(valor.segmentos)) return detalhe;
-  const comprimento = typeof valor.comprimento === "number" ? valor.comprimento : null;
+  if (typeof valor.circuito !== "string") return detalhe;
   const condutores = quantidadeDeCondutores(valor);
-  if (comprimento === null || condutores <= 0) return detalhe;
+  if (condutores <= 0) return detalhe;
+
+  const segmentos = Array.isArray(valor.segmentos) ? valor.segmentos : [];
+  if (segmentos.length > 0) {
+    let alterado = false;
+    const segmentosEnriquecidos = segmentos.map((segmento) => {
+      if (!segmento || typeof segmento !== "object" || Array.isArray(segmento)) return segmento;
+      const item = segmento as Record<string, unknown>;
+      const comprimento = typeof item.comprimento === "number"
+        ? item.comprimento
+        : typeof item.comprimento === "string" && Number.isFinite(Number(item.comprimento))
+          ? Number(item.comprimento)
+          : null;
+      if (comprimento === null || comprimento <= 0) return segmento;
+      alterado = true;
+      return { ...item, distanciaCabo: comprimento * condutores };
+    });
+    return alterado ? { ...valor, segmentos: segmentosEnriquecidos } : detalhe;
+  }
+
+  const comprimento = typeof valor.comprimento === "number"
+    ? valor.comprimento
+    : typeof valor.comprimento === "string" && Number.isFinite(Number(valor.comprimento))
+      ? Number(valor.comprimento)
+      : null;
+  if (comprimento === null || comprimento <= 0) return detalhe;
   return {
     ...valor,
     segmentos: [{
@@ -143,7 +177,8 @@ async function enriquecerDetalheComCabos(
     detalhe && typeof detalhe === "object" && !Array.isArray(detalhe)
       ? (detalhe as Record<string, unknown>)
       : {};
-  if (quantidadeDeCabos(detalhe) !== null) return detalhe;
+  const detalheComSegmentosCalculados = adicionarSegmentoDeCabos(detalhe);
+  if (quantidadeDeCabos(detalheComSegmentosCalculados) !== null) return detalheComSegmentosCalculados;
 
   let consulta = supabase.from("levantamentos").select("itens");
   if (levantamentoId) {
