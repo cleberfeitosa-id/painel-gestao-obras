@@ -1180,7 +1180,7 @@ export async function atualizarTarefasEmLote(
   const supabaseAdmin = await createAdminClient();
   const { data: tarefasExistentes, error: erroTarefasExistentes } = await supabaseAdmin
     .from("tarefas")
-    .select("id, obra_id, localizacao_tipo, localizacao_detalhe, levantamento_id, planta_id, pagina, ponto_x, ponto_y")
+    .select("id, titulo, obra_id, localizacao_tipo, localizacao_detalhe, levantamento_id, planta_id, pagina, ponto_x, ponto_y")
     .in("id", idsPermitidos);
 
   if (erroTarefasExistentes || !tarefasExistentes || tarefasExistentes.length !== idsPermitidos.length) {
@@ -1195,8 +1195,8 @@ export async function atualizarTarefasEmLote(
   const tarefasDistancia = new Map<string, number>();
   if (medicoes.some((medicao) => medicao.usar_distancia)) {
     for (const tarefa of tarefasExistentes) {
-      if (!["distancia", "circuito", "descida"].includes(tarefa.localizacao_tipo)) {
-        return { erro: "A opção de metros de cabo só pode ser usada em distâncias, circuitos ou descidas." };
+      if (!["circuito", "descida"].includes(tarefa.localizacao_tipo)) {
+        return { erro: `A soma dos cabos só pode ser usada em circuitos ou descidas. Tarefa incompatível: ${tarefa.titulo}.` };
       }
 
       const detalhe = tarefa.localizacao_detalhe;

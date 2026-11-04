@@ -8,7 +8,7 @@ import { OPCOES_STATUS_TAREFA, OPCOES_PRIORIDADE } from "@/lib/domain/rotulos";
 import type { PerfilRow, ExecutorRow } from "@/lib/supabase/database.types";
 
 interface BotaoEdicaoEmLoteProps {
-  tarefasSelecionadas: { id: string; obra_id: string }[];
+  tarefasSelecionadas: { id: string; obra_id: string; localizacao_tipo: string }[];
   responsaveis: Pick<PerfilRow, "id" | "nome">[];
   supervisores: Pick<PerfilRow, "id" | "nome">[];
   executores: Pick<ExecutorRow, "id" | "nome">[];
@@ -43,6 +43,9 @@ export function BotaoEdicaoEmLote({
   const tarefaIds = tarefasSelecionadas.map(t => t.id);
   const obraIdsUnicos = Array.from(new Set(tarefasSelecionadas.map((t) => t.obra_id)));
   const obrasMultiplas = obraIdsUnicos.length > 1;
+  const podeUsarSomaCabos = tarefasSelecionadas.every((tarefa) =>
+    ["circuito", "descida"].includes(tarefa.localizacao_tipo),
+  );
 
   const catalogoDaObra = obrasMultiplas
     ? []
@@ -243,10 +246,11 @@ export function BotaoEdicaoEmLote({
                       className="w-28 bg-white"
                     />
                     <label className="flex max-w-40 items-center gap-2 pb-1 text-xs text-superficie-600">
-                      <input
-                        type="checkbox"
-                        checked={medicao.usar_distancia}
-                        onChange={(e) => alternarUsoDaDistancia(indice, e.target.checked)}
+                       <input
+                         type="checkbox"
+                         checked={medicao.usar_distancia}
+                         disabled={!podeUsarSomaCabos}
+                         onChange={(e) => alternarUsoDaDistancia(indice, e.target.checked)}
                         className="h-4 w-4 rounded border-borda"
                       />
                        Usar soma dos cabos
@@ -272,11 +276,13 @@ export function BotaoEdicaoEmLote({
                   Adicionar medição
                 </Botao>
               </div>
-              <input
-                type="hidden"
-                name="medicoes"
-                value={JSON.stringify(medicoesLista.filter((m) => m.catalogo_id))}
-              />
+              {medicoesLista.length > 0 && (
+                <input
+                  type="hidden"
+                  name="medicoes"
+                  value={JSON.stringify(medicoesLista.filter((m) => m.catalogo_id))}
+                />
+              )}
             </fieldset>
           )}
 

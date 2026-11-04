@@ -389,7 +389,13 @@ export function ListaTarefas({
               aoConcluir={aoLimparSelecao}
             />
             <BotaoEdicaoEmLote
-              tarefasSelecionadas={tarefas.filter(t => selecionadas.has(t.id))}
+              tarefasSelecionadas={tarefas
+                .filter((t) => selecionadas.has(t.id))
+                .map((t) => ({
+                  id: t.id,
+                  obra_id: t.obra_id,
+                  localizacao_tipo: t.localizacao_tipo,
+                }))}
               responsaveis={responsaveis}
               supervisores={supervisores}
               executores={executores}
