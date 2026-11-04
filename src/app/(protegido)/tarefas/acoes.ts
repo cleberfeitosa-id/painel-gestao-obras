@@ -131,6 +131,7 @@ async function enriquecerDetalheComCabos(
   pagina: number | null | undefined,
   tipoLocalizacao: string,
   detalhe: unknown,
+  titulo?: string | null,
   pontoTarefa?: { x?: number | null; y?: number | null },
 ): Promise<unknown> {
   if (!(["circuito", "descida"].includes(tipoLocalizacao))) {
@@ -158,6 +159,10 @@ async function enriquecerDetalheComCabos(
   const circuito = typeof detalheObjeto.circuito === "string"
     ? detalheObjeto.circuito.trim().toLocaleLowerCase()
     : null;
+  const circuitoDoTitulo = typeof titulo === "string"
+    ? titulo.match(/(?:circuito|circ\.?)[\s:_-]*([a-z0-9][a-z0-9._/-]*)/i)?.[1]?.trim().toLocaleLowerCase() ?? null
+    : null;
+  const circuitoFiltro = circuito ?? circuitoDoTitulo;
   const comprimento = typeof detalheObjeto.comprimento === "number" ? detalheObjeto.comprimento : null;
   const pontos = Array.isArray(detalheObjeto.pontos) ? detalheObjeto.pontos : [];
   const pontoInicial = pontos[0] ?? pontoTarefa;
@@ -175,7 +180,8 @@ async function enriquecerDetalheComCabos(
     const circuitoItem = typeof circuitoItemBruto === "string"
       ? circuitoItemBruto.trim().toLocaleLowerCase()
       : null;
-    if (circuito === null || circuitoItem !== circuito) return false;
+    if (circuitoFiltro !== null && circuitoItem !== circuitoFiltro) return false;
+    if (circuitoFiltro === null && circuitoItem === null) return false;
     if (comprimento !== null && (typeof valor.comprimentoReal !== "number" || Math.abs(valor.comprimentoReal - comprimento) > 0.01)) return false;
     if (pontoInicial && typeof pontoInicial === "object") {
       if (!Array.isArray(valor.pontos) || !valor.pontos[0] || typeof valor.pontos[0] !== "object") return false;
@@ -600,6 +606,7 @@ export async function criarTarefa(
     resultado.data.pagina,
     resultado.data.localizacao_tipo,
     resultado.data.localizacao_detalhe,
+    resultado.data.titulo,
     { x: resultado.data.ponto_x, y: resultado.data.ponto_y },
   );
   const erroCabos = erroQuantidadeDeCabos(
@@ -835,6 +842,7 @@ export async function criarTarefasEmLote(
         localizacao.pagina,
         localizacao.localizacao_tipo,
         localizacao.localizacao_detalhe,
+        localizacao.titulo_sugerido ?? dados.titulo,
         { x: localizacao.ponto_x, y: localizacao.ponto_y },
       ),
     ),
@@ -1207,6 +1215,7 @@ export async function atualizarTarefasEmLote(
         tarefa.pagina,
         tarefa.localizacao_tipo,
         detalhe,
+        tarefa.titulo,
         { x: tarefa.ponto_x, y: tarefa.ponto_y },
       );
       detalhesComCabosPorTarefa.set(tarefa.id, detalheComSegmento);
@@ -1374,6 +1383,7 @@ export async function atualizarTarefa(
     resultado.data.pagina,
     resultado.data.localizacao_tipo,
     resultado.data.localizacao_detalhe,
+    resultado.data.titulo,
     { x: resultado.data.ponto_x, y: resultado.data.ponto_y },
   );
   const erroCabos = erroQuantidadeDeCabos(
