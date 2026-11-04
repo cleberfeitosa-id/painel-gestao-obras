@@ -1216,7 +1216,7 @@ export async function atualizarTarefasEmLote(
           : null
         : quantidadeDeCabos(detalheComSegmento);
       if (comprimento === null || !Number.isFinite(comprimento) || comprimento <= 0) {
-        return { erro: "Uma das tarefas selecionadas não possui uma quantidade de cabos válida." };
+        return { erro: `A tarefa "${tarefa.titulo}" não possui uma quantidade de cabos válida.` };
       }
       tarefasDistancia.set(tarefa.id, comprimento);
     }

@@ -280,7 +280,14 @@ export function BotaoEdicaoEmLote({
                 <input
                   type="hidden"
                   name="medicoes"
-                  value={JSON.stringify(medicoesLista.filter((m) => m.catalogo_id))}
+                  value={JSON.stringify(
+                    medicoesLista
+                      .filter((m) => m.catalogo_id)
+                      .map((m) => ({
+                        ...m,
+                        usar_distancia: podeUsarSomaCabos && m.usar_distancia,
+                      })),
+                  )}
                 />
               )}
             </fieldset>
