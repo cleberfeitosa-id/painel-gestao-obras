@@ -261,10 +261,23 @@ async function enriquecerDetalheComCabos(
         ? candidatosBase
         : [];
 
-  if (candidatos.length !== 1) {
+  let itemEncontrado = candidatos.length === 1 ? candidatos[0] : undefined;
+  if (!itemEncontrado && tipoLocalizacao === "descida" && circuitoFiltro) {
+    const itemCircuito = itens.find((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+      const valor = item as Record<string, unknown>;
+      if (valor.tipo !== "tubulacao_cabo") return false;
+      const meta = valor.metadadosCabo;
+      if (!meta || typeof meta !== "object" || Array.isArray(meta)) return false;
+      const circuitoItem = (meta as Record<string, unknown>).circuito;
+      return typeof circuitoItem === "string" && circuitoItem.trim().toLocaleLowerCase() === circuitoFiltro;
+    });
+    itemEncontrado = itemCircuito;
+  }
+
+  if (!itemEncontrado) {
     return adicionarSegmentoDeCabos(detalhe);
   }
-  const itemEncontrado = candidatos[0];
   const item = itemEncontrado as Record<string, unknown>;
   const meta = item.metadadosCabo;
   const metaObjeto = meta && typeof meta === "object" && !Array.isArray(meta)
@@ -273,7 +286,7 @@ async function enriquecerDetalheComCabos(
   const detalheEnriquecido = {
     ...detalheObjeto,
     circuito: detalheObjeto.circuito ?? item.circuito ?? metaObjeto.circuito,
-    comprimento: detalheObjeto.comprimento ?? item.comprimentoReal,
+    comprimento: detalheObjeto.comprimento ?? comprimento ?? item.comprimentoReal,
     condutores: detalheObjeto.condutores ?? metaObjeto.condutores,
     fases: detalheObjeto.fases ?? metaObjeto.fases,
     tipoCabo: detalheObjeto.tipoCabo ?? metaObjeto.tipoCabo,
