@@ -12,6 +12,7 @@ import type {
   Atualizacao,
   MomentoAnexo,
   PrioridadeTarefa,
+  Json,
   StatusTarefa,
   TarefaRow,
   TipoAnexo,
@@ -121,6 +122,78 @@ function adicionarSegmentoDeCabos(detalhe: unknown): unknown {
       distanciaCabo: comprimento * condutores,
     }],
   };
+}
+
+async function enriquecerDetalheComCabos(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  levantamentoId: string | null | undefined,
+  tipoLocalizacao: string,
+  detalhe: unknown,
+  pontoTarefa?: { x?: number | null; y?: number | null },
+): Promise<unknown> {
+  if (!levantamentoId || !["circuito", "descida"].includes(tipoLocalizacao)) {
+    return adicionarSegmentoDeCabos(detalhe);
+  }
+
+  const detalheObjeto =
+    detalhe && typeof detalhe === "object" && !Array.isArray(detalhe)
+      ? (detalhe as Record<string, unknown>)
+      : {};
+  if (quantidadeDeCabos(detalhe) !== null) return detalhe;
+
+  const { data: levantamento } = await supabase
+    .from("levantamentos")
+    .select("itens")
+    .eq("id", levantamentoId)
+    .maybeSingle();
+  const itens = Array.isArray(levantamento?.itens) ? levantamento.itens : [];
+  const circuito = typeof detalheObjeto.circuito === "string" ? detalheObjeto.circuito : null;
+  const comprimento = typeof detalheObjeto.comprimento === "number" ? detalheObjeto.comprimento : null;
+  const pontos = Array.isArray(detalheObjeto.pontos) ? detalheObjeto.pontos : [];
+  const pontoInicial = pontos[0] ?? pontoTarefa;
+
+  const itemEncontrado = itens.find((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const valor = item as Record<string, unknown>;
+    const tipoItem = tipoLocalizacao === "descida" ? "descida_subida" : "tubulacao_cabo";
+    if (valor.tipo !== tipoItem) return false;
+    const meta = valor.metadadosCabo;
+    const metaObjeto = meta && typeof meta === "object" && !Array.isArray(meta)
+      ? (meta as Record<string, unknown>)
+      : null;
+    const circuitoItem = metaObjeto?.circuito ?? valor.circuito;
+    if (circuito && circuitoItem !== circuito) return false;
+    if (comprimento !== null && typeof valor.comprimentoReal === "number" && Math.abs(valor.comprimentoReal - comprimento) > 0.01) return false;
+    if (pontoInicial && typeof pontoInicial === "object" && Array.isArray(valor.pontos) && valor.pontos[0] && typeof valor.pontos[0] === "object") {
+      const pontoItem = valor.pontos[0] as { x?: unknown; y?: unknown };
+      if (typeof pontoInicial !== "object" || pontoInicial === null) return false;
+      const ponto = pontoInicial as { x?: unknown; y?: unknown };
+      if (typeof ponto.x === "number" && typeof pontoItem.x === "number" && Math.abs(ponto.x - pontoItem.x) > 0.01) return false;
+      if (typeof ponto.y === "number" && typeof pontoItem.y === "number" && Math.abs(ponto.y - pontoItem.y) > 0.01) return false;
+    }
+    return true;
+  });
+
+  if (!itemEncontrado || typeof itemEncontrado !== "object" || Array.isArray(itemEncontrado)) {
+    return adicionarSegmentoDeCabos(detalhe);
+  }
+  const item = itemEncontrado as Record<string, unknown>;
+  const meta = item.metadadosCabo;
+  const metaObjeto = meta && typeof meta === "object" && !Array.isArray(meta)
+    ? (meta as Record<string, unknown>)
+    : {};
+  const detalheEnriquecido = {
+    ...detalheObjeto,
+    circuito: detalheObjeto.circuito ?? item.circuito ?? metaObjeto.circuito,
+    comprimento: detalheObjeto.comprimento ?? item.comprimentoReal,
+    condutores: detalheObjeto.condutores ?? metaObjeto.condutores,
+    fases: detalheObjeto.fases ?? metaObjeto.fases,
+    tipoCabo: detalheObjeto.tipoCabo ?? metaObjeto.tipoCabo,
+    tipoCondutor: detalheObjeto.tipoCondutor ?? metaObjeto.tipoCondutor,
+    pontos: detalheObjeto.pontos ?? item.pontos,
+    elemento: detalheObjeto.elemento ?? item.nome,
+  };
+  return adicionarSegmentoDeCabos(detalheEnriquecido);
 }
 
 function quantidadeMedicao(
@@ -505,16 +578,27 @@ export async function criarTarefa(
   );
   if (erroExecutor) return { erro: erroExecutor };
 
+  const detalheComCabos = await enriquecerDetalheComCabos(
+    supabase,
+    resultado.data.levantamento_id,
+    resultado.data.localizacao_tipo,
+    resultado.data.localizacao_detalhe,
+    { x: resultado.data.ponto_x, y: resultado.data.ponto_y },
+  );
   const erroCabos = erroQuantidadeDeCabos(
     resultado.data.medicoes ?? [],
-    [resultado.data.localizacao_detalhe],
+    [detalheComCabos],
     [resultado.data.localizacao_tipo],
   );
   if (erroCabos) return { erro: erroCabos };
 
+  const dadosTarefa = {
+    ...normalizar(resultado.data),
+    localizacao_detalhe: detalheComCabos as Json,
+  };
   const { data, error } = await supabase
     .from("tarefas")
-    .insert({ ...normalizar(resultado.data), criado_por: user.id })
+    .insert({ ...dadosTarefa, criado_por: user.id })
     .select("id")
     .single();
 
@@ -527,8 +611,8 @@ export async function criarTarefa(
     const medicoesInsert = resultado.data.medicoes.map((m) => ({
       tarefa_id: data.id,
       catalogo_id: m.catalogo_id,
-      quantidade: quantidadeMedicao(m, resultado.data.localizacao_detalhe),
-      segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(resultado.data.localizacao_detalhe)),
+      quantidade: quantidadeMedicao(m, detalheComCabos),
+      segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(detalheComCabos)),
       criado_por: user.id,
     }));
 
@@ -725,14 +809,25 @@ export async function criarTarefasEmLote(
   if (erroExecutor) return { erro: erroExecutor };
 
   const dados = resultado.data;
+  const detalhesComCabos = await Promise.all(
+    dados.localizacoes.map((localizacao) =>
+      enriquecerDetalheComCabos(
+        supabase,
+        localizacao.levantamento_id,
+        localizacao.localizacao_tipo,
+        localizacao.localizacao_detalhe,
+        { x: localizacao.ponto_x, y: localizacao.ponto_y },
+      ),
+    ),
+  );
   const erroCabos = erroQuantidadeDeCabos(
     resultado.data.medicoes ?? [],
-    dados.localizacoes.map((localizacao) => localizacao.localizacao_detalhe),
+    detalhesComCabos,
     dados.localizacoes.map((localizacao) => localizacao.localizacao_tipo),
   );
   if (erroCabos) return { erro: erroCabos };
 
-  const linhas = dados.localizacoes.map((localizacao) => {
+    const linhas = dados.localizacoes.map((localizacao, idx) => {
     let descFinal = dados.descricao || null;
     const descEsp = localizacao.descricao_especifica;
     if (descEsp) {
@@ -769,7 +864,7 @@ export async function criarTarefasEmLote(
         localizacao.localizacao_tipo === "regiao"
           ? (localizacao.regiao ?? null)
           : null,
-      localizacao_detalhe: localizacao.localizacao_detalhe ?? null,
+       localizacao_detalhe: (detalhesComCabos[idx] ?? localizacao.localizacao_detalhe ?? null) as Json | null,
       levantamento_id: localizacao.levantamento_id ?? null,
       criado_por: user.id,
     };
@@ -790,6 +885,7 @@ export async function criarTarefasEmLote(
   if (resultado.data.medicoes && resultado.data.medicoes.length > 0) {
     const medicoesInsert = data.flatMap((tarefa, idx) => {
       const loc = dados.localizacoes[idx];
+      const detalheComCabos = detalhesComCabos[idx];
       const quantHerdada =
         loc?.localizacao_detalhe?.comprimento ??
         loc?.localizacao_detalhe?.area ??
@@ -803,10 +899,10 @@ export async function criarTarefasEmLote(
         catalogo_id: m.catalogo_id,
         quantidade: quantidadeMedicao(
           m,
-          adicionarSegmentoDeCabos(loc?.localizacao_detalhe),
+          detalheComCabos,
           quantHerdada,
         ),
-        segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(loc?.localizacao_detalhe)),
+        segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(detalheComCabos)),
         criado_por: user.id,
       }));
     });
@@ -1065,7 +1161,7 @@ export async function atualizarTarefasEmLote(
   const supabaseAdmin = await createAdminClient();
   const { data: tarefasExistentes, error: erroTarefasExistentes } = await supabaseAdmin
     .from("tarefas")
-    .select("id, obra_id, localizacao_detalhe")
+    .select("id, obra_id, localizacao_tipo, localizacao_detalhe, levantamento_id, ponto_x, ponto_y")
     .in("id", idsPermitidos);
 
   if (erroTarefasExistentes || !tarefasExistentes || tarefasExistentes.length !== idsPermitidos.length) {
@@ -1076,25 +1172,23 @@ export async function atualizarTarefasEmLote(
   const localizacoesPorTarefa = new Map(
     tarefasExistentes.map((tarefa) => [tarefa.id, tarefa]),
   );
+  const detalhesComCabosPorTarefa = new Map<string, unknown>();
   const tarefasDistancia = new Map<string, number>();
   if (medicoes.some((medicao) => medicao.usar_distancia)) {
-    const { data: tarefasComLocalizacao, error: erroTarefas } = await supabaseAdmin
-      .from("tarefas")
-      .select("id, localizacao_tipo, localizacao_detalhe")
-      .in("id", idsPermitidos);
-
-    if (erroTarefas) {
-      console.error("[tarefas] falha ao buscar distancias das tarefas:", erroTarefas);
-      return { erro: "Falha ao obter as distâncias das tarefas." };
-    }
-
-    for (const tarefa of tarefasComLocalizacao ?? []) {
+    for (const tarefa of tarefasExistentes) {
       if (!["distancia", "circuito", "descida"].includes(tarefa.localizacao_tipo)) {
         return { erro: "A opção de metros de cabo só pode ser usada em distâncias, circuitos ou descidas." };
       }
 
       const detalhe = tarefa.localizacao_detalhe;
-      const detalheComSegmento = adicionarSegmentoDeCabos(detalhe);
+      const detalheComSegmento = await enriquecerDetalheComCabos(
+        supabaseAdmin,
+        tarefa.levantamento_id,
+        tarefa.localizacao_tipo,
+        detalhe,
+        { x: tarefa.ponto_x, y: tarefa.ponto_y },
+      );
+      detalhesComCabosPorTarefa.set(tarefa.id, detalheComSegmento);
       const comprimento = tarefa.localizacao_tipo === "distancia"
         ? detalhe && typeof detalhe === "object" && !Array.isArray(detalhe) && typeof detalhe.comprimento === "number"
           ? detalhe.comprimento
@@ -1126,7 +1220,8 @@ export async function atualizarTarefasEmLote(
     }
     const erroCabos = erroQuantidadeDeCabos(
       medicoes,
-      tarefasExistentes.map((tarefa) => tarefa.localizacao_detalhe),
+      tarefasExistentes.map((tarefa) => detalhesComCabosPorTarefa.get(tarefa.id) ?? tarefa.localizacao_detalhe),
+      tarefasExistentes.map((tarefa) => tarefa.localizacao_tipo),
     );
     if (erroCabos) return { erro: erroCabos };
   }
@@ -1161,7 +1256,9 @@ export async function atualizarTarefasEmLote(
           quantidade: m.usar_distancia
             ? tarefasDistancia.get(tarefaId)!
             : m.quantidade,
-          segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(localizacao?.localizacao_detalhe)),
+          segmentos_circuito: segmentosParaMedicao(
+            detalhesComCabosPorTarefa.get(tarefaId) ?? adicionarSegmentoDeCabos(localizacao?.localizacao_detalhe),
+          ),
           criado_por: user.id,
         }));
       });
@@ -1249,14 +1346,24 @@ export async function atualizarTarefa(
   );
   if (erroExecutor) return { erro: erroExecutor };
 
+  const detalheComCabos = await enriquecerDetalheComCabos(
+    supabase,
+    resultado.data.levantamento_id,
+    resultado.data.localizacao_tipo,
+    resultado.data.localizacao_detalhe,
+    { x: resultado.data.ponto_x, y: resultado.data.ponto_y },
+  );
   const erroCabos = erroQuantidadeDeCabos(
     resultado.data.medicoes ?? [],
-    [resultado.data.localizacao_detalhe],
+    [detalheComCabos],
     [resultado.data.localizacao_tipo],
   );
   if (erroCabos) return { erro: erroCabos };
 
-  const dadosNormalizados = normalizar(resultado.data);
+  const dadosNormalizados = {
+    ...normalizar(resultado.data),
+    localizacao_detalhe: detalheComCabos as Json,
+  };
   const dadosAtualizacao: Atualizacao<"tarefas"> = { ...dadosNormalizados };
   if (resultado.data.status !== "concluido" && tarefa.aprovacao !== "pendente") {
     dadosAtualizacao.aprovacao = "pendente";
@@ -1288,8 +1395,8 @@ export async function atualizarTarefa(
     const medicoesInsert = resultado.data.medicoes.map((m) => ({
       tarefa_id: id,
       catalogo_id: m.catalogo_id,
-      quantidade: quantidadeMedicao(m, resultado.data.localizacao_detalhe),
-      segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(resultado.data.localizacao_detalhe)),
+      quantidade: quantidadeMedicao(m, detalheComCabos),
+      segmentos_circuito: segmentosParaMedicao(adicionarSegmentoDeCabos(detalheComCabos)),
       criado_por: user.id,
     }));
 
