@@ -52,6 +52,7 @@ import {
   formatarMetros,
   formatarMetrosQuadrados,
   obterNomeCorCabo,
+  obterCondutoresVisuais,
   rotuloCondutor,
 } from "@/lib/levantamento/calculos";
 import {
@@ -739,6 +740,22 @@ export function VisualizadorLevantamento({
       detalhe.nivelOrigemId = item.nivelOrigemId;
       detalhe.nivelDestinoId = item.nivelDestinoId;
       detalhe.circuito = item.circuito;
+      detalhe.condutores = item.metadadosCabo?.condutores;
+      detalhe.fases = item.metadadosCabo?.fases;
+      detalhe.tipoCabo = item.metadadosCabo?.tipoCabo;
+      detalhe.tipoCondutor = item.metadadosCabo?.tipoCondutor;
+      detalhe.segmentos = item.circuito && item.metadadosCabo
+        ? [{
+            segmentoId: item.id,
+            comprimento: item.comprimentoReal ?? 0,
+            distanciaCabo:
+              (item.comprimentoReal ?? 0) *
+              obterCondutoresVisuais(item.metadadosCabo).reduce(
+                (total, condutor) => total + condutor.quantidade,
+                0,
+              ),
+          }]
+        : undefined;
       tituloSugerido = item.circuito
         ? `Descida Eletroduto - Circuito ${item.circuito}`
         : `Descida/Subida Vertical ${item.nome}`;
@@ -854,10 +871,12 @@ export function VisualizadorLevantamento({
 
     for (const [nomeCirc, itensCirc] of mapaCircuitos.entries()) {
       itensCirc.forEach((item, indice) => {
-        const quantidadeCondutores = (item.metadadosCabo?.condutores ?? []).reduce(
-          (total, condutor) => total + Math.max(0, condutor.quantidade),
-          0,
-        );
+        const quantidadeCondutores = item.metadadosCabo
+          ? obterCondutoresVisuais(item.metadadosCabo).reduce(
+              (total, condutor) => total + Math.max(0, condutor.quantidade),
+              0,
+            )
+          : 0;
         const comprimento = item.comprimentoReal ?? 0;
         const nivelNome = item.nivelId
           ? niveis.find((n) => n.id === item.nivelId)?.nome
